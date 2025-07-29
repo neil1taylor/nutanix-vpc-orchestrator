@@ -1,0 +1,394 @@
+"""
+Node provisioning service for Nutanix PXE/Config Server
+"""
+import ipaddress
+import base64
+import json
+import logging
+from database import Database
+from ibm_cloud_client import IBMCloudClient
+from config import Config
+
+logger = logging.getLogger(__name__)
+
+class NodeProvisioner:
+    def __init__(self):
+        self.db = Database()
+        self.ibm_cloud = IBMCloudClient()
+        self.config = Config()
+    
+    def provision_node(self, node_request):
+        """Main node provisioning orchestration"""
+        try:
+            logger.info(f"Starting provisioning for node {node_request['node_config']['node_name']}")
+            
+            # Step 1: Reserve IP addresses
+            ip_allocation = self.reserve_node_ips(node_request['node_config'])
+            
+            # Step 2: Register DNS records
+            dns_records = self.register_node_dns(ip_allocation, node_request['node_config'])
+            
+            # Step 3: Create vNICs
+            vnics = self.create_node_vnics(ip_allocation, node_request['node_config'])
+            
+            # Step 4: Update configuration database
+            node_id = self.update_config_database(node_request, ip_allocation, vnics)
+            
+            # Step 5: Deploy bare metal server
+            deployment_result = self.deploy_bare_metal_server(node_id, vnics, node_request)
+            
+            # Step 6: Initialize monitoring
+            self.start_deployment_monitoring(node_id)
+            
+            return {
+                'node_id': node_id,
+                'deployment_id': deployment_result['id'],
+                'estimated_completion': self.calculate_completion_time(),
+                'monitoring_endpoint': f'/api/v1/nodes/{node_id}/status'
+            }
+            
+        except Exception as e:
+            logger.error(f"Node provisioning failed: {str(e)}")
+            # Cleanup on failure
+            try:
+                self.cleanup_failed_provisioning(node_request['node_config']['node_name'])
+            except:
+                pass  # Don't fail on cleanup errors
+            raise
+    
+    def reserve_node_ips(self, node_config):
+        """Reserve IP addresses for all node components"""
+        logger.info(f"Reserving IPs for node {node_config['node_name']}")
+        
+        # Get subnet information
+        mgmt_subnet = self.ibm_cloud.get_subnet_info(Config.MANAGEMENT_SUBNET_ID)
+        workload_subnet = self.ibm_cloud.get_subnet_info(Config.WORKLOAD_SUBNET_ID)
+        
+        # Get existing reserved IPs to avoid conflicts
+        mgmt_reserved_ips = self.ibm_cloud.get_subnet_reserved_ips(Config.MANAGEMENT_SUBNET_ID)
+        workload_reserved_ips = self.ibm_cloud.get_subnet_reserved_ips(Config.WORKLOAD_SUBNET_ID)
+        
+        ip_allocation = {}
+        
+        try:
+            # Reserve management interface IP
+            mgmt_ip = self.get_next_available_ip(
+                mgmt_subnet['ipv4_cidr_block'], 
+                'management', 
+                mgmt_reserved_ips
+            )
+            ip_allocation['management'] = self.ibm_cloud.create_subnet_reserved_ip(
+                Config.MANAGEMENT_SUBNET_ID,
+                mgmt_ip,
+                f"{node_config['node_name']}-mgmt"
+            )
+            
+            # Reserve AHV IP
+            ahv_ip = self.get_next_available_ip(
+                mgmt_subnet['ipv4_cidr_block'], 
+                'ahv', 
+                mgmt_reserved_ips + [mgmt_ip]
+            )
+            ip_allocation['ahv'] = self.ibm_cloud.create_subnet_reserved_ip(
+                Config.MANAGEMENT_SUBNET_ID,
+                ahv_ip,
+                f"{node_config['node_name']}-ahv"
+            )
+            
+            # Reserve CVM IP
+            cvm_ip = self.get_next_available_ip(
+                mgmt_subnet['ipv4_cidr_block'], 
+                'cvm', 
+                mgmt_reserved_ips + [mgmt_ip, ahv_ip]
+            )
+            ip_allocation['cvm'] = self.ibm_cloud.create_subnet_reserved_ip(
+                Config.MANAGEMENT_SUBNET_ID,
+                cvm_ip,
+                f"{node_config['node_name']}-cvm"
+            )
+            
+            # Reserve workload interface IP
+            workload_ip = self.get_next_available_ip(
+                workload_subnet['ipv4_cidr_block'], 
+                'workload', 
+                workload_reserved_ips
+            )
+            ip_allocation['workload'] = self.ibm_cloud.create_subnet_reserved_ip(
+                Config.WORKLOAD_SUBNET_ID,
+                workload_ip,
+                f"{node_config['node_name']}-workload"
+            )
+            
+            # Reserve cluster IP if this is the first node
+            if self.db.is_first_node():
+                cluster_ip = self.get_next_available_ip(
+                    mgmt_subnet['ipv4_cidr_block'], 
+                    'cluster', 
+                    mgmt_reserved_ips + [mgmt_ip, ahv_ip, cvm_ip]
+                )
+                ip_allocation['cluster'] = self.ibm_cloud.create_subnet_reserved_ip(
+                    Config.MANAGEMENT_SUBNET_ID,
+                    cluster_ip,
+                    f"cluster01"
+                )
+            else:
+                ip_allocation['cluster'] = None
+            
+            # Store reservations for cleanup if needed
+            self.db.store_ip_reservations(node_config['node_name'], ip_allocation)
+            
+            logger.info(f"IP reservation completed for {node_config['node_name']}")
+            return ip_allocation
+            
+        except Exception as e:
+            # Cleanup any successful reservations
+            for ip_type, ip_info in ip_allocation.items():
+                if ip_info:
+                    try:
+                        subnet_id = Config.MANAGEMENT_SUBNET_ID if ip_type != 'workload' else Config.WORKLOAD_SUBNET_ID
+                        self.ibm_cloud.delete_subnet_reserved_ip(subnet_id, ip_info['reservation_id'])
+                    except:
+                        pass
+            raise Exception(f"IP reservation failed: {str(e)}")
+    
+    def get_next_available_ip(self, subnet_cidr, ip_type, existing_ips):
+        """Get next available IP in the specified range"""
+        subnet = ipaddress.IPv4Network(subnet_cidr)
+        start_range, end_range = Config.IP_RANGES[ip_type]
+        
+        for i in range(start_range, end_range + 1):
+            candidate_ip = str(subnet.network_address + i)
+            if candidate_ip not in existing_ips:
+                return candidate_ip
+        
+        raise Exception(f"No available IPs in range for {ip_type}")
+    
+    def register_node_dns(self, ip_allocation, node_config):
+        """Register DNS records for all node components"""
+        logger.info(f"Registering DNS records for {node_config['node_name']}")
+        
+        node_name = node_config['node_name']
+        dns_records = []
+        
+        try:
+            # Management interface DNS
+            mgmt_record = self.ibm_cloud.create_dns_record(
+                'A',
+                f"{node_name}-mgmt",
+                ip_allocation['management']['ip_address']
+            )
+            dns_records.append(mgmt_record)
+            
+            # AHV interface DNS
+            ahv_record = self.ibm_cloud.create_dns_record(
+                'A',
+                f"{node_name}-ahv",
+                ip_allocation['ahv']['ip_address']
+            )
+            dns_records.append(ahv_record)
+            
+            # CVM interface DNS
+            cvm_record = self.ibm_cloud.create_dns_record(
+                'A',
+                f"{node_name}-cvm",
+                ip_allocation['cvm']['ip_address']
+            )
+            dns_records.append(cvm_record)
+            
+            # Workload interface DNS
+            workload_record = self.ibm_cloud.create_dns_record(
+                'A',
+                f"{node_name}-workload",
+                ip_allocation['workload']['ip_address']
+            )
+            dns_records.append(workload_record)
+            
+            # Cluster DNS (if first node)
+            if ip_allocation.get('cluster'):
+                cluster_record = self.ibm_cloud.create_dns_record(
+                    'A',
+                    "cluster01",
+                    ip_allocation['cluster']['ip_address']
+                )
+                dns_records.append(cluster_record)
+            
+            # Store DNS records for cleanup
+            self.db.store_dns_records(node_config['node_name'], dns_records)
+            
+            logger.info(f"DNS registration completed for {node_config['node_name']}")
+            return dns_records
+            
+        except Exception as e:
+            # Cleanup any successful DNS records
+            for record in dns_records:
+                try:
+                    self.ibm_cloud.delete_dns_record(record['id'])
+                except:
+                    pass
+            raise Exception(f"DNS registration failed: {str(e)}")
+    
+    def create_node_vnics(self, ip_allocation, node_config):
+        """Create vNICs for the bare metal server"""
+        logger.info(f"Creating vNICs for {node_config['node_name']}")
+        
+        vnics = {}
+        
+        try:
+            # Create management vNIC
+            mgmt_vnic = self.ibm_cloud.create_network_interface(
+                Config.MANAGEMENT_SUBNET_ID,
+                f"{node_config['node_name']}-mgmt-vnic",
+                ip_allocation['management']['reservation_id'],
+                [Config.MANAGEMENT_SECURITY_GROUP_ID]
+            )
+            vnics['management_vnic'] = mgmt_vnic
+            
+            # Create workload vNIC
+            workload_vnic = self.ibm_cloud.create_network_interface(
+                Config.WORKLOAD_SUBNET_ID,
+                f"{node_config['node_name']}-workload-vnic",
+                ip_allocation['workload']['reservation_id'],
+                [Config.WORKLOAD_SECURITY_GROUP_ID]
+            )
+            vnics['workload_vnic'] = workload_vnic
+            
+            # Store vNIC info for cleanup
+            self.db.store_vnic_info(node_config['node_name'], vnics)
+            
+            logger.info(f"vNIC creation completed for {node_config['node_name']}")
+            return vnics
+            
+        except Exception as e:
+            # Cleanup any successful vNICs
+            for vnic_type, vnic_info in vnics.items():
+                try:
+                    self.ibm_cloud.delete_network_interface(vnic_info['id'])
+                except:
+                    pass
+            raise Exception(f"vNIC creation failed: {str(e)}")
+    
+    def update_config_database(self, node_data, ip_allocation, vnics):
+        """Update configuration database with new node"""
+        logger.info(f"Updating database for {node_data['node_config']['node_name']}")
+        
+        node_config = {
+            'node_name': node_data['node_config']['node_name'],
+            'node_position': node_data['node_config']['node_position'],
+            'server_profile': node_data['node_config']['server_profile'],
+            'cluster_role': node_data['node_config']['cluster_role'],
+            'deployment_status': 'provisioning',
+            'management_vnic': {
+                'vnic_id': vnics['management_vnic']['id'],
+                'ip': ip_allocation['management']['ip_address'],
+                'dns_name': f"{node_data['node_config']['node_name']}-mgmt.{Config.DNS_ZONE_NAME}"
+            },
+            'workload_vnic': {
+                'vnic_id': vnics['workload_vnic']['id'],
+                'ip': ip_allocation['workload']['ip_address'],
+                'dns_name': f"{node_data['node_config']['node_name']}-workload.{Config.DNS_ZONE_NAME}"
+            },
+            'nutanix_config': {
+                'ahv_ip': ip_allocation['ahv']['ip_address'],
+                'ahv_dns': f"{node_data['node_config']['node_name']}-ahv.{Config.DNS_ZONE_NAME}",
+                'cvm_ip': ip_allocation['cvm']['ip_address'],
+                'cvm_dns': f"{node_data['node_config']['node_name']}-cvm.{Config.DNS_ZONE_NAME}",
+                'cluster_ip': ip_allocation.get('cluster', {}).get('ip_address'),
+                'cluster_dns': f'cluster01.{Config.DNS_ZONE_NAME}' if ip_allocation.get('cluster') else None,
+                'storage_config': node_data['node_config']['storage_config']
+            }
+        }
+        
+        # Insert into database
+        node_id = self.db.insert_node(node_config)
+        
+        # Initialize deployment tracking
+        self.db.log_deployment_event(node_id, 'provisioning', 'success', 'Node configuration created')
+        
+        logger.info(f"Database update completed for node ID {node_id}")
+        return node_id
+    
+    def deploy_bare_metal_server(self, node_id, vnics, node_data):
+        """Deploy the bare metal server with custom iPXE image"""
+        logger.info(f"Deploying bare metal server for node ID {node_id}")
+        
+        node_config = self.db.get_node(node_id)
+        
+        try:
+            # Get custom iPXE image
+            ipxe_image = self.ibm_cloud.get_custom_image_by_name('nutanix-ipxe-boot')
+            
+            # Generate user data
+            user_data = self.generate_user_data(node_id)
+            
+            # Deploy bare metal server
+            deployment_result = self.ibm_cloud.create_bare_metal_server(
+                name=node_config['node_name'],
+                profile=node_config['server_profile'],
+                image_id=ipxe_image['id'],
+                primary_interface_id=vnics['management_vnic']['id'],
+                network_interfaces=[vnics['workload_vnic']],
+                user_data=user_data
+            )
+            
+            # Update database with deployment info
+            self.db.update_node_deployment_info(
+                node_id,
+                deployment_result['id'],
+                'deploying'
+            )
+            
+            self.db.log_deployment_event(
+                node_id, 
+                'bare_metal_deploy', 
+                'success', 
+                f"Bare metal server {deployment_result['id']} deployment initiated"
+            )
+            
+            logger.info(f"Bare metal deployment initiated for node {node_id}")
+            return deployment_result
+            
+        except Exception as e:
+            self.db.log_deployment_event(
+                node_id, 
+                'bare_metal_deploy', 
+                'failed', 
+                f"Deployment failed: {str(e)}"
+            )
+            raise Exception(f"Bare metal deployment failed: {str(e)}")
+    
+    def generate_user_data(self, node_id):
+        """Generate user data for server initialization"""
+        user_data = {
+            'node_id': node_id,
+            'pxe_server': Config.PXE_SERVER_DNS,
+            'config_endpoint': f'http://{Config.PXE_SERVER_DNS}:8081/server-config'
+        }
+        
+        return base64.b64encode(json.dumps(user_data).encode()).decode()
+    
+    def start_deployment_monitoring(self, node_id):
+        """Initialize deployment monitoring for the node"""
+        self.db.log_deployment_event(
+            node_id, 
+            'monitoring_start', 
+            'success', 
+            'Deployment monitoring initialized'
+        )
+        logger.info(f"Monitoring started for node {node_id}")
+    
+    def calculate_completion_time(self):
+        """Calculate estimated completion time"""
+        total_timeout = sum(Config.DEPLOYMENT_TIMEOUTS.values())
+        from datetime import datetime, timedelta
+        return (datetime.now() + timedelta(seconds=total_timeout)).isoformat()
+    
+    def cleanup_failed_provisioning(self, node_name):
+        """Clean up resources for a failed provisioning"""
+        logger.warning(f"Cleaning up failed provisioning for {node_name}")
+        
+        try:
+            # This will be implemented in the cleanup service
+            # For now, just log the need for cleanup
+            logger.error(f"Manual cleanup required for {node_name}")
+        except Exception as e:
+            logger.error(f"Cleanup failed for {node_name}: {str(e)}")
