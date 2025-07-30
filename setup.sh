@@ -354,7 +354,7 @@ systemctl is-active --quiet postgresql && log "PostgreSQL is running" || log "ER
 # Test API endpoint
 log "Testing API endpoint"
 sleep 10
-if curl -f http://localhost/health >/dev/null 2>&1; then
+if curl -f http://localhost:8080/health >/dev/null 2>&1; then
     log "Health check endpoint is responding"
 else
     log "WARNING: Health check endpoint is not responding"
@@ -400,8 +400,8 @@ systemctl is-active postgresql && echo "✓ PostgreSQL: Running" || echo "✗ Po
 echo
 
 echo "Network Endpoints:"
-curl -s -f http://localhost/health >/dev/null && echo "✓ Health Check: OK" || echo "✗ Health Check: Failed"
-curl -s -f http://localhost/api/v1/info >/dev/null && echo "✓ API Info: OK" || echo "✗ API Info: Failed"
+curl -s -f http://localhost:8080/health >/dev/null && echo "✓ Health Check: OK" || echo "✗ Health Check: Failed"
+curl -s -f http://localhost:8080/api/v1/info >/dev/null && echo "✓ API Info: OK" || echo "✗ API Info: Failed"
 echo
 
 echo "Database Connection:"
