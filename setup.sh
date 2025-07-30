@@ -115,7 +115,7 @@ DATABASE_URL=postgresql://nutanix:nutanix@localhost/nutanix_pxe
 
 # Server Configuration
 PXE_SERVER_IP=${PXE_SERVER_IP:-10.240.0.12}
-PXE_SERVER_DNS=${PXE_SERVER_DNS:-nutanix-prod-pxe-01.nutanix.internal}
+PXE_SERVER_DNS=${PXE_SERVER_DNS:-nutanix-pxe-config.nutanix.cloud}
 DNS_ZONE_NAME=${DNS_ZONE_NAME:-nutanix.internal}
 
 # Application Configuration

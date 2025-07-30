@@ -62,11 +62,11 @@ Once the PXE/Config Server is deployed, it exposes the following endpoints:
 ### Provision First Node (Create Cluster)
 
 ```bash
-curl -X POST http://nutanix-prod-pxe-01.nutanix.internal/api/v1/nodes \
+curl -X POST http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes \
   -H "Content-Type: application/json" \
   -d '{
     "node_config": {
-      "node_name": "nutanix-prod-bm-node-01",
+      "node_name": "nutanix-poc-bm-node-01",
       "node_position": "A",
       "server_profile": "bx2d-metal-48x192",
       "cluster_role": "compute",
@@ -85,11 +85,11 @@ curl -X POST http://nutanix-prod-pxe-01.nutanix.internal/api/v1/nodes \
 ### Provision Additional Node (Join Cluster)
 
 ```bash
-curl -X POST http://nutanix-prod-pxe-01.nutanix.internal/api/v1/nodes \
+curl -X POST http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes \
   -H "Content-Type: application/json" \
   -d '{
     "node_config": {
-      "node_name": "nutanix-prod-bm-node-02",
+      "node_name": "nutanix-poc-bm-node-02",
       "node_position": "B", 
       "server_profile": "bx2d-metal-48x192",
       "cluster_role": "compute"
@@ -104,13 +104,13 @@ curl -X POST http://nutanix-prod-pxe-01.nutanix.internal/api/v1/nodes \
 
 ```bash
 # Check node status
-curl http://nutanix-prod-pxe-01.nutanix.internal/api/v1/nodes/1/status
+curl http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes/1/status
 
 # Get deployment history
-curl http://nutanix-prod-pxe-01.nutanix.internal/api/v1/nodes/1/history
+curl http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes/1/history
 
 # Get overall summary
-curl http://nutanix-prod-pxe-01.nutanix.internal/api/v1/deployment/summary
+curl http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/deployment/summary
 ```
 
 ## Post-Deployment Setup
@@ -121,7 +121,7 @@ Replace the placeholder boot images with actual Nutanix images:
 
 ```bash
 # SSH to PXE server
-ssh nutanix@nutanix-prod-pxe-01.nutanix.internal
+ssh nutanix@nutanix-pxe-config.nutanix.cloud
 
 # Upload actual Nutanix images
 sudo cp nutanix-foundation-kernel /var/www/pxe/images/vmlinuz-foundation
@@ -237,7 +237,7 @@ git commit -m "Update feature XYZ"
 git push origin main
 
 # Update production server
-ssh nutanix@nutanix-prod-pxe-01.nutanix.internal
+ssh nutanix@nutanix-pxe-config.nutanix.cloud
 /opt/nutanix-pxe/update.sh
 ```
 
@@ -295,7 +295,7 @@ export GITHUB_BRANCH="v1.0.0"
 1. **Redeploy from Scratch**
    ```bash
    # Delete and recreate VSI with cloud-init
-   ibmcloud is instance-delete nutanix-prod-pxe-01
+   ibmcloud is instance-delete nutanix-poc-pxe-01
    # Redeploy with cloud-init.yaml
    ```
 
