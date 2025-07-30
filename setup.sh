@@ -83,8 +83,7 @@ sudo -u postgres createdb nutanix_pxe -O nutanix || true
 sudo -u postgres psql -c "ALTER USER nutanix PASSWORD 'nutanix';" || true
 
 # Configure PostgreSQL
-PG_VERSION=$(sudo -u postgres psql -t -c "SELECT version();" | grep -o '[0-9]\{1,\}\.[0-9]\{1,\}' | head -1)
-PG_CONFIG_DIR="/etc/postgresql/${PG_VERSION}/main"
+PG_CONFIG_DIR="/etc/postgresql/14/main"
 
 # Allow local connections
 if ! grep -q "host nutanix_pxe nutanix 127.0.0.1/32 md5" "${PG_CONFIG_DIR}/pg_hba.conf"; then
