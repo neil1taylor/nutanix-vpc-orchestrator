@@ -1,9 +1,10 @@
 """
 IBM Cloud VPC and DNS client for Nutanix PXE/Config Server
 Uses Trusted Profile authentication via metadata service
+Configuration loaded from environment variables set by cloud-init
 """
+import os
 import logging
-from config import Config
 
 from ibm_cloud_sdk_core.authenticators import VPCInstanceAuthenticator
 from ibm_vpc import VpcV1
@@ -13,10 +14,19 @@ logger = logging.getLogger(__name__)
 
 class IBMCloudClient:
     def __init__(self):
-        self.region = Config.IBM_CLOUD_REGION
-        self.vpc_id = Config.VPC_ID
-        self.dns_instance_id = Config.DNS_INSTANCE_ID
-        self.dns_zone_id = Config.DNS_ZONE_ID
+        # Load configuration from environment variables
+        self.region = os.getenv('IBM_CLOUD_REGION', 'us-south')
+        self.vpc_id = os.getenv('VPC_ID')
+        self.dns_instance_id = os.getenv('DNS_INSTANCE_ID')
+        self.dns_zone_id = os.getenv('DNS_ZONE_ID')
+        
+        # Validate required environment variables
+        if not all([self.vpc_id, self.dns_instance_id, self.dns_zone_id]):
+            missing_vars = []
+            if not self.vpc_id: missing_vars.append('VPC_ID')
+            if not self.dns_instance_id: missing_vars.append('DNS_INSTANCE_ID')
+            if not self.dns_zone_id: missing_vars.append('DNS_ZONE_ID')
+            raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
         
         # Initialize VPC service with trusted profile authentication
         self.vpc_authenticator = VPCInstanceAuthenticator()
@@ -112,7 +122,7 @@ class IBMCloudClient:
             logger.error(f"Failed to delete VNI {vni_id}: {str(e)}")
             raise
     
-    def create_bare_metal_server(self, name, profile, image_id, primary_vni_id, additional_vnis=None, user_data=None):
+    def create_bare_metal_server(self, name, profile, image_id, primary_vni_id, ssh_key_ids, additional_vnis=None, user_data=None):
         """Create a bare metal server using VPC SDK"""
         try:
             # Primary network attachment
@@ -138,7 +148,8 @@ class IBMCloudClient:
                 'primary_network_attachment': primary_network_attachment,
                 'network_attachments': network_attachments,
                 'vpc': {'id': self.vpc_id},
-                'zone': {'name': f"{self.region}-1"}
+                'zone': {'name': f"{self.region}-1"},
+                'keys': [{'id': key_id} for key_id in ssh_key_ids]
             }
             
             if user_data:

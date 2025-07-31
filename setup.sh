@@ -8,6 +8,7 @@ set -euo pipefail
 PROJECT_DIR="/opt/nutanix-pxe"
 SERVICE_USER="nutanix"
 LOG_FILE="/var/log/nutanix-pxe-setup.log"
+NUTANIX_ISO_URL="https://download.nutanix.com/ce/2024.08.19/phoenix.x86_64-fnd_5.6.1_patch-aos_6.8.1_ga.iso"
 
 # Logging function
 log() {
@@ -98,8 +99,7 @@ systemctl enable postgresql
 log "Creating environment configuration"
 cat > "$PROJECT_DIR/.env" << EOF
 # IBM Cloud Configuration
-IBM_CLOUD_API_KEY=${IBM_CLOUD_API_KEY:-}
-IBM_CLOUD_REGION=${IBM_CLOUD_REGION:-us-south}
+IBM_CLOUD_REGION=${IBM_CLOUD_REGION:-}
 VPC_ID=${VPC_ID:-}
 DNS_INSTANCE_ID=${DNS_INSTANCE_ID:-}
 DNS_ZONE_ID=${DNS_ZONE_ID:-}
@@ -109,14 +109,15 @@ MANAGEMENT_SUBNET_ID=${MANAGEMENT_SUBNET_ID:-}
 WORKLOAD_SUBNET_ID=${WORKLOAD_SUBNET_ID:-}
 MANAGEMENT_SECURITY_GROUP_ID=${MANAGEMENT_SECURITY_GROUP_ID:-}
 WORKLOAD_SECURITY_GROUP_ID=${WORKLOAD_SECURITY_GROUP_ID:-}
+INTRA_NODE_SECURITY_GROUP_ID=${INTRA_NODE_SECURITY_GROUP_ID:-}
 
 # Database Configuration
 DATABASE_URL=postgresql://nutanix:nutanix@localhost/nutanix_pxe
 
 # Server Configuration
-PXE_SERVER_IP=${PXE_SERVER_IP:-10.240.0.12}
-PXE_SERVER_DNS=${PXE_SERVER_DNS:-nutanix-pxe-config.nutanix-ce-poc.cloud}
-DNS_ZONE_NAME=${DNS_ZONE_NAME:-nutanix.internal}
+PXE_SERVER_IP=${PXE_SERVER_IP:-}
+PXE_SERVER_DNS=${PXE_SERVER_DNS:-}
+DNS_ZONE_NAME=${DNS_ZONE_NAME:-}
 
 # Application Configuration
 SECRET_KEY=$(openssl rand -base64 32)
@@ -317,21 +318,20 @@ db = Database()
 print('Database initialized successfully')
 "
 
-# Download placeholder images (these would be replaced with actual Nutanix images)
-log "Setting up placeholder boot images"
-cd /var/www/pxe/images
+# Download Nutanix ISO and create boot images
+log "Downloading Nutanix boot images..."
+cd /tmp
+wget -O nutanix-ce.iso "$NUTANIX_ISO_URL"
 
-# Create placeholder files
-touch vmlinuz-foundation
-touch initrd-foundation.img
-touch nutanix-ce-installer.iso
+# Mount and extract
+mount -o loop nutanix-ce.iso /mnt
+cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-foundation
+cp /mnt/boot/initrd /var/www/pxe/images/initrd-foundation.img
+cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
+umount /mnt
 
-echo "Placeholder kernel image" > vmlinuz-foundation
-echo "Placeholder initrd image" > initrd-foundation.img
-echo "Placeholder ISO image" > nutanix-ce-installer.iso
-
-# Set permissions
 chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
+log "Nutanix ISO downloaded and images configured"
 
 # Enable and start services
 log "Enabling and starting services"

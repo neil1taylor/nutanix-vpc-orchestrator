@@ -26,6 +26,7 @@ class Config:
     WORKLOAD_SUBNET_ID = os.environ.get('WORKLOAD_SUBNET_ID')
     MANAGEMENT_SECURITY_GROUP_ID = os.environ.get('MANAGEMENT_SECURITY_GROUP_ID')
     WORKLOAD_SECURITY_GROUP_ID = os.environ.get('WORKLOAD_SECURITY_GROUP_ID')
+    INTRA_NODE_SECURITY_GROUP_ID = os.environ.get('INTRA_NODE_SECURITY_GROUP_ID')
     
     # PXE Server settings
     PXE_SERVER_IP = os.environ.get('PXE_SERVER_IP') or '10.240.0.12'
