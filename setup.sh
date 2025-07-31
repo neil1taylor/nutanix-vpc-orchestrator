@@ -144,16 +144,17 @@ test_database() {
     local start_time=$(date +%s)
     
     if sudo -u postgres psql -d nutanix_pxe -c "SELECT 1;" >/dev/null 2>&1; then
-        if cd "$PROJECT_DIR" && source venv/bin/activate && python3 -c "
+        if sudo -u "$SERVICE_USER" bash -c "
+cd '$PROJECT_DIR' && source venv/bin/activate && python3 -c \"
 from database import Database
 db = Database()
 with db.get_connection() as conn:
     with conn.cursor() as cur:
-        cur.execute('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '\''public'\''')
+        cur.execute('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = \'public\'')
         table_count = cur.fetchone()[0]
         if table_count < 5:
             raise Exception(f'Expected at least 5 tables, found {table_count}')
-" >/dev/null 2>&1; then
+\"" >/dev/null 2>&1; then
             local end_time=$(date +%s)
             local duration=$((end_time - start_time))
             test_result "Database Connectivity" "PASS" "Database accessible with proper schema" "$duration"
@@ -176,13 +177,13 @@ with db.get_connection() as conn:
 test_python_environment() {
     local start_time=$(date +%s)
     
-    if cd "$PROJECT_DIR" && source venv/bin/activate; then
+    if cd "$PROJECT_DIR" && sudo -u "$SERVICE_USER" bash -c "source venv/bin/activate && python3 --version" >/dev/null 2>&1; then
         # Test required packages
         local required_packages=("flask" "psycopg2" "gunicorn" "ibm-cloud-sdk-core" "ibm-vpc" "ibm-cloud-networking-services")
         local missing_packages=()
         
         for package in "${required_packages[@]}"; do
-            if ! python3 -c "import ${package//-/_}" >/dev/null 2>&1; then
+            if ! sudo -u "$SERVICE_USER" bash -c "cd '$PROJECT_DIR' && source venv/bin/activate && python3 -c 'import ${package//-/_}'" >/dev/null 2>&1; then
                 missing_packages+=("$package")
             fi
         done
@@ -381,7 +382,8 @@ test_application_config() {
     # Source environment variables
     source /etc/profile.d/app-vars.sh
     
-    if cd "$PROJECT_DIR" && source venv/bin/activate && python3 -c "
+    if sudo -u "$SERVICE_USER" -E bash -c "
+cd '$PROJECT_DIR' && source venv/bin/activate && python3 -c \"
 from config import Config
 try:
     Config.validate_required_config()
@@ -389,7 +391,7 @@ try:
 except Exception as e:
     print(f'Configuration validation failed: {e}')
     exit(1)
-" >/dev/null 2>&1; then
+\"" >/dev/null 2>&1; then
         local end_time=$(date +%s)
         local duration=$((end_time - start_time))
         test_result "Application Config" "PASS" "Configuration loads and validates successfully" "$duration"
@@ -718,10 +720,17 @@ cd "$PROJECT_DIR"
 python3 -m venv venv
 source venv/bin/activate
 
-# Install Python dependencies
+# Create virtual environment as the service user
+sudo -u "$SERVICE_USER" python3 -m venv venv
+
+# Install Python dependencies as the service user
 log "Installing Python dependencies"
+sudo -u "$SERVICE_USER" bash -c "
+cd '$PROJECT_DIR'
+source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+"
 
 # Setup PostgreSQL database
 log "Setting up PostgreSQL database"
@@ -1015,11 +1024,14 @@ nginx -t
 # Initialize database
 log "Initializing database"
 cd "$PROJECT_DIR"
+sudo -u "$SERVICE_USER" bash -c "
+cd '$PROJECT_DIR'
 source venv/bin/activate
-python3 -c "
+python3 -c \"
 from database import Database
 db = Database()
 print('Database initialized successfully')
+\"
 "
 
 # Download Nutanix ISO and create boot images
