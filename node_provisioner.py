@@ -1,5 +1,6 @@
 """
 Node provisioning service for Nutanix PXE/Config Server
+Updated to use Virtual Network Interfaces (VNI) and proper SDK methods
 """
 import ipaddress
 import base64
@@ -28,14 +29,14 @@ class NodeProvisioner:
             # Step 2: Register DNS records
             dns_records = self.register_node_dns(ip_allocation, node_request['node_config'])
             
-            # Step 3: Create vNICs
-            vnics = self.create_node_vnics(ip_allocation, node_request['node_config'])
+            # Step 3: Create Virtual Network Interfaces (VNIs)
+            vnis = self.create_node_vnis(ip_allocation, node_request['node_config'])
             
             # Step 4: Update configuration database
-            node_id = self.update_config_database(node_request, ip_allocation, vnics)
+            node_id = self.update_config_database(node_request, ip_allocation, vnis)
             
             # Step 5: Deploy bare metal server
-            deployment_result = self.deploy_bare_metal_server(node_id, vnics, node_request)
+            deployment_result = self.deploy_bare_metal_server(node_id, vnis, node_request)
             
             # Step 6: Initialize monitoring
             self.start_deployment_monitoring(node_id)
@@ -227,47 +228,47 @@ class NodeProvisioner:
                     pass
             raise Exception(f"DNS registration failed: {str(e)}")
     
-    def create_node_vnics(self, ip_allocation, node_config):
-        """Create vNICs for the bare metal server"""
-        logger.info(f"Creating vNICs for {node_config['node_name']}")
+    def create_node_vnis(self, ip_allocation, node_config):
+        """Create Virtual Network Interfaces (VNIs) for the bare metal server"""
+        logger.info(f"Creating VNIs for {node_config['node_name']}")
         
-        vnics = {}
+        vnis = {}
         
         try:
-            # Create management vNIC
-            mgmt_vnic = self.ibm_cloud.create_network_interface(
+            # Create management VNI
+            mgmt_vni = self.ibm_cloud.create_virtual_network_interface(
                 Config.MANAGEMENT_SUBNET_ID,
-                f"{node_config['node_name']}-mgmt-vnic",
+                f"{node_config['node_name']}-mgmt-vni",
                 ip_allocation['management']['reservation_id'],
                 [Config.MANAGEMENT_SECURITY_GROUP_ID]
             )
-            vnics['management_vnic'] = mgmt_vnic
+            vnis['management_vni'] = mgmt_vni
             
-            # Create workload vNIC
-            workload_vnic = self.ibm_cloud.create_network_interface(
+            # Create workload VNI
+            workload_vni = self.ibm_cloud.create_virtual_network_interface(
                 Config.WORKLOAD_SUBNET_ID,
-                f"{node_config['node_name']}-workload-vnic",
+                f"{node_config['node_name']}-workload-vni",
                 ip_allocation['workload']['reservation_id'],
                 [Config.WORKLOAD_SECURITY_GROUP_ID]
             )
-            vnics['workload_vnic'] = workload_vnic
+            vnis['workload_vni'] = workload_vni
             
-            # Store vNIC info for cleanup
-            self.db.store_vnic_info(node_config['node_name'], vnics)
+            # Store VNI info for cleanup
+            self.db.store_vni_info(node_config['node_name'], vnis)
             
-            logger.info(f"vNIC creation completed for {node_config['node_name']}")
-            return vnics
+            logger.info(f"VNI creation completed for {node_config['node_name']}")
+            return vnis
             
         except Exception as e:
-            # Cleanup any successful vNICs
-            for vnic_type, vnic_info in vnics.items():
+            # Cleanup any successful VNIs
+            for vni_type, vni_info in vnis.items():
                 try:
-                    self.ibm_cloud.delete_network_interface(vnic_info['id'])
+                    self.ibm_cloud.delete_virtual_network_interface(vni_info['id'])
                 except:
                     pass
-            raise Exception(f"vNIC creation failed: {str(e)}")
+            raise Exception(f"VNI creation failed: {str(e)}")
     
-    def update_config_database(self, node_data, ip_allocation, vnics):
+    def update_config_database(self, node_data, ip_allocation, vnis):
         """Update configuration database with new node"""
         logger.info(f"Updating database for {node_data['node_config']['node_name']}")
         
@@ -277,13 +278,13 @@ class NodeProvisioner:
             'server_profile': node_data['node_config']['server_profile'],
             'cluster_role': node_data['node_config']['cluster_role'],
             'deployment_status': 'provisioning',
-            'management_vnic': {
-                'vnic_id': vnics['management_vnic']['id'],
+            'management_vni': {
+                'vni_id': vnis['management_vni']['id'],
                 'ip': ip_allocation['management']['ip_address'],
                 'dns_name': f"{node_data['node_config']['node_name']}-mgmt.{Config.DNS_ZONE_NAME}"
             },
-            'workload_vnic': {
-                'vnic_id': vnics['workload_vnic']['id'],
+            'workload_vni': {
+                'vni_id': vnis['workload_vni']['id'],
                 'ip': ip_allocation['workload']['ip_address'],
                 'dns_name': f"{node_data['node_config']['node_name']}-workload.{Config.DNS_ZONE_NAME}"
             },
@@ -307,7 +308,7 @@ class NodeProvisioner:
         logger.info(f"Database update completed for node ID {node_id}")
         return node_id
     
-    def deploy_bare_metal_server(self, node_id, vnics, node_data):
+    def deploy_bare_metal_server(self, node_id, vnis, node_data):
         """Deploy the bare metal server with custom iPXE image"""
         logger.info(f"Deploying bare metal server for node ID {node_id}")
         
@@ -320,13 +321,13 @@ class NodeProvisioner:
             # Generate user data
             user_data = self.generate_user_data(node_id)
             
-            # Deploy bare metal server
+            # Deploy bare metal server with VNIs
             deployment_result = self.ibm_cloud.create_bare_metal_server(
                 name=node_config['node_name'],
                 profile=node_config['server_profile'],
                 image_id=ipxe_image['id'],
-                primary_interface_id=vnics['management_vnic']['id'],
-                network_interfaces=[vnics['workload_vnic']],
+                primary_vni_id=vnis['management_vni']['id'],
+                additional_vnis=[vnis['workload_vni']],
                 user_data=user_data
             )
             

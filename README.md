@@ -62,7 +62,7 @@ Once the PXE/Config Server is deployed, it exposes the following endpoints:
 ### Provision First Node (Create Cluster)
 
 ```bash
-curl -X POST http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes \
+curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/nodes \
   -H "Content-Type: application/json" \
   -d '{
     "node_config": {
@@ -85,7 +85,7 @@ curl -X POST http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes \
 ### Provision Additional Node (Join Cluster)
 
 ```bash
-curl -X POST http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes \
+curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/nodes \
   -H "Content-Type: application/json" \
   -d '{
     "node_config": {
@@ -104,13 +104,13 @@ curl -X POST http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes \
 
 ```bash
 # Check node status
-curl http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes/1/status
+curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/nodes/1/status
 
 # Get deployment history
-curl http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/nodes/1/history
+curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/nodes/1/history
 
 # Get overall summary
-curl http://nutanix-pxe-config.nutanix.cloud:8080/api/v1/deployment/summary
+curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/deployment/summary
 ```
 
 ## Post-Deployment Setup
@@ -121,7 +121,7 @@ Replace the placeholder boot images with actual Nutanix images:
 
 ```bash
 # SSH to PXE server
-ssh nutanix@nutanix-pxe-config.nutanix.cloud
+ssh nutanix@nutanix-pxe-config.nutanix-ce-poc.cloud
 
 # Upload actual Nutanix images
 sudo cp nutanix-foundation-kernel /var/www/pxe/images/vmlinuz-foundation
@@ -177,13 +177,13 @@ sudo journalctl -u nutanix-pxe -f
 
 ```bash
 # Health check
-curl http://localhost/health
+curl http://localhost:8080/health
 
 # Service info
-curl http://localhost/api/v1/info
+curl http://localhost:8080/api/v1/info
 
 # Deployment summary
-curl http://localhost/api/v1/deployment/summary
+curl http://localhost:8080/api/v1/deployment/summary
 ```
 
 ### Log Management
@@ -237,7 +237,7 @@ git commit -m "Update feature XYZ"
 git push origin main
 
 # Update production server
-ssh nutanix@nutanix-pxe-config.nutanix.cloud
+ssh nutanix@nutanix-pxe-config.nutanix-ce-poc.cloud
 /opt/nutanix-pxe/update.sh
 ```
 

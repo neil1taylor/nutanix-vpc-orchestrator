@@ -29,7 +29,7 @@ class Config:
     
     # PXE Server settings
     PXE_SERVER_IP = os.environ.get('PXE_SERVER_IP') or '10.240.0.12'
-    PXE_SERVER_DNS = os.environ.get('PXE_SERVER_DNS') or 'nutanix-pxe-config.nutanix.cloud'
+    PXE_SERVER_DNS = os.environ.get('PXE_SERVER_DNS') or 'nutanix-pxe-config.nutanix-ce-poc.cloud'
     
     # DNS settings
     DNS_ZONE_NAME = os.environ.get('DNS_ZONE_NAME') or 'nutanix.internal'
