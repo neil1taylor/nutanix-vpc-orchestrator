@@ -131,39 +131,6 @@ fi
 systemctl restart postgresql
 systemctl enable postgresql
 
-# Create environment file
-log "Creating environment configuration"
-cat > "$PROJECT_DIR/.env" << EOF
-# IBM Cloud Configuration
-IBM_CLOUD_REGION=${IBM_CLOUD_REGION:-}
-VPC_ID=${VPC_ID:-}
-DNS_INSTANCE_ID=${DNS_INSTANCE_ID:-}
-DNS_ZONE_ID=${DNS_ZONE_ID:-}
-
-# Network Configuration
-MANAGEMENT_SUBNET_ID=${MANAGEMENT_SUBNET_ID:-}
-WORKLOAD_SUBNET_ID=${WORKLOAD_SUBNET_ID:-}
-MANAGEMENT_SECURITY_GROUP_ID=${MANAGEMENT_SECURITY_GROUP_ID:-}
-WORKLOAD_SECURITY_GROUP_ID=${WORKLOAD_SECURITY_GROUP_ID:-}
-INTRA_NODE_SECURITY_GROUP_ID=${INTRA_NODE_SECURITY_GROUP_ID:-}
-
-# Database Configuration
-DATABASE_URL=postgresql://nutanix:nutanix@localhost/nutanix_pxe
-
-# Server Configuration
-PXE_SERVER_IP=${PXE_SERVER_IP:-}
-PXE_SERVER_DNS=${PXE_SERVER_DNS:-}
-DNS_ZONE_NAME=${DNS_ZONE_NAME:-}
-
-# Application Configuration
-SECRET_KEY=$(openssl rand -base64 32)
-DEBUG=False
-EOF
-
-# Set secure permissions on environment file
-chmod 600 "$PROJECT_DIR/.env"
-chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/.env"
-
 # Create sample boot scripts
 log "Creating sample boot scripts"
 
@@ -246,6 +213,7 @@ User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin
+EnvironmentFile=/etc/profile.d/app-vars.sh
 ExecStart=$PROJECT_DIR/venv/bin/gunicorn --config gunicorn.conf.py app:app
 ExecReload=/bin/kill -s HUP \$MAINPID
 Restart=always
@@ -601,22 +569,40 @@ log "Updating environment variables..."
 
 # Add HTTPS-related environment variables
 if [ "$ENABLE_HTTPS" = "true" ]; then
-    sudo tee -a $PROJECT_DIR/.env > /dev/null <<EOF
+    sudo tee -a /etc/profile.d/app-vars.sh > /dev/null <<EOF
 
 # HTTPS Configuration
 HTTPS_ENABLED=true
 SSL_CERT_PATH=$SSL_DIR/nutanix-orchestrator.crt
 SSL_KEY_PATH=$SSL_DIR/nutanix-orchestrator.key
 FORCE_HTTPS=true
+
+# Database Configuration
+DATABASE_URL=postgresql://nutanix:nutanix@localhost/nutanix_pxe
+
+# Application Configuration
+SECRET_KEY=$(openssl rand -base64 32)
+DEBUG=False
+
 EOF
 else
-    sudo tee -a $PROJECT_DIR/.env > /dev/null <<EOF
+    sudo tee -a /etc/profile.d/app-vars.sh > /dev/null <<EOF
 
 # HTTPS Configuration
 HTTPS_ENABLED=false
 FORCE_HTTPS=false
+
+# Database Configuration
+DATABASE_URL=postgresql://nutanix:nutanix@localhost/nutanix_pxe
+
+# Application Configuration
+SECRET_KEY=$(openssl rand -base64 32)
+DEBUG=False
 EOF
 fi
+
+log "Reload environment variables"
+bash /etc/profile.d/app-vars.sh
 
 # Create SSL health monitoring script
 if [ "$ENABLE_HTTPS" = "true" ]; then
