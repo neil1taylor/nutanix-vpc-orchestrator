@@ -429,10 +429,12 @@ EOF
 fi
 
 # Enable Nginx site
+log "Enabling Nginx site"
 ln -sf /etc/nginx/sites-available/nutanix-pxe /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 
 # Test Nginx configuration
+log "Testing Nginx configuration"
 nginx -t
 
 # Update Flask for HTTPS
@@ -504,10 +506,13 @@ cd /tmp
 wget --quiet -O nutanix-ce.iso "$NUTANIX_ISO_URL"
 
 # Mount and extract
+log "Mounting ISO and extracting files"
 mount -o loop nutanix-ce.iso /mnt
 cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-foundation
 cp /mnt/boot/initrd /var/www/pxe/images/initrd-foundation.img
 cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
+
+log "Un-mounting ISO"
 umount /mnt
 
 chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
@@ -547,6 +552,7 @@ if [ "$ENABLE_HTTPS" = "true" ]; then
     else
         log "WARNING: HTTPS endpoint is not responding"
     fi
+fi
 
 # Create initial admin user or configuration
 log "Setting up initial configuration"
