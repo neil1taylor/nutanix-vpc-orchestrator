@@ -1,15 +1,15 @@
 """
 Node provisioning service for Nutanix PXE/Config Server
-Updated to use Virtual Network Interfaces (VNI) and proper SDK methods
-Configuration loaded from environment variables set by cloud-init
+Updated to use Config class for all configuration settings
 """
-import os
 import ipaddress
 import base64
 import json
 import logging
+from datetime import datetime, timedelta
 from database import Database
 from ibm_cloud_client import IBMCloudClient
+from config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -17,55 +17,12 @@ class NodeProvisioner:
     def __init__(self):
         self.db = Database()
         self.ibm_cloud = IBMCloudClient()
+        self.config = Config
         
-        # Load configuration from environment variables
-        self.load_config_from_env()
-    
-    def load_config_from_env(self):
-        """Load configuration from environment variables"""
-        # Required environment variables
-        required_vars = [
-            'MANAGEMENT_SUBNET_ID', 'WORKLOAD_SUBNET_ID', 'DNS_ZONE_NAME',
-            'MANAGEMENT_SECURITY_GROUP_ID', 'WORKLOAD_SECURITY_GROUP_ID',
-            'INTRA_NODE_SECURITY_GROUP_ID', 'PXE_SERVER_DNS', 'SSH_KEY_ID'
-        ]
+        # Validate required configuration
+        self.config.validate_required_config()
         
-        missing_vars = []
-        for var in required_vars:
-            if not os.getenv(var):
-                missing_vars.append(var)
-        
-        if missing_vars:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
-        
-        # Load configuration
-        self.MANAGEMENT_SUBNET_ID = os.getenv('MANAGEMENT_SUBNET_ID')
-        self.WORKLOAD_SUBNET_ID = os.getenv('WORKLOAD_SUBNET_ID')
-        self.DNS_ZONE_NAME = os.getenv('DNS_ZONE_NAME')
-        self.MANAGEMENT_SECURITY_GROUP_ID = os.getenv('MANAGEMENT_SECURITY_GROUP_ID')
-        self.WORKLOAD_SECURITY_GROUP_ID = os.getenv('WORKLOAD_SECURITY_GROUP_ID')
-        self.INTRA_NODE_SECURITY_GROUP_ID = os.getenv('INTRA_NODE_SECURITY_GROUP_ID')
-        self.PXE_SERVER_DNS = os.getenv('PXE_SERVER_DNS')
-        self.SSH_KEY_ID = os.getenv('SSH_KEY_ID')
-        
-        # Optional configuration with defaults
-        self.IP_RANGES = {
-            'management': (int(os.getenv('MGMT_IP_START', '10')), int(os.getenv('MGMT_IP_END', '50'))),
-            'ahv': (int(os.getenv('AHV_IP_START', '51')), int(os.getenv('AHV_IP_END', '100'))),
-            'cvm': (int(os.getenv('CVM_IP_START', '101')), int(os.getenv('CVM_IP_END', '150'))),
-            'workload': (int(os.getenv('WORKLOAD_IP_START', '10')), int(os.getenv('WORKLOAD_IP_END', '200'))),
-            'cluster': (int(os.getenv('CLUSTER_IP_START', '200')), int(os.getenv('CLUSTER_IP_END', '210')))
-        }
-        
-        self.DEPLOYMENT_TIMEOUTS = {
-            'ip_reservation': int(os.getenv('TIMEOUT_IP_RESERVATION', '300')),
-            'dns_registration': int(os.getenv('TIMEOUT_DNS_REGISTRATION', '180')),
-            'vni_creation': int(os.getenv('TIMEOUT_VNI_CREATION', '600')),
-            'server_deployment': int(os.getenv('TIMEOUT_SERVER_DEPLOYMENT', '1800')),
-            'total_deployment': int(os.getenv('TIMEOUT_TOTAL_DEPLOYMENT', '3600'))
-        }
-        
-        logger.info("Configuration loaded from environment variables")
+        logger.info("NodeProvisioner initialized with Config class")
     
     def provision_node(self, node_request):
         """Main node provisioning orchestration"""
@@ -111,12 +68,12 @@ class NodeProvisioner:
         logger.info(f"Reserving IPs for node {node_config['node_name']}")
         
         # Get subnet information
-        mgmt_subnet = self.ibm_cloud.get_subnet_info(self.MANAGEMENT_SUBNET_ID)
-        workload_subnet = self.ibm_cloud.get_subnet_info(self.WORKLOAD_SUBNET_ID)
+        mgmt_subnet = self.ibm_cloud.get_subnet_info(self.config.MANAGEMENT_SUBNET_ID)
+        workload_subnet = self.ibm_cloud.get_subnet_info(self.config.WORKLOAD_SUBNET_ID)
         
         # Get existing reserved IPs to avoid conflicts
-        mgmt_reserved_ips = self.ibm_cloud.get_subnet_reserved_ips(self.MANAGEMENT_SUBNET_ID)
-        workload_reserved_ips = self.ibm_cloud.get_subnet_reserved_ips(self.WORKLOAD_SUBNET_ID)
+        mgmt_reserved_ips = self.ibm_cloud.get_subnet_reserved_ips(self.config.MANAGEMENT_SUBNET_ID)
+        workload_reserved_ips = self.ibm_cloud.get_subnet_reserved_ips(self.config.WORKLOAD_SUBNET_ID)
         
         ip_allocation = {}
         
@@ -128,7 +85,7 @@ class NodeProvisioner:
                 mgmt_reserved_ips
             )
             ip_allocation['management'] = self.ibm_cloud.create_subnet_reserved_ip(
-                self.MANAGEMENT_SUBNET_ID,
+                self.config.MANAGEMENT_SUBNET_ID,
                 mgmt_ip,
                 f"{node_config['node_name']}-mgmt"
             )
@@ -140,7 +97,7 @@ class NodeProvisioner:
                 mgmt_reserved_ips + [mgmt_ip]
             )
             ip_allocation['ahv'] = self.ibm_cloud.create_subnet_reserved_ip(
-                self.MANAGEMENT_SUBNET_ID,
+                self.config.MANAGEMENT_SUBNET_ID,
                 ahv_ip,
                 f"{node_config['node_name']}-ahv"
             )
@@ -152,7 +109,7 @@ class NodeProvisioner:
                 mgmt_reserved_ips + [mgmt_ip, ahv_ip]
             )
             ip_allocation['cvm'] = self.ibm_cloud.create_subnet_reserved_ip(
-                self.MANAGEMENT_SUBNET_ID,
+                self.config.MANAGEMENT_SUBNET_ID,
                 cvm_ip,
                 f"{node_config['node_name']}-cvm"
             )
@@ -164,7 +121,7 @@ class NodeProvisioner:
                 workload_reserved_ips
             )
             ip_allocation['workload'] = self.ibm_cloud.create_subnet_reserved_ip(
-                self.WORKLOAD_SUBNET_ID,
+                self.config.WORKLOAD_SUBNET_ID,
                 workload_ip,
                 f"{node_config['node_name']}-workload"
             )
@@ -177,7 +134,7 @@ class NodeProvisioner:
                     mgmt_reserved_ips + [mgmt_ip, ahv_ip, cvm_ip]
                 )
                 ip_allocation['cluster'] = self.ibm_cloud.create_subnet_reserved_ip(
-                    self.MANAGEMENT_SUBNET_ID,
+                    self.config.MANAGEMENT_SUBNET_ID,
                     cluster_ip,
                     f"cluster01"
                 )
@@ -195,7 +152,7 @@ class NodeProvisioner:
             for ip_type, ip_info in ip_allocation.items():
                 if ip_info:
                     try:
-                        subnet_id = self.MANAGEMENT_SUBNET_ID if ip_type != 'workload' else self.WORKLOAD_SUBNET_ID
+                        subnet_id = self.config.MANAGEMENT_SUBNET_ID if ip_type != 'workload' else self.config.WORKLOAD_SUBNET_ID
                         self.ibm_cloud.delete_subnet_reserved_ip(subnet_id, ip_info['reservation_id'])
                     except:
                         pass
@@ -204,7 +161,7 @@ class NodeProvisioner:
     def get_next_available_ip(self, subnet_cidr, ip_type, existing_ips):
         """Get next available IP in the specified range"""
         subnet = ipaddress.IPv4Network(subnet_cidr)
-        start_range, end_range = self.IP_RANGES[ip_type]
+        start_range, end_range = self.config.IP_RANGES[ip_type]
         
         for i in range(start_range, end_range + 1):
             candidate_ip = str(subnet.network_address + i)
@@ -286,19 +243,19 @@ class NodeProvisioner:
         try:
             # Create management VNI
             mgmt_vni = self.ibm_cloud.create_virtual_network_interface(
-                self.MANAGEMENT_SUBNET_ID,
+                self.config.MANAGEMENT_SUBNET_ID,
                 f"{node_config['node_name']}-mgmt-vni",
                 ip_allocation['management']['reservation_id'],
-                [self.MANAGEMENT_SECURITY_GROUP_ID, self.INTRA_NODE_SECURITY_GROUP_ID]
+                [self.config.MANAGEMENT_SECURITY_GROUP_ID, self.config.INTRA_NODE_SECURITY_GROUP_ID]
             )
             vnis['management_vni'] = mgmt_vni
             
             # Create workload VNI
             workload_vni = self.ibm_cloud.create_virtual_network_interface(
-                self.WORKLOAD_SUBNET_ID,
+                self.config.WORKLOAD_SUBNET_ID,
                 f"{node_config['node_name']}-workload-vni",
                 ip_allocation['workload']['reservation_id'],
-                [self.WORKLOAD_SECURITY_GROUP_ID]
+                [self.config.WORKLOAD_SECURITY_GROUP_ID]
             )
             vnis['workload_vni'] = workload_vni
             
@@ -330,21 +287,21 @@ class NodeProvisioner:
             'management_vni': {
                 'vni_id': vnis['management_vni']['id'],
                 'ip': ip_allocation['management']['ip_address'],
-                'dns_name': f"{node_data['node_config']['node_name']}-mgmt.{self.DNS_ZONE_NAME}"
+                'dns_name': f"{node_data['node_config']['node_name']}-mgmt.{self.config.DNS_ZONE_NAME}"
             },
             'workload_vni': {
                 'vni_id': vnis['workload_vni']['id'],
                 'ip': ip_allocation['workload']['ip_address'],
-                'dns_name': f"{node_data['node_config']['node_name']}-workload.{self.DNS_ZONE_NAME}"
+                'dns_name': f"{node_data['node_config']['node_name']}-workload.{self.config.DNS_ZONE_NAME}"
             },
             'nutanix_config': {
                 'ahv_ip': ip_allocation['ahv']['ip_address'],
-                'ahv_dns': f"{node_data['node_config']['node_name']}-ahv.{self.DNS_ZONE_NAME}",
+                'ahv_dns': f"{node_data['node_config']['node_name']}-ahv.{self.config.DNS_ZONE_NAME}",
                 'cvm_ip': ip_allocation['cvm']['ip_address'],
-                'cvm_dns': f"{node_data['node_config']['node_name']}-cvm.{self.DNS_ZONE_NAME}",
+                'cvm_dns': f"{node_data['node_config']['node_name']}-cvm.{self.config.DNS_ZONE_NAME}",
                 'cluster_ip': ip_allocation.get('cluster', {}).get('ip_address'),
-                'cluster_dns': f'cluster01.{self.DNS_ZONE_NAME}' if ip_allocation.get('cluster') else None,
-                'storage_config': node_data['node_config']['storage_config']
+                'cluster_dns': f'cluster01.{self.config.DNS_ZONE_NAME}' if ip_allocation.get('cluster') else None,
+                'storage_config': node_data['node_config'].get('storage_config', {})
             }
         }
         
@@ -376,7 +333,7 @@ class NodeProvisioner:
                 profile=node_config['server_profile'],
                 image_id=ipxe_image['id'],
                 primary_vni_id=vnis['management_vni']['id'],
-                ssh_key_ids=[self.SSH_KEY_ID],
+                ssh_key_ids=[self.config.SSH_KEY_ID],
                 additional_vnis=[vnis['workload_vni']],
                 user_data=user_data
             )
@@ -411,8 +368,8 @@ class NodeProvisioner:
         """Generate user data for server initialization"""
         user_data = {
             'node_id': node_id,
-            'pxe_server': self.PXE_SERVER_DNS,
-            'config_endpoint': f'http://{self.PXE_SERVER_DNS}:8081/server-config'
+            'pxe_server': self.config.PXE_SERVER_DNS,
+            'config_endpoint': f'http://{self.config.PXE_SERVER_DNS}:8081/server-config'
         }
         
         return base64.b64encode(json.dumps(user_data).encode()).decode()
@@ -429,8 +386,7 @@ class NodeProvisioner:
     
     def calculate_completion_time(self):
         """Calculate estimated completion time"""
-        total_timeout = sum(self.DEPLOYMENT_TIMEOUTS.values())
-        from datetime import datetime, timedelta
+        total_timeout = sum(self.config.DEPLOYMENT_TIMEOUTS.values())
         return (datetime.now() + timedelta(seconds=total_timeout)).isoformat()
     
     def cleanup_failed_provisioning(self, node_name):
