@@ -33,3 +33,10 @@ bash setup.sh
 sudo systemctl stop nutanix-pxe
 sudo -u nutanix ./venv/bin/python app.py
 ```
+
+## Test gunicorn manually:
+```bash
+cd /opt/nutanix-pxe
+source /etc/profile.d/app-vars.sh
+sudo -u nutanix -E bash -c "source venv/bin/activate && gunicorn --bind 0.0.0.0:8080 --workers 1 app:app"
+```

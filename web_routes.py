@@ -62,7 +62,7 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
             return render_template('monitoring.html', health_data={})
 
     @app.route('/provision', methods=['GET', 'POST'])
-    def provision_node():
+    def web_provision_node():
         """Node provisioning form"""
         if request.method == 'POST':
             try:
@@ -93,8 +93,14 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
                     flash('Please fill in all required fields', 'error')
                     return render_template('provision_form.html')
                 
-                # Submit to existing API endpoint
-                result = node_provisioner.provision_node(node_config)
+                # Submit to existing API endpoint via internal call
+                try:
+                    result = node_provisioner.provision_node(node_config)
+                    flash(f'Node {node_config["node_config"]["node_name"]} provisioning started successfully!', 'success')
+                    return redirect(url_for('deployments'))
+                except Exception as e:
+                    logger.error(f"Error provisioning node: {e}")
+                    flash(f'Error provisioning node: {str(e)}', 'error')
                 
                 if result.get('success'):
                     flash(f'Node {node_config["node_config"]["node_name"]} provisioning started successfully!', 'success')

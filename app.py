@@ -48,7 +48,7 @@ register_web_routes(app, db, node_provisioner, status_monitor)
 # ============================================================================
 
 @app.route('/boot-config', methods=['GET'])
-def handle_boot_config():
+def api_handle_boot_config():
     """Handle iPXE boot configuration requests"""
     try:
         boot_script = boot_service.handle_ipxe_boot(request.args)
@@ -59,7 +59,7 @@ def handle_boot_config():
         return Response(error_script, mimetype='text/plain'), 500
 
 @app.route('/server-config/<server_ip>', methods=['GET'])
-def get_server_config(server_ip):
+def api_get_server_config(server_ip):
     """Get detailed server configuration for Foundation"""
     try:
         config = boot_service.get_server_config(server_ip)
@@ -72,7 +72,7 @@ def get_server_config(server_ip):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/images/<filename>', methods=['GET'])
-def serve_boot_image(filename):
+def api_serve_boot_image(filename):
     """Serve boot images (kernel, initrd, etc.)"""
     try:
         # Security check - only allow approved files
@@ -91,7 +91,7 @@ def serve_boot_image(filename):
         return jsonify({'error': str(e)}), 404
 
 @app.route('/scripts/<script_name>', methods=['GET'])
-def serve_boot_script(script_name):
+def api_serve_boot_script(script_name):
     """Serve boot scripts and configuration files"""
     try:
         allowed_scripts = [
@@ -113,7 +113,7 @@ def serve_boot_script(script_name):
 # ============================================================================
 
 @app.route('/api/v1/nodes', methods=['POST'])
-def provision_node():
+def api_provision_node():
     """Provision a new Nutanix node"""
     try:
         data = request.get_json()
@@ -145,7 +145,7 @@ def provision_node():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/v1/nodes/<int:node_id>', methods=['GET'])
-def get_node_info(node_id):
+def api_get_node_info(node_id):
     """Get node information"""
     try:
         node = db.get_node(node_id)
@@ -173,7 +173,7 @@ def get_node_info(node_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/v1/nodes', methods=['GET'])
-def list_nodes():
+def api_list_nodes():
     """List all nodes"""
     try:
         # This would require adding a method to Database class
@@ -188,7 +188,7 @@ def list_nodes():
 # ============================================================================
 
 @app.route('/api/v1/nodes/<int:node_id>/status', methods=['GET'])
-def get_node_status(node_id):
+def api_get_node_status(node_id):
     """Get deployment status for a specific node"""
     try:
         node = db.get_node(node_id)
@@ -206,7 +206,7 @@ def get_node_status(node_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/deployment-status/<server_ip>', methods=['GET'])
-def get_deployment_status(server_ip):
+def api_get_deployment_status(server_ip):
     """Get deployment status by server IP (legacy endpoint)"""
     try:
         status = status_monitor.get_deployment_status(server_ip)
@@ -219,7 +219,7 @@ def get_deployment_status(server_ip):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/phase-update', methods=['POST'])
-def update_deployment_phase():
+def api_update_deployment_phase():
     """Receive phase updates from deploying servers"""
     try:
         data = request.get_json()
@@ -230,7 +230,7 @@ def update_deployment_phase():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/v1/nodes/<int:node_id>/history', methods=['GET'])
-def get_deployment_history(node_id):
+def api_get_deployment_history(node_id):
     """Get deployment history for a node"""
     try:
         node = db.get_node(node_id)
@@ -248,7 +248,7 @@ def get_deployment_history(node_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/v1/deployment/summary', methods=['GET'])
-def get_deployment_summary():
+def api_get_deployment_summary():
     """Get overall deployment summary"""
     try:
         summary = status_monitor.get_overall_deployment_summary()
@@ -265,7 +265,7 @@ def get_deployment_summary():
 # ============================================================================
 
 @app.route('/api/v1/dns/records', methods=['POST'])
-def create_dns_record():
+def api_create_dns_record():
     """Create a DNS record"""
     try:
         data = request.get_json()
@@ -285,7 +285,7 @@ def create_dns_record():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/v1/dns/records/<record_name>', methods=['DELETE'])
-def delete_dns_record(record_name):
+def api_delete_dns_record(record_name):
     """Delete a DNS record"""
     try:
         # Implementation would go here
@@ -299,7 +299,7 @@ def delete_dns_record(record_name):
 # ============================================================================
 
 @app.route('/api/v1/cleanup/node/<int:node_id>', methods=['POST'])
-def cleanup_node(node_id):
+def api_cleanup_node(node_id):
     """Clean up resources for a specific node"""
     try:
         node = db.get_node(node_id)
@@ -319,7 +319,7 @@ def cleanup_node(node_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/v1/cleanup/deployment/<deployment_id>', methods=['POST'])
-def cleanup_deployment(deployment_id):
+def api_cleanup_deployment(deployment_id):
     """Clean up all resources for a deployment"""
     try:
         # Implementation would clean up entire deployment
@@ -329,7 +329,7 @@ def cleanup_deployment(deployment_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/v1/cleanup/script/<deployment_id>', methods=['GET'])
-def generate_cleanup_script(deployment_id):
+def api_generate_cleanup_script(deployment_id):
     """Generate cleanup script for manual execution"""
     try:
         # Implementation would generate shell script
@@ -357,7 +357,7 @@ echo "This is a placeholder - full implementation needed"
 # ============================================================================
 
 @app.route('/health', methods=['GET'])
-def health_check():
+def api_health_check():
     """Health check endpoint"""
     try:
         # Check database connectivity
@@ -379,7 +379,7 @@ def health_check():
         }), 500
 
 @app.route('/api/v1/info', methods=['GET'])
-def get_server_info():
+def api_get_server_info():
     """Get PXE server information"""
     return jsonify({
         'server_name': 'Nutanix PXE/Config Server',
@@ -405,15 +405,15 @@ def get_server_info():
 # ============================================================================
 
 @app.errorhandler(404)
-def not_found(error):
+def api_not_found(error):
     return jsonify({'error': 'Not found'}), 404
 
 @app.errorhandler(500)
-def internal_error(error):
+def api_internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 @app.errorhandler(400)
-def bad_request(error):
+def api_bad_request(error):
     return jsonify({'error': 'Bad request'}), 400
 
 # ============================================================================
