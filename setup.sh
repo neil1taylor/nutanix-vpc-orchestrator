@@ -503,17 +503,30 @@ print('Database initialized successfully')
 # Download Nutanix ISO and create boot images
 log "Downloading Nutanix CE ISO from ${NUTANIX_ISO_URL}..."
 cd /tmp
-wget --quiet -O nutanix-ce.iso "$NUTANIX_ISO_URL"
+
+if [ ! -f "nutanix-ce.iso" ]; then
+    log "Downloading ISO from $NUTANIX_ISO_URL..."
+    wget --quiet -O nutanix-ce.iso "$NUTANIX_ISO_URL"
+else
+    log "ISO already exists. Skipping download."
+fi
 
 # Mount and extract
 log "Mounting ISO to /mnt and extracting files"
 mount -o loop nutanix-ce.iso /mnt
-log "Copying /mnt/boot/kernel to /var/www/pxe/images/vmlinuz-foundation"
-cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-foundation
-log "Copying /mnt/boot/initrd to /var/www/pxe/images/initrd-foundation.img"
-cp /mnt/boot/initrd /var/www/pxe/images/initrd-foundation.img
-log "Copying nutanix-ce.iso to /var/www/pxe/images/nutanix-ce-installer.iso"
-cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
+
+if [ ! -f "/var/www/pxe/images/vmlinuz-foundation" ]; then
+    log "Copying /mnt/boot/kernel to /var/www/pxe/images/vmlinuz-foundation"
+    cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-foundation
+fi
+if [ ! -f "/var/www/pxe/images/initrd-foundation.img" ]; then
+    log "Copying /mnt/boot/initrd to /var/www/pxe/images/initrd-foundation.img"
+    cp /mnt/boot/initrd /var/www/pxe/images/initrd-foundation.img
+fi
+if [ ! -f "/var/www/pxe/images/nutanix-ce-installer.iso" ]; then
+    log "Copying nutanix-ce.iso to /var/www/pxe/images/nutanix-ce-installer.iso"
+    cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
+fi
 
 log "Un-mounting ISO"
 umount /mnt
