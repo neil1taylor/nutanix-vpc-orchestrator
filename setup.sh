@@ -501,20 +501,24 @@ print('Database initialized successfully')
 "
 
 # Download Nutanix ISO and create boot images
-log "Downloading Nutanix boot images..."
+log "Downloading Nutanix CE ISO from ${NUTANIX_ISO_URL}..."
 cd /tmp
 wget --quiet -O nutanix-ce.iso "$NUTANIX_ISO_URL"
 
 # Mount and extract
-log "Mounting ISO and extracting files"
+log "Mounting ISO to /mnt and extracting files"
 mount -o loop nutanix-ce.iso /mnt
+log "Copying /mnt/boot/kernel to /var/www/pxe/images/vmlinuz-foundation"
 cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-foundation
+log "Copying /mnt/boot/initrd to /var/www/pxe/images/initrd-foundation.img"
 cp /mnt/boot/initrd /var/www/pxe/images/initrd-foundation.img
+log "Copying nutanix-ce.iso to /var/www/pxe/images/nutanix-ce-installer.iso"
 cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
 
 log "Un-mounting ISO"
 umount /mnt
 
+log "Changing ownership of /var/www/pxe to ${SERVICE_USER}:${SERVICE_USER}"
 chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
 log "Nutanix ISO downloaded and images configured"
 
@@ -528,6 +532,7 @@ systemctl start nginx
 systemctl start nutanix-pxe
 
 # Wait for services to start
+log "Waiting for services to start"
 sleep 5
 
 # Check service status
@@ -610,9 +615,9 @@ if [ "$ENABLE_HTTPS" = "true" ]; then
 """
 SSL Certificate monitoring script
 """
-import os
+
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
@@ -624,18 +629,18 @@ def check_ssl_certificate(cert_path):
         
         cert = x509.load_pem_x509_certificate(cert_data, default_backend())
         expires = cert.not_valid_after_utc
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         days_until_expiry = (expires - now).days
         
         print(f"Certificate expires: {expires}")
         print(f"Days until expiry: {days_until_expiry}")
         
-        if days_until_expiry < 30:
-            print("WARNING: Certificate expires in less than 30 days!")
-            return 1
-        elif days_until_expiry < 7:
+        if days_until_expiry < 7:
             print("CRITICAL: Certificate expires in less than 7 days!")
             return 2
+        elif days_until_expiry < 30:
+            print("WARNING: Certificate expires in less than 30 days!")
+            return 1
         else:
             print("Certificate is valid")
             return 0
@@ -647,6 +652,7 @@ def check_ssl_certificate(cert_path):
 if __name__ == "__main__":
     cert_path = sys.argv[1] if len(sys.argv) > 1 else "/opt/nutanix-pxe/ssl/nutanix-orchestrator.crt"
     exit(check_ssl_certificate(cert_path))
+
 EOF
 
     sudo chmod +x $PROJECT_DIR/ssl_monitor.py
