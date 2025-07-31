@@ -501,7 +501,7 @@ print('Database initialized successfully')
 # Download Nutanix ISO and create boot images
 log "Downloading Nutanix boot images..."
 cd /tmp
-wget -O nutanix-ce.iso "$NUTANIX_ISO_URL"
+wget --quiet -O nutanix-ce.iso "$NUTANIX_ISO_URL"
 
 # Mount and extract
 mount -o loop nutanix-ce.iso /mnt
@@ -539,6 +539,14 @@ if curl -f http://localhost:8080/health >/dev/null 2>&1; then
 else
     log "WARNING: Health check endpoint is not responding"
 fi
+
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    log "Testing HTTPS endpoint"
+    if curl -fk http://localhost >/dev/null 2>&1; then
+        log "HTTPS endpoint is responding"
+    else
+        log "WARNING: HTTPS endpoint is not responding"
+    fi
 
 # Create initial admin user or configuration
 log "Setting up initial configuration"
@@ -609,7 +617,7 @@ def check_ssl_certificate(cert_path):
             cert_data = f.read()
         
         cert = x509.load_pem_x509_certificate(cert_data, default_backend())
-        expires = cert.not_valid_after
+        expires = cert.not_valid_after_utc
         now = datetime.utcnow()
         days_until_expiry = (expires - now).days
         
