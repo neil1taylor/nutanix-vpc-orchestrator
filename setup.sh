@@ -426,6 +426,7 @@ server {
     }
 }
 EOF
+fi
 
 # Enable Nginx site
 ln -sf /etc/nginx/sites-available/nutanix-pxe /etc/nginx/sites-enabled/
