@@ -505,7 +505,7 @@ log "Downloading Nutanix CE ISO from ${NUTANIX_ISO_URL}..."
 cd /tmp
 
 if [ ! -f "nutanix-ce.iso" ]; then
-    log "Downloading ISO from $NUTANIX_ISO_URL..."
+    log "Downloading Nutanix CE ISO from $NUTANIX_ISO_URL..."
     wget --quiet -O nutanix-ce.iso "$NUTANIX_ISO_URL"
 else
     log "ISO already exists. Skipping download."
