@@ -16,10 +16,10 @@ The web interface is built as a Flask extension to the existing API-based Nutani
 
 ### Backend
 - **Flask 2.3+**: Web framework with Jinja2 templating
-- **PostgreSQL**: Existing database with minimal schema extensions
-- **Python 3.8+**: Leverages existing application dependencies
-- **Gunicorn**: WSGI server (existing configuration)
-- **Nginx**: Reverse proxy for static assets (existing configuration)
+- **PostgreSQL**: Database with minimal schema extensions
+- **Python 3.8+**: Application
+- **Gunicorn**: WSGI server
+- **Nginx**: Reverse proxy for static assets
 
 ### Frontend
 - **IBM Carbon Design System**: Official IBM design language
@@ -42,41 +42,24 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
 
 ## File Structure and Components
 
-```
+```bash
 nutanix-pxe-server/
-├── web_routes.py              # Flask web routes
-├── templates/                 # Jinja2 templates
-│   ├── base.html             # Master layout template
-│   ├── dashboard.html        # Dashboard view
-│   ├── nodes.html           # Node management
-│   ├── provision_form.html   # Node provisioning form
-│   ├── node_details.html     # Individual node details
-│   ├── deployments.html      # Deployment history
-│   └── monitoring.html       # System health monitoring
+├── web_routes.py                  # Flask web routes
+├── templates/                     # Jinja2 templates
+│   ├── base.html                  # Master layout template
+│   ├── dashboard.html             # Dashboard view
+│   ├── nodes.html                 # Node management
+│   ├── provision_form.html        # Node provisioning form
+│   ├── node_details.html          # Individual node details
+│   ├── deployments.html           # Deployment history
+│   └── monitoring.html            # System health monitoring
 ├── static/
 │   ├── css/
-│   │   └── styles.css        # IBM Carbon-based styles
+│   │   └── styles.css             # IBM Carbon-based styles
 │   └── js/
-│       ├── main.js           # Core JavaScript functionality
+│       ├── main.js                # Core JavaScript functionality
 │       └── deployment-monitor.js  # Real-time updates
-└── requirements.txt          # Additional Python dependencies
-```
-
-## Database Schema Extensions
-
-Minimal additions to existing schema for web UI support:
-
-```sql
--- Optional columns for enhanced web UI functionality
-ALTER TABLE nodes ADD COLUMN IF NOT EXISTS progress_percentage INTEGER DEFAULT 0;
-ALTER TABLE nodes ADD COLUMN IF NOT EXISTS current_phase VARCHAR(100);
-ALTER TABLE nodes ADD COLUMN IF NOT EXISTS cluster_name VARCHAR(100);
-
--- Performance indexes for web queries
-CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(deployment_status);
-CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at);
-CREATE INDEX IF NOT EXISTS idx_deployment_history_node ON deployment_history(node_id);
-CREATE INDEX IF NOT EXISTS idx_deployment_history_timestamp ON deployment_history(timestamp);
+└── requirements.txt               # Additional Python dependencies
 ```
 
 ## API Integration Patterns
@@ -428,148 +411,6 @@ const observeDeploymentRows = new IntersectionObserver((entries) => {
     });
 });
 ```
-
-## Testing Strategy
-
-### Backend Testing
-
-```python
-# test_web_routes.py
-import pytest
-from flask import url_for
-
-def test_dashboard_loads(client):
-    """Test dashboard renders without errors"""
-    response = client.get(url_for('dashboard'))
-    assert response.status_code == 200
-    assert b'Cluster Overview' in response.data
-
-def test_provision_form_validation(client):
-    """Test form validation works correctly"""
-    response = client.post(url_for('provision_node'), data={
-        'node_name': '',  # Invalid: required field empty
-        'server_profile': 'invalid-profile'  # Invalid: not in choices
-    })
-    assert response.status_code == 200
-    assert b'Please fill in all required fields' in response.data
-
-@pytest.fixture
-def mock_node_provisioner():
-    """Mock the node provisioner for testing"""
-    with patch('web_routes.node_provisioner') as mock:
-        mock.provision_node.return_value = {'success': True, 'node_id': 123}
-        yield mock
-```
-
-### Frontend Testing
-
-```javascript
-// Using Jest for JavaScript testing
-describe('DeploymentMonitor', () => {
-    let monitor;
-    
-    beforeEach(() => {
-        // Mock DOM elements
-        document.body.innerHTML = `
-            <tr data-node-id="123">
-                <td>test-node</td>
-                <td><span class="status-indicator status-pending"></span></td>
-            </tr>
-        `;
-        monitor = new DeploymentMonitor();
-    });
-    
-    test('should update status indicator correctly', () => {
-        const row = document.querySelector('tr[data-node-id="123"]');
-        monitor.updateRowStatus(row, 'running', 100, 'Complete');
-        
-        const indicator = row.querySelector('.status-indicator');
-        expect(indicator.classList.contains('status-running')).toBe(true);
-    });
-});
-```
-
-## Deployment and CI/CD
-
-### Docker Integration
-
-```dockerfile
-# Dockerfile additions for web UI assets
-FROM python:3.9-slim
-
-# ... existing setup ...
-
-# Install Node.js for asset building (optional)
-RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - \
-    && apt-get install -y nodejs
-
-# Copy and build frontend assets
-COPY static/ /app/static/
-COPY templates/ /app/templates/
-
-# ... rest of existing Dockerfile ...
-```
-
-### GitHub Actions Workflow
-
-```yaml
-name: Test Web Interface
-on: [push, pull_request]
-
-jobs:
-  test-web-ui:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-          
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-flask
-          
-      - name: Run web interface tests
-        run: |
-          pytest tests/test_web_routes.py -v
-          
-      - name: Test frontend JavaScript
-        run: |
-          npm install jest jsdom
-          npm test
-```
-
-## Migration Guide
-
-### From API-Only to Hybrid
-
-1. **Phase 1: Add web routes alongside existing API**
-   ```python
-   # Existing API routes continue to work
-   @app.route('/api/v1/nodes', methods=['POST'])
-   def api_provision_node():
-       return jsonify(provision_logic(request.json))
-   
-   # New web routes use same logic
-   @app.route('/provision', methods=['POST']) 
-   def web_provision_node():
-       return handle_web_form(provision_logic)
-   ```
-
-2. **Phase 2: Optional database schema updates**
-   ```sql
-   -- Non-breaking additions only
-   ALTER TABLE nodes ADD COLUMN IF NOT EXISTS progress_percentage INTEGER DEFAULT 0;
-   ```
-
-3. **Phase 3: Deploy static assets**
-   ```bash
-   mkdir -p static/css static/js templates/
-   # Copy template and static files
-   ```
 
 ### Backward Compatibility
 
