@@ -832,7 +832,7 @@ WorkingDirectory=$PROJECT_DIR
 Environment="PATH=$PROJECT_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/etc/profile.d/app-vars.sh
 ExecStartPre=/bin/bash -c 'set -a; source /etc/profile.d/app-vars.sh; set +a'
-ExecStart=/bin/bash -c 'set -a; source /etc/profile.d/app-vars.sh; exec $PROJECT_DIR/venv/bin/gunicorn --config gunicorn.conf.py app:app'
+ExecStart=/bin/bash -c "set -a; source /etc/profile.d/app-vars.sh; exec $PROJECT_DIR/venv/bin/gunicorn --config gunicorn.conf.py app:app"
 ExecReload=/bin/kill -s HUP \$MAINPID
 Restart=always
 RestartSec=5
