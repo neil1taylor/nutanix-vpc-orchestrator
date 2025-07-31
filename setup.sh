@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup script for Nutanix PXE/Config Server with testing
+# Enhanced Setup script for Nutanix PXE/Config Server with comprehensive testing
 # This script is executed by cloud-init during VSI deployment
 
 set -euo pipefail
@@ -717,8 +717,6 @@ chown -R "$SERVICE_USER:$SERVICE_USER" /var/log/nutanix-pxe
 # Setup Python virtual environment
 log "Setting up Python virtual environment"
 cd "$PROJECT_DIR"
-python3 -m venv venv
-source venv/bin/activate
 
 # Create virtual environment as the service user
 sudo -u "$SERVICE_USER" python3 -m venv venv
@@ -833,8 +831,7 @@ Group=$SERVICE_USER
 WorkingDirectory=$PROJECT_DIR
 Environment="PATH=$PROJECT_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/etc/profile.d/app-vars.sh
-ExecStartPre=/bin/bash -c 'set -a; source /etc/profile.d/app-vars.sh; set +a'
-ExecStart=/bin/bash -c "set -a; source /etc/profile.d/app-vars.sh; exec $PROJECT_DIR/venv/bin/gunicorn --config gunicorn.conf.py app:app"
+ExecStart=$PROJECT_DIR/venv/bin/gunicorn --config gunicorn.conf.py app:app
 ExecReload=/bin/kill -s HUP \$MAINPID
 Restart=always
 RestartSec=5
