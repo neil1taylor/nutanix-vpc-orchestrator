@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Provision Node - Nutanix VPC Orchestrator{% endblock %}
+
+{% block breadcrumb %}> Provision Node{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Provision New Node</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Node Configuration</h2>
+    </div>
+    <div class="card-content">
+        <form method="POST" action="{{ url_for('provision_node') }}">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label" for="node_name">Node Name *</label>
+                    <input type="text" id="node_name" name="node_name" class="form-input" 
+                           placeholder="nutanix-poc-bm-node-01" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="node_position">Node Position</label>
+                    <select id="node_position" name="node_position" class="form-select">
+                        <option value="">Select position</option>
+                        <option value="A">Position A</option>
+                        <option value="B">Position B</option>
+                        <option value="C">Position C</option>
+                        <option value="D">Position D</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="server_profile">Server Profile *</label>
+                    <select id="server_profile" name="server_profile" class="form-select" required>
+                        <option value="">Select server profile</option>
+                        <option value="bx2d-metal-24x96">bx2d-metal-24x96 (24 vCPU, 96 GB RAM)</option>
+                        <option value="bx2d-metal-48x192">bx2d-metal-48x192 (48 vCPU, 192 GB RAM)</option>
+                        <option value="bx2d-metal-96x384">bx2d-metal-96x384 (96 vCPU, 384 GB RAM)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="cluster_role">Cluster Role</label>
+                    <select id="cluster_role" name="cluster_role" class="form-select">
+                        <option value="">Select role</option>
+                        <option value="compute">Compute</option>
+                        <option value="storage">Storage</option>
+                        <option value="compute-storage">Compute + Storage</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="cluster_operation">Cluster Operation *</label>
+                    <select id="cluster_operation" name="cluster_operation" class="form-select" required>
+                        <option value="">Select operation</option>
+                        <option value="create_new">Create New Cluster</option>
+                        <option value="join_existing">Join Existing Cluster</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="management_subnet">Management Subnet</label>
+                    <select id="management_subnet" name="management_subnet" class="form-select">
+                        <option value="auto">Auto-assign</option>
+                        <option value="10.240.1.0/24">10.240.1.0/24 - Production</option>
+                        <option value="10.240.2.0/24">10.240.2.0/24 - Development</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn">Provision Node</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--cds-border-subtle);
+}
+</style>
+{% endblock %}

@@ -9,6 +9,10 @@ PROJECT_DIR="/opt/nutanix-pxe"
 SERVICE_USER="nutanix"
 LOG_FILE="/var/log/nutanix-pxe-setup.log"
 NUTANIX_ISO_URL="https://download.nutanix.com/ce/2024.08.19/phoenix.x86_64-fnd_5.6.1_patch-aos_6.8.1_ga.iso"
+ENABLE_HTTPS=${ENABLE_HTTPS:-true}
+SSL_DOMAIN=${SSL_DOMAIN:-$(hostname -f)}
+SSL_DIR="/opt/nutanix-pxe/ssl"
+
 
 # Logging function
 log() {
@@ -37,6 +41,38 @@ apt-get install -y \
     unzip \
     systemd \
     supervisor
+
+log "HTTPS Enabled: $ENABLE_HTTPS"
+log "SSL Domain: $SSL_DOMAIN"
+log "SSL Directory: $SSL_DIR"
+
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    log "Setting up SSL certificates..."
+    
+    # Create SSL directory
+    sudo mkdir -p $SSL_DIR
+    
+    # Generate private key
+    log "Generating private key..."
+    sudo openssl genrsa -out $SSL_DIR/nutanix-orchestrator.key 2048
+    
+    # Generate certificate signing request
+    log "Generating certificate signing request..."
+    sudo openssl req -new -key $SSL_DIR/nutanix-orchestrator.key -out $SSL_DIR/nutanix-orchestrator.csr -subj "/C=US/ST=State/L=City/O=Organization/OU=IT/CN=$SSL_DOMAIN/emailAddress=admin@$SSL_DOMAIN"
+    
+    # Generate self-signed certificate (valid for 365 days)
+    log "Generating self-signed certificate..."
+    sudo openssl x509 -req -days 365 -in $SSL_DIR/nutanix-orchestrator.csr -signkey $SSL_DIR/nutanix-orchestrator.key -out $SSL_DIR/nutanix-orchestrator.crt
+    
+    # Set proper permissions
+    sudo chown -R "$SERVICE_USER:$SERVICE_USER" $SSL_DIR
+    sudo chmod 600 $SSL_DIR/nutanix-orchestrator.key
+    sudo chmod 644 $SSL_DIR/nutanix-orchestrator.crt
+    
+    log "SSL certificates generated successfully"
+else
+    log "HTTPS disabled, using HTTP only"
+fi
 
 # Create service user
 log "Creating service user"
@@ -242,7 +278,114 @@ EOF
 
 # Configure Nginx as reverse proxy
 log "Configuring Nginx"
-cat > /etc/nginx/sites-available/nutanix-pxe << EOF
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    cat > /etc/nginx/sites-available/nutanix-pxe << EOF
+# HTTP to HTTPS Redirect
+server {
+    listen 80;
+    server_name $SSL_DOMAIN _;
+    
+    # Redirect all HTTP traffic to HTTPS
+    return 301 https://\$server_name\$request_uri;
+}
+
+# HTTPS Server Block
+server {
+    listen 443 ssl http2;
+    server_name $SSL_DOMAIN _;
+
+    # SSL Configuration
+    ssl_certificate $SSL_DIR/nutanix-orchestrator.crt;
+    ssl_certificate_key $SSL_DIR/nutanix-orchestrator.key;
+    
+    # SSL Security Settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    
+    # Security Headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload";
+    add_header Referrer-Policy "strict-origin-when-cross-origin";
+
+    # Root directory
+    root /var/www/pxe;
+    index index.html;
+
+    # PXE boot files
+    location /pxe/ {
+        alias /var/www/pxe/;
+        autoindex on;
+        try_files \$uri \$uri/ =404;
+    }
+
+    # API and Web Interface - Proxy to Gunicorn
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$server_name;
+        
+        # WebSocket support (for future real-time features)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # Buffer settings
+        proxy_buffering on;
+        proxy_buffer_size 128k;
+        proxy_buffers 4 256k;
+        proxy_busy_buffers_size 256k;
+    }
+
+    # Static files (CSS, JS, images) - served directly by Nginx
+    location /static/ {
+        alias $PROJECT_DIR/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        
+        # Compress static files
+        gzip on;
+        gzip_vary on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+    }
+
+    # Health check endpoint (no logging)
+    location /health {
+        proxy_pass http://127.0.0.1:8080/health;
+        access_log off;
+    }
+
+    # Boot configuration endpoints
+    location /boot-config {
+        proxy_pass http://127.0.0.1:8080/boot-config;
+    }
+
+    location ~* ^/server-config/(.+)\$ {
+        proxy_pass http://127.0.0.1:8080/server-config/\$1;
+    }
+
+    # Error pages
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /var/www/html;
+    }
+}
+EOF
+
+else
+    cat > /etc/nginx/sites-available/nutanix-pxe << EOF
 server {
     listen 80;
     server_name _;
@@ -290,6 +433,41 @@ rm -f /etc/nginx/sites-enabled/default
 
 # Test Nginx configuration
 nginx -t
+
+# Update Flask for HTTPS
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    log "Configuring Flask for HTTPS..."
+    
+    # Create HTTPS configuration file
+    sudo tee /opt/nutanix-pxe/https_config.py > /dev/null <<'EOF'
+"""
+HTTPS configuration for Flask application
+"""
+from flask import request, redirect, url_for
+
+def configure_https_app(app):
+    """Configure Flask app for HTTPS operation"""
+    
+    @app.before_request
+    def force_https():
+        """Redirect HTTP to HTTPS in production"""
+        if not request.is_secure:
+            # Check if we're behind a proxy (Nginx) that handles SSL
+            if request.headers.get('X-Forwarded-Proto') != 'https':
+                # Only redirect if not in debug mode and not a health check
+                if not app.debug and request.endpoint != 'health':
+                    return redirect(request.url.replace('http://', 'https://'))
+    
+    @app.context_processor
+    def inject_https_vars():
+        """Inject HTTPS-aware variables into templates"""
+        return {
+            'is_https': request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https',
+            'scheme': 'https' if (request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https') else 'http'
+        }
+    
+    return app
+EOF
 
 # Create log rotation configuration
 log "Setting up log rotation"
@@ -384,6 +562,83 @@ if command -v ufw >/dev/null 2>&1; then
     ufw --force enable
 fi
 
+# Updating environment variables
+log "Updating environment variables..."
+
+# Add HTTPS-related environment variables
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    sudo tee -a $PROJECT_DIR/.env > /dev/null <<EOF
+
+# HTTPS Configuration
+HTTPS_ENABLED=true
+SSL_CERT_PATH=$SSL_DIR/nutanix-orchestrator.crt
+SSL_KEY_PATH=$SSL_DIR/nutanix-orchestrator.key
+FORCE_HTTPS=true
+EOF
+else
+    sudo tee -a $PROJECT_DIR/.env > /dev/null <<EOF
+
+# HTTPS Configuration
+HTTPS_ENABLED=false
+FORCE_HTTPS=false
+EOF
+fi
+
+# Create SSL health monitoring script
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    log "Setting up SSL health monitoring..."
+    
+    # Create SSL certificate monitoring script
+    sudo tee $PROJECT_DIR/ssl_monitor.py > /dev/null <<'EOF'
+#!/usr/bin/env python3
+"""
+SSL Certificate monitoring script
+"""
+import os
+import sys
+from datetime import datetime
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+
+def check_ssl_certificate(cert_path):
+    """Check SSL certificate expiration"""
+    try:
+        with open(cert_path, 'rb') as f:
+            cert_data = f.read()
+        
+        cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+        expires = cert.not_valid_after
+        now = datetime.utcnow()
+        days_until_expiry = (expires - now).days
+        
+        print(f"Certificate expires: {expires}")
+        print(f"Days until expiry: {days_until_expiry}")
+        
+        if days_until_expiry < 30:
+            print("WARNING: Certificate expires in less than 30 days!")
+            return 1
+        elif days_until_expiry < 7:
+            print("CRITICAL: Certificate expires in less than 7 days!")
+            return 2
+        else:
+            print("Certificate is valid")
+            return 0
+            
+    except Exception as e:
+        print(f"Error checking certificate: {e}")
+        return 3
+
+if __name__ == "__main__":
+    cert_path = sys.argv[1] if len(sys.argv) > 1 else "/opt/nutanix-pxe/ssl/nutanix-orchestrator.crt"
+    exit(check_ssl_certificate(cert_path))
+EOF
+
+    sudo chmod +x $PROJECT_DIR/ssl_monitor.py
+    sudo chown "$SERVICE_USER:$SERVICE_USER" $PROJECT_DIR/ssl_monitor.py
+    
+    log "SSL monitoring script created"
+fi
+
 # Create status check script
 cat > "$PROJECT_DIR/check-status.sh" << EOF
 #!/bin/bash
@@ -442,10 +697,29 @@ log "  - Check Status: $PROJECT_DIR/check-status.sh"
 log "  - Restart Service: systemctl restart nutanix-pxe"
 log "  - View Logs: journalctl -u nutanix-pxe -f"
 log ""
-log "Next Steps:"
-log "1. Update environment variables in $PROJECT_DIR/.env"
-log "2. Replace placeholder boot images with actual Nutanix images"
-log "3. Test node provisioning API"
+
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    log "HTTPS is now enabled"
+    log "SSL Certificate: $SSL_DIR/nutanix-orchestrator.crt" 
+    log "SSL Private Key: $SSL_DIR/nutanix-orchestrator.key"
+    log "Web Interface: https://$SSL_DOMAIN"
+    log "HTTP automatically redirects to HTTPS"
+    log ""
+    log "IMPORTANT NOTES:"
+    log " - Browser will show security warning for self-signed certificate"
+    log " - Users need to accept the security exception to proceed"
+    log " - For production, consider using Let's Encrypt or commercial certificates"
+    log ""
+    log "Test Commands:"
+    log " curl -k https://$SSL_DOMAIN/health"
+    log " curl -I http://$SSL_DOMAIN/ (should redirect to HTTPS)"
+    log ""
+    log "SSL Certificate Info:"
+    /opt/nutanix-pxe/ssl_monitor.py
+else
+    log "HTTPS is disabled - using HTTP only"
+    log "Web Interface: http://$SSL_DOMAIN"
+fi
 
 # Create a simple README for operators
 cat > "$PROJECT_DIR/README.md" << 'EOF'

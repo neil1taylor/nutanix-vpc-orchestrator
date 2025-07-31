@@ -39,6 +39,9 @@ class Database:
                             workload_vnic_id VARCHAR(255),
                             workload_ip INET,
                             nutanix_config JSONB,
+                            progress_percentage INTEGER DEFAULT 0,
+                            current_phase VARCHAR(100),
+                            cluster_name VARCHAR(100),
                             created_at TIMESTAMP DEFAULT NOW(),
                             updated_at TIMESTAMP DEFAULT NOW()
                         );
@@ -101,6 +104,24 @@ class Database:
                             vnic_id VARCHAR(255),
                             vnic_type VARCHAR(50),
                             created_at TIMESTAMP DEFAULT NOW()
+                        );
+                    """)
+
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(
+                            deployment_status
+                        );
+                    """)
+
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(
+                            created_at
+                        );
+                    """)
+
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_deployment_history_node ON deployment_history(
+                            node_id
                         );
                     """)
                     

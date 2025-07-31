@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Nutanix VPC Orchestrator{% endblock %}</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/carbon-components/10.58.0/css/carbon-components.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header class="header">
+        <div class="header-title">Nutanix VPC Orchestrator</div>
+        <nav class="header-nav">
+            <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+            <a href="{{ url_for('nodes') }}" class="nav-item {% if request.endpoint == 'nodes' %}active{% endif %}">Cluster Nodes</a>
+            <a href="{{ url_for('deployments') }}" class="nav-item {% if request.endpoint == 'deployments' %}active{% endif %}">Deployments</a>
+            <a href="{{ url_for('monitoring') }}" class="nav-item {% if request.endpoint == 'monitoring' %}active{% endif %}">Monitoring</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="breadcrumb">
+            IBM Cloud > VPC Infrastructure > Nutanix Orchestrator
+            {% block breadcrumb %}{% endblock %}
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'error' if category == 'error' else 'success' if category == 'success' else 'warning' }}">
+                        <strong>{{ category.title() }}:</strong> {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

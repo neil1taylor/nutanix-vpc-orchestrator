@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Nutanix VPC Orchestrator{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Cluster Overview</h1>
+    <a href="{{ url_for('provision_node') }}" class="btn">Provision New Node</a>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.active_nodes or 0 }}</div>
+        <div class="stat-label">Active Nodes</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_clusters or 0 }}</div>
+        <div class="stat-label">Clusters</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_deployments or 0 }}</div>
+        <div class="stat-label">Total Deployments</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.success_rate or '0%' }}</div>
+        <div class="stat-label">Success Rate</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Recent Deployments</h2>
+        <button class="btn btn-secondary" onclick="refreshDashboard()">Refresh</button>
+    </div>
+    <div class="card-content">
+        {% if recent_deployments %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Node Name</th>
+                    <th>Status</th>
+                    <th>Cluster</th>
+                    <th>Created</th>
+                    <th>Progress</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for deployment in recent_deployments %}
+                <tr>
+                    <td>{{ deployment.node_name }}</td>
+                    <td>
+                        <span class="status-indicator status-{{ 'running' if deployment.status == 'running' else 'pending' if deployment.status in ['provisioning', 'pending'] else 'error' if deployment.status == 'error' else 'stopped' }}"></span>
+                        {{ deployment.status.title() }}
+                    </td>
+                    <td>{{ deployment.cluster }}</td>
+                    <td>{{ deployment.created_at.strftime('%Y-%m-%d %H:%M') if deployment.created_at else 'Unknown' }}</td>
+                    <td>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: {{ deployment.progress }}%"></div>
+                        </div>
+                        {{ deployment.progress }}% Complete
+                    </td>
+                    <td>
+                        <a href="{{ url_for('node_details', node_id=deployment.id) }}" class="btn btn-secondary">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No recent deployments found. <a href="{{ url_for('provision_node') }}">Provision your first node</a>.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function refreshDashboard() {
+    const refreshBtn = event.target;
+    refreshBtn.textContent = 'Refreshing...';
+    refreshBtn.disabled = true;
+    
+    fetch('/api/web/dashboard-stats')
+        .then(response => response.json())
+        .then(data => {
+            // Update stats
+            document.querySelector('.stats-grid .stat-card:nth-child(1) .stat-value').textContent = data.active_nodes || 0;
+            document.querySelector('.stats-grid .stat-card:nth-child(2) .stat-value').textContent = data.total_clusters || 0;
+            document.querySelector('.stats-grid .stat-card:nth-child(3) .stat-value').textContent = data.total_deployments || 0;
+            document.querySelector('.stats-grid .stat-card:nth-child(4) .stat-value').textContent = data.success_rate || '0%';
+            
+            refreshBtn.textContent = 'Refresh';
+            refreshBtn.disabled = false;
+        })
+        .catch(error => {
+            console.error('Error refreshing dashboard:', error);
+            refreshBtn.textContent = 'Refresh';
+            refreshBtn.disabled = false;
+        });
+}
+
+// Auto-refresh every 30 seconds
+setInterval(refreshDashboard, 30000);
+</script>
+{% endblock %}

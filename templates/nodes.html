@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Cluster Nodes - Nutanix VPC Orchestrator{% endblock %}
+
+{% block breadcrumb %}> Cluster Nodes{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Cluster Nodes</h1>
+    <a href="{{ url_for('provision_node') }}" class="btn">Add Node</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">All Nodes</h2>
+    </div>
+    <div class="card-content">
+        {% if nodes %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Node Name</th>
+                    <th>IP Address</th>
+                    <th>Role</th>
+                    <th>Cluster</th>
+                    <th>Server Profile</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for node in nodes %}
+                <tr>
+                    <td>{{ node.node_name }}</td>
+                    <td>{{ node.ip_address }}</td>
+                    <td>{{ node.cluster_role.title() if node.cluster_role else 'Not set' }}</td>
+                    <td>{{ node.cluster_name }}</td>
+                    <td>{{ node.server_profile }}</td>
+                    <td>
+                        <span class="status-indicator status-{{ 'running' if node.status == 'running' else 'pending' if node.status in ['provisioning', 'pending'] else 'error' if node.status == 'error' else 'stopped' }}"></span>
+                        {{ node.status.title() }}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('node_details', node_id=node.id) }}" class="btn btn-secondary">Manage</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No nodes found. <a href="{{ url_for('provision_node') }}">Provision your first node</a>.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

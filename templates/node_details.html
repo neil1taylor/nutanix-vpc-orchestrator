@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}{{ node.node_name }} - Nutanix VPC Orchestrator{% endblock %}
+
+{% block breadcrumb %}> Cluster Nodes > {{ node.node_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{{ node.node_name }}</h1>
+    <div>
+        <a href="{{ url_for('nodes') }}" class="btn btn-secondary">Back to Nodes</a>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">
+            <span class="status-indicator status-{{ 'running' if node.status == 'running' else 'pending' if node.status in ['provisioning', 'pending'] else 'error' if node.status == 'error' else 'stopped' }}"></span>
+        </div>
+        <div class="stat-label">Status: {{ node.status.title() }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ node.progress or 0 }}%</div>
+        <div class="stat-label">Deployment Progress</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ node.ip_address or 'Pending' }}</div>
+        <div class="stat-label">IP Address</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ node.server_profile }}</div>
+        <div class="stat-label">Server Profile</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Node Configuration</h2>
+    </div>
+    <div class="card-content">
+        <div class="config-grid">
+            <div class="config-item">
+                <strong>Cluster:</strong> {{ node.cluster_name or 'Not assigned' }}
+            </div>
+            <div class="config-item">
+                <strong>Role:</strong> {{ node.cluster_role.title() if node.cluster_role else 'Not set' }}
+            </div>
+            <div class="config-item">
+                <strong>Position:</strong> {{ node.node_position or 'Not set' }}
+            </div>
+            <div class="config-item">
+                <strong>Created:</strong> {{ node.created_at.strftime('%Y-%m-%d %H:%M:%S') if node.created_at else 'Unknown' }}
+            </div>
+            {% if node.current_phase %}
+            <div class="config-item">
+                <strong>Current Phase:</strong> {{ node.current_phase }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if deployment_history %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Deployment History</h2>
+    </div>
+    <div class="card-content">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Phase</th>
+                    <th>Status</th>
+                    <th>Timestamp</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for history in deployment_history %}
+                <tr>
+                    <td>{{ history.phase }}</td>
+                    <td>
+                        <span class="status-indicator status-{{ 'running' if history.status == 'success' else 'error' if history.status == 'error' else 'pending' }}"></span>
+                        {{ history.status.title() }}
+                    </td>
+                    <td>{{ history.timestamp.strftime('%Y-%m-%d %H:%M:%S') if history.timestamp else 'Unknown' }}</td>
+                    <td>{{ history.duration or 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.config-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--cds-border-subtle);
+}
+</style>
+{% endblock %}
