@@ -1,7 +1,7 @@
 """
 Main Flask application for Nutanix PXE/Config Server
 """
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_from_directory, jsonify
 from web_routes import register_web_routes
 from flask_cors import CORS
 import logging
@@ -26,28 +26,22 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-def create_app():
-    app = Flask(__name__)
-    app.config.from_object(Config)
-    CORS(app)
+# Initialize Flask app GLOBALLY
+app = Flask(__name__)
+app.config.from_object(Config)
+CORS(app)
 
-    # Add secret key for sessions and flash messages
-    app.secret_key = os.environ.get('SECRET_KEY', 'nutanix-orchestrator-secret-key')
+# Add secret key for sessions and flash messages
+app.secret_key = os.environ.get('SECRET_KEY', 'nutanix-orchestrator-secret-key')
 
-    # Initialize services
-    db = Database()
-    node_provisioner = NodeProvisioner()
-    boot_service = BootService()
-    status_monitor = StatusMonitor()
+# Initialize services
+db = Database()
+node_provisioner = NodeProvisioner()
+boot_service = BootService()
+status_monitor = StatusMonitor()
 
-    # Register existing API routes...
-    # register_api_routes(app)
-        
-    # Register new web UI routes
-    register_web_routes(app, db, node_provisioner, status_monitor)
-
-    return app
+# Register web UI routes
+register_web_routes(app, db, node_provisioner, status_monitor)
 
 # ============================================================================
 # BOOT SERVER ENDPOINTS (Port 8080)
@@ -439,8 +433,6 @@ if __name__ == '__main__':
     logger.info(f"Status Monitor: http://{Config.PXE_SERVER_IP}:8082")
     logger.info(f"DNS Service: http://{Config.PXE_SERVER_IP}:8083")
     logger.info(f"Cleanup Service: http://{Config.PXE_SERVER_IP}:8084")
-
-    create_app()
     
     # Run in development mode - use gunicorn for production
     app.run(
