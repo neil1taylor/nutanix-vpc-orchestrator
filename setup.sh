@@ -421,8 +421,11 @@ test_api_endpoints() {
     # Test web interface root
     test_http_endpoint "Web Interface" "$base_url/" "200" 15
     
-    # Test boot-config endpoint (should handle missing parameters gracefully)
-    test_http_endpoint "Boot Config Endpoint" "$base_url/boot-config" "500" 10
+    # Test boot-config endpoint without parameters (should return error)
+    test_http_endpoint "Boot Config Endpoint (no params)" "$base_url/boot-config" "500" 10
+
+    # Test boot-config endpoint with parameters (should work)
+    test_http_endpoint "Boot Config Endpoint (with params)" "$base_url/boot-config?mgmt_ip=192.168.1.100&mgmt_mac=00:11:22:33:44:55" "200" 10
     
     if [[ "$ENABLE_HTTPS" == "true" ]]; then
         # Test HTTPS redirect
