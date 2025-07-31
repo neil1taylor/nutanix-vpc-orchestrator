@@ -469,6 +469,7 @@ def configure_https_app(app):
     
     return app
 EOF
+fi
 
 # Create log rotation configuration
 log "Setting up log rotation"
