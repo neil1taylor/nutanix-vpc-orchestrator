@@ -846,8 +846,6 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-
-
 # Configure Nginx as reverse proxy
 log "Configuring Nginx"
 # Create modular configuration structure
