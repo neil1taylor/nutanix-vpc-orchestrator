@@ -15,20 +15,70 @@ from boot_service import BootService
 from status_monitor import StatusMonitor
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(f'{Config.LOG_PATH}/pxe-server.log'),
-        logging.StreamHandler()
-    ]
-)
+class ProxyAwareLogHandler(logging.Handler):
+    def __init__(self, handler):
+        super().__init__()
+        self.handler = handler
+    
+    def emit(self, record):
+        # Try to get the real IP from Flask's request context
+        try:
+            from flask import has_request_context, request
+            if has_request_context() and request:
+                # Get the real IP from X-Forwarded-For header if available
+                forwarded_for = request.headers.get('X-Forwarded-For')
+                if forwarded_for:
+                    # Get the first IP in the chain (client IP)
+                    real_ip = forwarded_for.split(',')[0].strip()
+                    record.real_ip = real_ip
+                else:
+                    # Fallback to remote address
+                    record.real_ip = request.remote_addr
+            else:
+                record.real_ip = 'unknown'
+        except:
+            record.real_ip = 'unknown'
+        
+        self.handler.emit(record)
+
+# Custom formatter that includes real IP
+class ProxyAwareFormatter(logging.Formatter):
+    def format(self, record):
+        if not hasattr(record, 'real_ip'):
+            record.real_ip = 'unknown'
+        return super().format(record)
+
+# Set up logging with custom formatter
+formatter = ProxyAwareFormatter('%(asctime)s - %(name)s - %(levelname)s - %(real_ip)s - %(message)s')
+
+# Create file handler
+file_handler = logging.FileHandler(f'{Config.LOG_PATH}/pxe-server.log')
+file_handler.setFormatter(formatter)
+
+# Create stream handler
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+# Wrap handlers with proxy-aware handler
+proxy_file_handler = ProxyAwareLogHandler(file_handler)
+proxy_stream_handler = ProxyAwareLogHandler(stream_handler)
+
+# Configure root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(proxy_file_handler)
+root_logger.addHandler(proxy_stream_handler)
 
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app GLOBALLY
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config.from_object(Config)
+
+# Configure Flask to trust proxy headers
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
 CORS(app)
 
 # Add secret key for sessions and flash messages
@@ -44,10 +94,9 @@ status_monitor = StatusMonitor()
 register_web_routes(app, db, node_provisioner, status_monitor)
 
 # ============================================================================
-# BOOT SERVER ENDPOINTS
+# BOOT SERVER ENDPOINTS (Consolidated under /boot/)
 # ============================================================================
 
-@app.route('/boot-config', methods=['GET'])
 @app.route('/boot/config', methods=['GET'])
 def api_handle_boot_config():
     """Handle iPXE boot configuration requests"""
@@ -59,7 +108,6 @@ def api_handle_boot_config():
         error_script = boot_service.generate_error_boot_script(str(e))
         return Response(error_script, mimetype='text/plain'), 500
 
-@app.route('/server-config/<server_ip>', methods=['GET'])
 @app.route('/boot/server/<server_ip>', methods=['GET'])
 def api_get_server_config(server_ip):
     """Get detailed server configuration for Foundation"""
@@ -73,7 +121,6 @@ def api_get_server_config(server_ip):
         logger.error(f"Server config error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/images/<filename>', methods=['GET'])
 @app.route('/boot/images/<filename>', methods=['GET'])
 def api_serve_boot_image(filename):
     """Serve boot images (kernel, initrd, etc.)"""
@@ -93,7 +140,6 @@ def api_serve_boot_image(filename):
         logger.error(f"Image serve error: {str(e)}")
         return jsonify({'error': str(e)}), 404
 
-@app.route('/scripts/<script_name>', methods=['GET'])
 @app.route('/boot/scripts/<script_name>', methods=['GET'])
 def api_serve_boot_script(script_name):
     """Serve boot scripts and configuration files"""
@@ -113,10 +159,10 @@ def api_serve_boot_script(script_name):
         return jsonify({'error': str(e)}), 404
 
 # ============================================================================
-# CONFIGURATION API ENDPOINTS (Port 8081)
+# CONFIGURATION API ENDPOINTS (Consolidated under /api/config/)
 # ============================================================================
 
-@app.route('/api/v1/nodes', methods=['POST'])
+@app.route('/api/config/nodes', methods=['POST'])
 def api_provision_node():
     """Provision a new Nutanix node"""
     try:
@@ -148,7 +194,7 @@ def api_provision_node():
         logger.error(f"Node provisioning error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/nodes/<int:node_id>', methods=['GET'])
+@app.route('/api/config/nodes/<int:node_id>', methods=['GET'])
 def api_get_node_info(node_id):
     """Get node information"""
     try:
@@ -176,7 +222,7 @@ def api_get_node_info(node_id):
         logger.error(f"Get node error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/nodes', methods=['GET'])
+@app.route('/api/config/nodes', methods=['GET'])
 def api_list_nodes():
     """List all nodes"""
     try:
@@ -188,10 +234,10 @@ def api_list_nodes():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
-# STATUS MONITORING ENDPOINTS (Port 8082)
+# STATUS MONITORING ENDPOINTS (Consolidated under /api/status/)
 # ============================================================================
 
-@app.route('/api/v1/nodes/<int:node_id>/status', methods=['GET'])
+@app.route('/api/status/nodes/<int:node_id>', methods=['GET'])
 def api_get_node_status(node_id):
     """Get deployment status for a specific node"""
     try:
@@ -209,7 +255,7 @@ def api_get_node_status(node_id):
         logger.error(f"Node status error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/deployment-status/<server_ip>', methods=['GET'])
+@app.route('/api/status/deployment/<server_ip>', methods=['GET'])
 def api_get_deployment_status(server_ip):
     """Get deployment status by server IP (legacy endpoint)"""
     try:
@@ -222,7 +268,7 @@ def api_get_deployment_status(server_ip):
         logger.error(f"Deployment status error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/phase-update', methods=['POST'])
+@app.route('/api/status/phase', methods=['POST'])
 def api_update_deployment_phase():
     """Receive phase updates from deploying servers"""
     try:
@@ -233,7 +279,7 @@ def api_update_deployment_phase():
         logger.error(f"Phase update error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/nodes/<int:node_id>/history', methods=['GET'])
+@app.route('/api/status/history/<int:node_id>', methods=['GET'])
 def api_get_deployment_history(node_id):
     """Get deployment history for a node"""
     try:
@@ -251,7 +297,7 @@ def api_get_deployment_history(node_id):
         logger.error(f"Deployment history error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/deployment/summary', methods=['GET'])
+@app.route('/api/status/summary', methods=['GET'])
 def api_get_deployment_summary():
     """Get overall deployment summary"""
     try:
@@ -265,10 +311,10 @@ def api_get_deployment_summary():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
-# DNS REGISTRATION ENDPOINTS (Port 8083)
+# DNS REGISTRATION ENDPOINTS (Consolidated under /api/dns/)
 # ============================================================================
 
-@app.route('/api/v1/dns/records', methods=['POST'])
+@app.route('/api/dns/records', methods=['POST'])
 def api_create_dns_record():
     """Create a DNS record"""
     try:
@@ -288,7 +334,7 @@ def api_create_dns_record():
         logger.error(f"DNS record creation error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/dns/records/<record_name>', methods=['DELETE'])
+@app.route('/api/dns/records/<record_name>', methods=['DELETE'])
 def api_delete_dns_record(record_name):
     """Delete a DNS record"""
     try:
@@ -299,10 +345,10 @@ def api_delete_dns_record(record_name):
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
-# CLEANUP MANAGEMENT ENDPOINTS (Port 8084)
+# CLEANUP MANAGEMENT ENDPOINTS (Consolidated under /api/cleanup/)
 # ============================================================================
 
-@app.route('/api/v1/cleanup/node/<int:node_id>', methods=['POST'])
+@app.route('/api/cleanup/node/<int:node_id>', methods=['POST'])
 def api_cleanup_node(node_id):
     """Clean up resources for a specific node"""
     try:
@@ -312,7 +358,7 @@ def api_cleanup_node(node_id):
         
         # Implementation would clean up:
         # - DNS records
-        # - IP reservations  
+        # - IP reservations
         # - vNICs
         # - Bare metal server
         
@@ -322,7 +368,7 @@ def api_cleanup_node(node_id):
         logger.error(f"Node cleanup error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/cleanup/deployment/<deployment_id>', methods=['POST'])
+@app.route('/api/cleanup/deployment/<deployment_id>', methods=['POST'])
 def api_cleanup_deployment(deployment_id):
     """Clean up all resources for a deployment"""
     try:
@@ -332,7 +378,7 @@ def api_cleanup_deployment(deployment_id):
         logger.error(f"Deployment cleanup error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/cleanup/script/<deployment_id>', methods=['GET'])
+@app.route('/api/cleanup/script/<deployment_id>', methods=['GET'])
 def api_generate_cleanup_script(deployment_id):
     """Generate cleanup script for manual execution"""
     try:
@@ -362,7 +408,7 @@ echo "This is a placeholder - full implementation needed"
 
 @app.route('/health', methods=['GET'])
 def api_health_check():
-    """Health check endpoint"""
+    """Health check endpoint - doesn't require authentication"""
     try:
         # Check database connectivity
         with db.get_connection() as conn:
@@ -389,90 +435,20 @@ def api_get_server_info():
         'server_name': 'Nutanix PXE/Config Server',
         'version': '1.0.0',
         'services': {
-            'boot_server': 'http://{}:8080'.format(Config.PXE_SERVER_IP),
-            'config_api': 'http://{}:8081'.format(Config.PXE_SERVER_IP),
-            'status_monitor': 'http://{}:8082'.format(Config.PXE_SERVER_IP),
-            'dns_service': 'http://{}:8083'.format(Config.PXE_SERVER_IP),
-            'cleanup_service': 'http://{}:8084'.format(Config.PXE_SERVER_IP)
+            'boot_server': 'https://{}'.format(Config.PXE_SERVER_DNS),
+            'config_api': 'https://{}'.format(Config.PXE_SERVER_DNS),
+            'status_monitor': 'https://{}'.format(Config.PXE_SERVER_DNS),
+            'dns_service': 'https://{}'.format(Config.PXE_SERVER_DNS),
+            'cleanup_service': 'https://{}'.format(Config.PXE_SERVER_DNS)
         },
         'endpoints': {
-            'provision_node': 'POST /api/v1/nodes',
-            'node_status': 'GET /api/v1/nodes/{id}/status',
-            'boot_config': 'GET /boot-config',
-            'server_config': 'GET /server-config/{ip}',
+            'provision_node': 'POST /api/config/nodes',
+            'node_status': 'GET /api/status/nodes/{id}',
+            'boot_config': 'GET /boot/config',
+            'server_config': 'GET /boot/server/{ip}',
             'health_check': 'GET /health'
         }
     })
-
-# ============================================================================
-# BACKWARD COMPATIBILITY REDIRECTS
-# ============================================================================
-
-# Redirect old endpoints to new path-based routes
-@app.route('/api/v1/nodes', methods=['POST'])
-def api_provision_node_redirect():
-    """Redirect old config API endpoint to new path"""
-    return redirect('/api/config/nodes', code=308)
-
-@app.route('/api/v1/nodes/<int:node_id>', methods=['GET'])
-def api_get_node_info_redirect(node_id):
-    """Redirect old config API endpoint to new path"""
-    return redirect(f'/api/config/nodes/{node_id}', code=308)
-
-@app.route('/api/v1/nodes', methods=['GET'])
-def api_list_nodes_redirect():
-    """Redirect old config API endpoint to new path"""
-    return redirect('/api/config/nodes', code=308)
-
-@app.route('/api/v1/nodes/<int:node_id>/status', methods=['GET'])
-def api_get_node_status_redirect(node_id):
-    """Redirect old status API endpoint to new path"""
-    return redirect(f'/api/status/nodes/{node_id}', code=308)
-
-@app.route('/deployment-status/<server_ip>', methods=['GET'])
-def api_get_deployment_status_redirect(server_ip):
-    """Redirect old status API endpoint to new path"""
-    return redirect(f'/api/status/deployment/{server_ip}', code=308)
-
-@app.route('/phase-update', methods=['POST'])
-def api_update_deployment_phase_redirect():
-    """Redirect old status API endpoint to new path"""
-    return redirect('/api/status/phase', code=308)
-
-@app.route('/api/v1/nodes/<int:node_id>/history', methods=['GET'])
-def api_get_deployment_history_redirect(node_id):
-    """Redirect old status API endpoint to new path"""
-    return redirect(f'/api/status/history/{node_id}', code=308)
-
-@app.route('/api/v1/deployment/summary', methods=['GET'])
-def api_get_deployment_summary_redirect():
-    """Redirect old status API endpoint to new path"""
-    return redirect('/api/status/summary', code=308)
-
-@app.route('/api/v1/dns/records', methods=['POST'])
-def api_create_dns_record_redirect():
-    """Redirect old DNS API endpoint to new path"""
-    return redirect('/api/dns/records', code=308)
-
-@app.route('/api/v1/dns/records/<record_name>', methods=['DELETE'])
-def api_delete_dns_record_redirect(record_name):
-    """Redirect old DNS API endpoint to new path"""
-    return redirect(f'/api/dns/records/{record_name}', code=308)
-
-@app.route('/api/v1/cleanup/node/<int:node_id>', methods=['POST'])
-def api_cleanup_node_redirect(node_id):
-    """Redirect old cleanup API endpoint to new path"""
-    return redirect(f'/api/cleanup/node/{node_id}', code=308)
-
-@app.route('/api/v1/cleanup/deployment/<deployment_id>', methods=['POST'])
-def api_cleanup_deployment_redirect(deployment_id):
-    """Redirect old cleanup API endpoint to new path"""
-    return redirect(f'/api/cleanup/deployment/{deployment_id}', code=308)
-
-@app.route('/api/v1/cleanup/script/<deployment_id>', methods=['GET'])
-def api_generate_cleanup_script_redirect(deployment_id):
-    """Redirect old cleanup API endpoint to new path"""
-    return redirect(f'/api/cleanup/script/{deployment_id}', code=308)
 
 # ============================================================================
 # ERROR HANDLERS

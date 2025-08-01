@@ -83,6 +83,33 @@ class Config:
     SSL_KEY_PATH = os.environ.get('SSL_KEY_PATH', '/opt/nutanix-pxe/ssl/nutanix-orchestrator.key')
     FORCE_HTTPS = os.environ.get('FORCE_HTTPS', 'false').lower() == 'true'
     
+    # API Path Configuration
+    API_BASE_PATH = '/api'
+    BOOT_BASE_PATH = '/boot'
+    
+    # Service Path Configuration
+    CONFIG_API_PATH = '/api/config'
+    STATUS_API_PATH = '/api/status'
+    DNS_API_PATH = '/api/dns'
+    CLEANUP_API_PATH = '/api/cleanup'
+    BOOT_API_PATH = '/boot'
+    
+    @classmethod
+    def get_api_url(cls, service, endpoint):
+        """Generate API URL for a specific service and endpoint"""
+        service_paths = {
+            'config': cls.CONFIG_API_PATH,
+            'status': cls.STATUS_API_PATH,
+            'dns': cls.DNS_API_PATH,
+            'cleanup': cls.CLEANUP_API_PATH,
+            'boot': cls.BOOT_API_PATH
+        }
+        
+        if service in service_paths:
+            return f"{service_paths[service]}{endpoint}"
+        else:
+            return endpoint
+    
     @classmethod
     def validate_required_config(cls):
         """Validate that all required configuration is present"""

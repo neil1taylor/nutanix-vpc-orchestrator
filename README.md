@@ -62,7 +62,7 @@ Once the PXE/Config Server is deployed, it exposes the following endpoints:
 ### Provision First Node (Create Cluster)
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/nodes \
+curl -X POST http://localhost:8081/api/v1/nodes \
   -H "Content-Type: application/json" \
   -d '{
     "node_config": {

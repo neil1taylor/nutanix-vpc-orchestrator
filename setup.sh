@@ -711,11 +711,13 @@ chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
 mkdir -p {logs,images,scripts,configs,static,templates}
 mkdir -p /var/www/pxe/{images,scripts,configs}
 mkdir -p /var/log/nutanix-pxe
+mkdir -p /var/log/nginx
 
 # Set permissions
 chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
 chown -R "$SERVICE_USER:$SERVICE_USER" /var/log/nutanix-pxe
+chown -R "www-data:www-data" /var/log/nginx
 
 # Setup Python virtual environment
 log "Setting up Python virtual environment"
@@ -1207,6 +1209,19 @@ cat > /etc/logrotate.d/nutanix-pxe << EOF
     create 644 $SERVICE_USER $SERVICE_USER
     postrotate
         systemctl reload nutanix-pxe
+    endscript
+}
+
+/var/log/nginx/*.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 644 www-data www-data
+    postrotate
+        systemctl reload nginx
     endscript
 }
 EOF
