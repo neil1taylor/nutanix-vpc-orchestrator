@@ -494,7 +494,7 @@ create_utilities() {
     chmod +x "$PROJECT_DIR/scripts/check-status.sh"
     chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/check-status.sh"
 
-    chmod +x "$PROJECT_DIR//scripts.run-tests.sh"
+    chmod +x "$PROJECT_DIR/scripts/run-tests.sh"
     chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/run-tests.sh"
 }
 
