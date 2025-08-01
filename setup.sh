@@ -484,6 +484,11 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
+    # Create tmpfiles.d configuration for runtime directory
+    cat > /etc/tmpfiles.d/nutanix-pxe.conf << EOF
+d /var/run/nutanix-pxe 0755 $SERVICE_USER $SERVICE_USER - -
+EOF
+
     systemctl daemon-reload
     systemctl enable nutanix-pxe
 }
