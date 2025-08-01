@@ -317,7 +317,7 @@ setup_python() {
         cd '$PROJECT_DIR'
         source venv/bin/activate
         pip install --upgrade pip
-        pip install flask psycopg2-binary gunicorn ibm-cloud-sdk-core ibm-vpc ibm-cloud-networking-services
+        pip install -r requirements.txt
     "
 }
 
@@ -475,7 +475,7 @@ WorkingDirectory=$PROJECT_DIR
 Environment="PATH=$PROJECT_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/etc/profile.d/app-vars.sh
 ExecStartPre=/bin/bash -c 'set -a; source /etc/profile.d/app-vars.sh; set +a'
-ExecStart=/bin/bash -c "set -a; source /etc/profile.d/app-vars.sh; exec $PROJECT_DIR/venv/bin/gunicorn --config gunicorn.conf.py app:app"
+ExecStart=/bin/bash -c "set -a; source /etc/profile.d/app-vars.sh; exec $PROJECT_DIR/venv/bin/gunicorn --config $PROJECT_DIR/gunicorn.conf.py app:app"
 ExecReload=/bin/kill -s HUP \$MAINPID
 Restart=always
 RestartSec=5
