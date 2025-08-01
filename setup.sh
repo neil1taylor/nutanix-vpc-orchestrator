@@ -846,100 +846,12 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-# Create Gunicorn configuration
-cat > "$PROJECT_DIR/gunicorn.conf.py" << EOF
-# Gunicorn configuration for Nutanix PXE Server
 
-bind = "0.0.0.0:8080"
-workers = 4
-worker_class = "sync"
-worker_connections = 1000
-max_requests = 1000
-max_requests_jitter = 50
-timeout = 30
-keepalive = 2
-user = "$SERVICE_USER"
-group = "$SERVICE_USER"
-tmp_upload_dir = None
-errorlog = "/var/log/nutanix-pxe/gunicorn-error.log"
-accesslog = "/var/log/nutanix-pxe/gunicorn-access.log"
-loglevel = "info"
-access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"'
-EOF
 
 # Configure Nginx as reverse proxy
 log "Configuring Nginx"
 # Create modular configuration structure
 mkdir -p /etc/nginx/conf.d
-
-# Create security configuration
-cat > /etc/nginx/conf.d/security.conf << 'EOF'
-# Security Headers
-add_header X-Frame-Options DENY;
-add_header X-Content-Type-Options nosniff;
-add_header X-XSS-Protection "1; mode=block";
-add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-add_header Referrer-Policy "strict-origin-when-cross-origin";
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
-EOF
-
-# Create SSL configuration
-cat > /etc/nginx/conf.d/ssl.conf << 'EOF'
-# SSL Configuration
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
-ssl_prefer_server_ciphers off;
-ssl_session_cache shared:SSL:10m;
-ssl_session_timeout 10m;
-ssl_stapling on;
-ssl_stapling_verify on;
-EOF
-
-# Create proxy configuration
-cat > /etc/nginx/conf.d/proxy.conf << 'EOF'
-# Proxy Settings
-proxy_set_header Host $host;
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-proxy_set_header X-Forwarded-Proto $scheme;
-proxy_set_header X-Forwarded-Host $server_name;
-
-# WebSocket support
-proxy_http_version 1.1;
-proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection "upgrade";
-
-# Timeouts
-proxy_connect_timeout 60s;
-proxy_send_timeout 60s;
-proxy_read_timeout 60s;
-
-# Buffer settings
-proxy_buffering on;
-proxy_buffer_size 128k;
-proxy_buffers 4 256k;
-proxy_busy_buffers_size 256k;
-EOF
-
-# Create gzip configuration
-cat > /etc/nginx/conf.d/gzip.conf << 'EOF'
-# Gzip compression
-gzip on;
-gzip_vary on;
-gzip_min_length 1024;
-gzip_proxied any;
-gzip_comp_level 6;
-gzip_types
-    text/plain
-    text/css
-    text/xml
-    text/javascript
-    application/json
-    application/javascript
-    application/xml+rss
-    application/atom+xml
-    image/svg+xml;
-EOF
 
 if [ "$ENABLE_HTTPS" = "true" ]; then
     cat > /etc/nginx/sites-available/nutanix-pxe << 'EOF'
