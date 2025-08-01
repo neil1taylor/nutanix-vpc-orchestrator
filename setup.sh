@@ -492,10 +492,10 @@ create_utilities() {
     log "Enabling utility scripts..."
 
     chmod +x "$PROJECT_DIR/scripts/check-status.sh"
-    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/check-status.sh"
+    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/check-status.sh"
 
     chmod +x "$PROJECT_DIR//scripts.run-tests.sh"
-    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/run-tests.sh"
+    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/run-tests.sh"
 }
 
 # ============================================================================
