@@ -1,32 +1,27 @@
 """
 IBM Cloud VPC and DNS client for Nutanix PXE/Config Server
 Uses Trusted Profile authentication via metadata service
-Configuration loaded from environment variables set by cloud-init
+Configuration loaded from Config class
 """
-import os
 import logging
 
 from ibm_cloud_sdk_core.authenticators import VPCInstanceAuthenticator
 from ibm_vpc import VpcV1
 from ibm_cloud_networking_services import DnsSvcsV1
+from config import Config
 
 logger = logging.getLogger(__name__)
 
 class IBMCloudClient:
     def __init__(self):
-        # Load configuration from environment variables
-        self.region = os.getenv('IBM_CLOUD_REGION', 'us-south')
-        self.vpc_id = os.getenv('VPC_ID')
-        self.dns_instance_id = os.getenv('DNS_INSTANCE_ID')
-        self.dns_zone_id = os.getenv('DNS_ZONE_ID')
+        # Load configuration from Config class instead of direct os.getenv
+        self.region = Config.IBM_CLOUD_REGION
+        self.vpc_id = Config.VPC_ID
+        self.dns_instance_id = Config.DNS_INSTANCE_ID
+        self.dns_zone_id = Config.DNS_ZONE_ID
         
-        # Validate required environment variables
-        if not all([self.vpc_id, self.dns_instance_id, self.dns_zone_id]):
-            missing_vars = []
-            if not self.vpc_id: missing_vars.append('VPC_ID')
-            if not self.dns_instance_id: missing_vars.append('DNS_INSTANCE_ID')
-            if not self.dns_zone_id: missing_vars.append('DNS_ZONE_ID')
-            raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+        # Validate required configuration using Config class method
+        Config.validate_required_config()
         
         # Initialize VPC service with trusted profile authentication
         self.vpc_authenticator = VPCInstanceAuthenticator()
@@ -37,21 +32,18 @@ class IBMCloudClient:
         self.dns_authenticator = VPCInstanceAuthenticator()
         self.dns_service = DnsSvcsV1(authenticator=self.dns_authenticator)
         
-        logger.info("IBM Cloud client initialized with trusted profile authentication")
+        logger.info("IBM Cloud client initialized with Config class and trusted profile authentication")
     
     # VPC Methods using SDK
     def create_subnet_reserved_ip(self, subnet_id, address, name):
         """Reserve an IP address in a subnet using VPC SDK"""
         try:
-            reserved_ip_prototype = {
-                'address': address,
-                'name': name,
-                'auto_delete': False
-            }
-            
+            # Correct method call - pass parameters directly, not as prototype object
             result = self.vpc_service.create_subnet_reserved_ip(
                 subnet_id=subnet_id,
-                reserved_ip_prototype=reserved_ip_prototype
+                address=address,
+                name=name,
+                auto_delete=False
             ).get_result()
             
             logger.info(f"Reserved IP {address} in subnet {subnet_id}")
@@ -213,26 +205,25 @@ class IBMCloudClient:
     def create_dns_record(self, record_type, name, rdata, ttl=300):
         """Create a DNS record using DNS Services SDK"""
         try:
+            # Fixed: Pass parameters directly instead of using prototype object
             if record_type.upper() == 'A':
-                resource_record_prototype = {
-                    'name': name,
-                    'type': record_type.upper(),
-                    'rdata': {'ip': rdata},
-                    'ttl': ttl
-                }
+                result = self.dns_service.create_resource_record(
+                    instance_id=self.dns_instance_id,
+                    dnszone_id=self.dns_zone_id,
+                    name=name,
+                    type=record_type.upper(),
+                    rdata={'ip': rdata},
+                    ttl=ttl
+                ).get_result()
             else:
-                resource_record_prototype = {
-                    'name': name,
-                    'type': record_type.upper(),
-                    'rdata': {record_type.lower(): rdata},
-                    'ttl': ttl
-                }
-            
-            result = self.dns_service.create_resource_record(
-                instance_id=self.dns_instance_id,
-                dnszone_id=self.dns_zone_id,
-                resource_record_prototype=resource_record_prototype
-            ).get_result()
+                result = self.dns_service.create_resource_record(
+                    instance_id=self.dns_instance_id,
+                    dnszone_id=self.dns_zone_id,
+                    name=name,
+                    type=record_type.upper(),
+                    rdata={record_type.lower(): rdata},
+                    ttl=ttl
+                ).get_result()
             
             logger.info(f"Created DNS record {name} -> {rdata}")
             return {
@@ -244,19 +235,19 @@ class IBMCloudClient:
         except Exception as e:
             logger.error(f"Failed to create DNS record {name}: {str(e)}")
             raise
-    
-    def delete_dns_record(self, record_id):
-        """Delete a DNS record using DNS Services SDK"""
-        try:
-            self.dns_service.delete_resource_record(
-                instance_id=self.dns_instance_id,
-                dnszone_id=self.dns_zone_id,
-                resource_record_id=record_id
-            )
-            logger.info(f"Deleted DNS record {record_id}")
-        except Exception as e:
-            logger.error(f"Failed to delete DNS record {record_id}: {str(e)}")
-            raise
+        
+        def delete_dns_record(self, record_id):
+            """Delete a DNS record using DNS Services SDK"""
+            try:
+                self.dns_service.delete_resource_record(
+                    instance_id=self.dns_instance_id,
+                    dnszone_id=self.dns_zone_id,
+                    resource_record_id=record_id
+                )
+                logger.info(f"Deleted DNS record {record_id}")
+            except Exception as e:
+                logger.error(f"Failed to delete DNS record {record_id}: {str(e)}")
+                raise
     
     def get_dns_records(self):
         """Get all DNS records in the zone using DNS Services SDK"""
