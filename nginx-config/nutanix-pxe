@@ -1,0 +1,98 @@
+# HTTPS Server Block
+server {
+    listen 443 ssl http2;
+    server_name _;
+    
+    # SSL Configuration
+    include /etc/nginx/conf.d/ssl.conf;
+    
+    # Security Headers
+    include /etc/nginx/conf.d/security.conf;
+    
+    # Boot server endpoints
+    location /boot/ {
+        proxy_pass http://127.0.0.1:8080/boot/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Configuration API endpoints
+    location /api/config/ {
+        proxy_pass http://127.0.0.1:8080/api/config/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Status monitoring endpoints
+    location /api/status/ {
+        proxy_pass http://127.0.0.1:8080/api/status/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # DNS service endpoints
+    location /api/dns/ {
+        proxy_pass http://127.0.0.1:8080/api/dns/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Cleanup service endpoints
+    location /api/cleanup/ {
+        proxy_pass http://127.0.0.1:8080/api/cleanup/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Web interface
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Static files
+    location /static/ {
+        alias /opt/nutanix-pxe/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        gzip on;
+        gzip_vary on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+    }
+    
+    # Boot images and scripts
+    location /boot-images/ {
+        alias /var/www/pxe/images/;
+        expires 1h;
+        add_header Cache-Control "public";
+    }
+    
+    location /boot-scripts/ {
+        alias /var/www/pxe/scripts/;
+        expires 1h;
+        add_header Cache-Control "public";
+    }
+    
+    # Health check endpoint
+    location /health {
+        access_log off;
+        proxy_pass http://127.0.0.1:8080/health;
+        proxy_set_header Host $host;
+    }
+    
+    # Error pages
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /var/www/html;
+    }
+}
+
+# HTTP to HTTPS Redirect
+server {
+    listen 80;
+    server_name _;
+    
+    # Redirect all HTTP traffic to HTTPS
+    return 301 https://$server_name$request_uri;
+}

@@ -1,53 +1,104 @@
-"""
-Main Flask application for Nutanix PXE/Config Server
-"""
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_from_directory, jsonify
-from web_routes import register_web_routes
-from flask_cors import CORS
-import logging
-import os
-from datetime import datetime
+# Application Code Changes Implementation Plan
 
-from config import Config
-from database import Database
-from node_provisioner import NodeProvisioner
-from boot_service import BootService
-from status_monitor import StatusMonitor
+## Overview
+This plan outlines the necessary changes to the Nutanix VPC Orchestrator application code to support the new Nginx reverse proxy architecture with path-based routing and consolidated services.
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(f'{Config.LOG_PATH}/pxe-server.log'),
-        logging.StreamHandler()
-    ]
-)
+## Implementation Phases
 
-logger = logging.getLogger(__name__)
+### Phase 1: Preparation and Analysis
+1. **Codebase Assessment**
+   - Review current Flask application structure
+   - Analyze existing route definitions and URL patterns
+   - Identify dependencies on specific ports or URLs
+   - Document current API endpoints and their usage
 
-# Initialize Flask app GLOBALLY
-app = Flask(__name__)
-app.config.from_object(Config)
-CORS(app)
+2. **Impact Analysis**
+   - Identify all files that need modification
+   - Assess impact on existing clients and integrations
+   - Review backward compatibility requirements
+   - Document testing requirements
 
-# Add secret key for sessions and flash messages
-app.secret_key = os.environ.get('SECRET_KEY', 'nutanix-orchestrator-secret-key')
+3. **Branching Strategy**
+   - Create feature branch for changes
+   - Set up continuous integration for testing
+   - Prepare development environment
 
-# Initialize services
-db = Database()
-node_provisioner = NodeProvisioner()
-boot_service = BootService()
-status_monitor = StatusMonitor()
+### Phase 2: Route Restructuring
+1. **Path-Based Routing Implementation**
+   - Update route decorators to use new path structure
+   - Implement URL generation functions for new paths
+   - Update internal links and redirects
+   - Maintain backward compatibility during transition
 
-# Register web UI routes
-register_web_routes(app, db, node_provisioner, status_monitor)
+2. **API Endpoint Organization**
+   - Group related endpoints under common path prefixes
+   - Implement consistent naming conventions
+   - Add API versioning support
+   - Update documentation
+
+### Phase 3: Configuration Updates
+1. **Environment Configuration**
+   - Update configuration to support new URL structure
+   - Add settings for path prefixes
+   - Update SSL and security settings
+   - Configure caching settings
+
+2. **Service Integration**
+   - Update service classes to use new paths
+   - Modify internal API calls to use consolidated endpoints
+   - Update webhook URLs and callback endpoints
+   - Test service integrations
+
+### Phase 4: Web Interface Updates
+1. **Template Modifications**
+   - Update template URLs to use new path structure
+   - Modify form actions and link destinations
+   - Update JavaScript AJAX calls
+   - Test responsive design
+
+2. **Frontend JavaScript Updates**
+   - Update API endpoint URLs in JavaScript code
+   - Modify WebSocket connection URLs
+   - Update AJAX request paths
+   - Test interactive features
+
+### Phase 5: Testing and Validation
+1. **Unit Testing**
+   - Update existing unit tests for new routes
+   - Add tests for backward compatibility
+   - Test error handling and edge cases
+   - Validate security features
+
+2. **Integration Testing**
+   - Test API endpoints with new path structure
+   - Validate web interface functionality
+   - Test service integrations
+   - Verify SSL and security features
+
+### Phase 6: Production Deployment
+1. **Deployment Steps**
+   - Schedule maintenance window
+   - Deploy updated application code
+   - Update configuration files
+   - Restart application service
+   - Monitor for issues
+
+2. **Post-Deployment Validation**
+   - Verify application functionality
+   - Test all API endpoints
+   - Validate web interface
+   - Monitor performance metrics
+
+## Detailed Code Changes
+
+### 1. Route Restructuring
+```python
+# app.py - Updated route structure
 
 # ============================================================================
-# BOOT SERVER ENDPOINTS
+# BOOT SERVER ENDPOINTS (Consolidated under /boot/)
 # ============================================================================
 
-@app.route('/boot-config', methods=['GET'])
 @app.route('/boot/config', methods=['GET'])
 def api_handle_boot_config():
     """Handle iPXE boot configuration requests"""
@@ -59,7 +110,6 @@ def api_handle_boot_config():
         error_script = boot_service.generate_error_boot_script(str(e))
         return Response(error_script, mimetype='text/plain'), 500
 
-@app.route('/server-config/<server_ip>', methods=['GET'])
 @app.route('/boot/server/<server_ip>', methods=['GET'])
 def api_get_server_config(server_ip):
     """Get detailed server configuration for Foundation"""
@@ -73,7 +123,6 @@ def api_get_server_config(server_ip):
         logger.error(f"Server config error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/images/<filename>', methods=['GET'])
 @app.route('/boot/images/<filename>', methods=['GET'])
 def api_serve_boot_image(filename):
     """Serve boot images (kernel, initrd, etc.)"""
@@ -93,7 +142,6 @@ def api_serve_boot_image(filename):
         logger.error(f"Image serve error: {str(e)}")
         return jsonify({'error': str(e)}), 404
 
-@app.route('/scripts/<script_name>', methods=['GET'])
 @app.route('/boot/scripts/<script_name>', methods=['GET'])
 def api_serve_boot_script(script_name):
     """Serve boot scripts and configuration files"""
@@ -113,10 +161,10 @@ def api_serve_boot_script(script_name):
         return jsonify({'error': str(e)}), 404
 
 # ============================================================================
-# CONFIGURATION API ENDPOINTS (Port 8081)
+# CONFIGURATION API ENDPOINTS (Consolidated under /api/config/)
 # ============================================================================
 
-@app.route('/api/v1/nodes', methods=['POST'])
+@app.route('/api/config/nodes', methods=['POST'])
 def api_provision_node():
     """Provision a new Nutanix node"""
     try:
@@ -148,7 +196,7 @@ def api_provision_node():
         logger.error(f"Node provisioning error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/nodes/<int:node_id>', methods=['GET'])
+@app.route('/api/config/nodes/<int:node_id>', methods=['GET'])
 def api_get_node_info(node_id):
     """Get node information"""
     try:
@@ -176,22 +224,11 @@ def api_get_node_info(node_id):
         logger.error(f"Get node error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/nodes', methods=['GET'])
-def api_list_nodes():
-    """List all nodes"""
-    try:
-        # This would require adding a method to Database class
-        nodes = []  # db.get_all_nodes()
-        return jsonify({'nodes': nodes})
-    except Exception as e:
-        logger.error(f"List nodes error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
 # ============================================================================
-# STATUS MONITORING ENDPOINTS (Port 8082)
+# STATUS MONITORING ENDPOINTS (Consolidated under /api/status/)
 # ============================================================================
 
-@app.route('/api/v1/nodes/<int:node_id>/status', methods=['GET'])
+@app.route('/api/status/nodes/<int:node_id>', methods=['GET'])
 def api_get_node_status(node_id):
     """Get deployment status for a specific node"""
     try:
@@ -209,7 +246,7 @@ def api_get_node_status(node_id):
         logger.error(f"Node status error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/deployment-status/<server_ip>', methods=['GET'])
+@app.route('/api/status/deployment/<server_ip>', methods=['GET'])
 def api_get_deployment_status(server_ip):
     """Get deployment status by server IP (legacy endpoint)"""
     try:
@@ -222,7 +259,7 @@ def api_get_deployment_status(server_ip):
         logger.error(f"Deployment status error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/phase-update', methods=['POST'])
+@app.route('/api/status/phase', methods=['POST'])
 def api_update_deployment_phase():
     """Receive phase updates from deploying servers"""
     try:
@@ -233,7 +270,7 @@ def api_update_deployment_phase():
         logger.error(f"Phase update error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/nodes/<int:node_id>/history', methods=['GET'])
+@app.route('/api/status/history/<int:node_id>', methods=['GET'])
 def api_get_deployment_history(node_id):
     """Get deployment history for a node"""
     try:
@@ -251,7 +288,7 @@ def api_get_deployment_history(node_id):
         logger.error(f"Deployment history error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/deployment/summary', methods=['GET'])
+@app.route('/api/status/summary', methods=['GET'])
 def api_get_deployment_summary():
     """Get overall deployment summary"""
     try:
@@ -265,10 +302,10 @@ def api_get_deployment_summary():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
-# DNS REGISTRATION ENDPOINTS (Port 8083)
+# DNS REGISTRATION ENDPOINTS (Consolidated under /api/dns/)
 # ============================================================================
 
-@app.route('/api/v1/dns/records', methods=['POST'])
+@app.route('/api/dns/records', methods=['POST'])
 def api_create_dns_record():
     """Create a DNS record"""
     try:
@@ -288,7 +325,7 @@ def api_create_dns_record():
         logger.error(f"DNS record creation error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/dns/records/<record_name>', methods=['DELETE'])
+@app.route('/api/dns/records/<record_name>', methods=['DELETE'])
 def api_delete_dns_record(record_name):
     """Delete a DNS record"""
     try:
@@ -299,10 +336,10 @@ def api_delete_dns_record(record_name):
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
-# CLEANUP MANAGEMENT ENDPOINTS (Port 8084)
+# CLEANUP MANAGEMENT ENDPOINTS (Consolidated under /api/cleanup/)
 # ============================================================================
 
-@app.route('/api/v1/cleanup/node/<int:node_id>', methods=['POST'])
+@app.route('/api/cleanup/node/<int:node_id>', methods=['POST'])
 def api_cleanup_node(node_id):
     """Clean up resources for a specific node"""
     try:
@@ -322,7 +359,7 @@ def api_cleanup_node(node_id):
         logger.error(f"Node cleanup error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/cleanup/deployment/<deployment_id>', methods=['POST'])
+@app.route('/api/cleanup/deployment/<deployment_id>', methods=['POST'])
 def api_cleanup_deployment(deployment_id):
     """Clean up all resources for a deployment"""
     try:
@@ -332,7 +369,7 @@ def api_cleanup_deployment(deployment_id):
         logger.error(f"Deployment cleanup error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/v1/cleanup/script/<deployment_id>', methods=['GET'])
+@app.route('/api/cleanup/script/<deployment_id>', methods=['GET'])
 def api_generate_cleanup_script(deployment_id):
     """Generate cleanup script for manual execution"""
     try:
@@ -355,162 +392,162 @@ echo "This is a placeholder - full implementation needed"
     except Exception as e:
         logger.error(f"Cleanup script generation error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+```
 
-# ============================================================================
-# HEALTH AND INFO ENDPOINTS
-# ============================================================================
+### 2. Configuration Updates
+```python
+# config.py - Updated configuration
 
-@app.route('/health', methods=['GET'])
-def api_health_check():
-    """Health check endpoint"""
-    try:
-        # Check database connectivity
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT 1')
-        
-        return jsonify({
-            'status': 'healthy',
-            'timestamp': datetime.now().isoformat(),
-            'version': '1.0.0'
-        })
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
-        }), 500
-
-@app.route('/api/v1/info', methods=['GET'])
-def api_get_server_info():
-    """Get PXE server information"""
-    return jsonify({
-        'server_name': 'Nutanix PXE/Config Server',
-        'version': '1.0.0',
-        'services': {
-            'boot_server': 'http://{}:8080'.format(Config.PXE_SERVER_IP),
-            'config_api': 'http://{}:8081'.format(Config.PXE_SERVER_IP),
-            'status_monitor': 'http://{}:8082'.format(Config.PXE_SERVER_IP),
-            'dns_service': 'http://{}:8083'.format(Config.PXE_SERVER_IP),
-            'cleanup_service': 'http://{}:8084'.format(Config.PXE_SERVER_IP)
-        },
-        'endpoints': {
-            'provision_node': 'POST /api/v1/nodes',
-            'node_status': 'GET /api/v1/nodes/{id}/status',
-            'boot_config': 'GET /boot-config',
-            'server_config': 'GET /server-config/{ip}',
-            'health_check': 'GET /health'
+class Config:
+    # ... existing configuration ...
+    
+    # API Path Configuration
+    API_BASE_PATH = '/api'
+    BOOT_BASE_PATH = '/boot'
+    
+    # Service Path Configuration
+    CONFIG_API_PATH = '/api/config'
+    STATUS_API_PATH = '/api/status'
+    DNS_API_PATH = '/api/dns'
+    CLEANUP_API_PATH = '/api/cleanup'
+    BOOT_API_PATH = '/boot'
+    
+    # URL Generation Helper
+    @classmethod
+    def get_api_url(cls, service, endpoint):
+        """Generate API URL for a specific service and endpoint"""
+        service_paths = {
+            'config': cls.CONFIG_API_PATH,
+            'status': cls.STATUS_API_PATH,
+            'dns': cls.DNS_API_PATH,
+            'cleanup': cls.CLEANUP_API_PATH,
+            'boot': cls.BOOT_API_PATH
         }
-    })
+        
+        if service in service_paths:
+            return f"{service_paths[service]}{endpoint}"
+        else:
+            return endpoint
+```
 
-# ============================================================================
-# BACKWARD COMPATIBILITY REDIRECTS
-# ============================================================================
+### 3. Web Interface Updates
+```python
+# web_routes.py - Updated web routes
 
-# Redirect old endpoints to new path-based routes
-@app.route('/api/v1/nodes', methods=['POST'])
-def api_provision_node_redirect():
-    """Redirect old config API endpoint to new path"""
-    return redirect('/api/config/nodes', code=308)
-
-@app.route('/api/v1/nodes/<int:node_id>', methods=['GET'])
-def api_get_node_info_redirect(node_id):
-    """Redirect old config API endpoint to new path"""
-    return redirect(f'/api/config/nodes/{node_id}', code=308)
-
-@app.route('/api/v1/nodes', methods=['GET'])
-def api_list_nodes_redirect():
-    """Redirect old config API endpoint to new path"""
-    return redirect('/api/config/nodes', code=308)
-
-@app.route('/api/v1/nodes/<int:node_id>/status', methods=['GET'])
-def api_get_node_status_redirect(node_id):
-    """Redirect old status API endpoint to new path"""
-    return redirect(f'/api/status/nodes/{node_id}', code=308)
-
-@app.route('/deployment-status/<server_ip>', methods=['GET'])
-def api_get_deployment_status_redirect(server_ip):
-    """Redirect old status API endpoint to new path"""
-    return redirect(f'/api/status/deployment/{server_ip}', code=308)
-
-@app.route('/phase-update', methods=['POST'])
-def api_update_deployment_phase_redirect():
-    """Redirect old status API endpoint to new path"""
-    return redirect('/api/status/phase', code=308)
-
-@app.route('/api/v1/nodes/<int:node_id>/history', methods=['GET'])
-def api_get_deployment_history_redirect(node_id):
-    """Redirect old status API endpoint to new path"""
-    return redirect(f'/api/status/history/{node_id}', code=308)
-
-@app.route('/api/v1/deployment/summary', methods=['GET'])
-def api_get_deployment_summary_redirect():
-    """Redirect old status API endpoint to new path"""
-    return redirect('/api/status/summary', code=308)
-
-@app.route('/api/v1/dns/records', methods=['POST'])
-def api_create_dns_record_redirect():
-    """Redirect old DNS API endpoint to new path"""
-    return redirect('/api/dns/records', code=308)
-
-@app.route('/api/v1/dns/records/<record_name>', methods=['DELETE'])
-def api_delete_dns_record_redirect(record_name):
-    """Redirect old DNS API endpoint to new path"""
-    return redirect(f'/api/dns/records/{record_name}', code=308)
-
-@app.route('/api/v1/cleanup/node/<int:node_id>', methods=['POST'])
-def api_cleanup_node_redirect(node_id):
-    """Redirect old cleanup API endpoint to new path"""
-    return redirect(f'/api/cleanup/node/{node_id}', code=308)
-
-@app.route('/api/v1/cleanup/deployment/<deployment_id>', methods=['POST'])
-def api_cleanup_deployment_redirect(deployment_id):
-    """Redirect old cleanup API endpoint to new path"""
-    return redirect(f'/api/cleanup/deployment/{deployment_id}', code=308)
-
-@app.route('/api/v1/cleanup/script/<deployment_id>', methods=['GET'])
-def api_generate_cleanup_script_redirect(deployment_id):
-    """Redirect old cleanup API endpoint to new path"""
-    return redirect(f'/api/cleanup/script/{deployment_id}', code=308)
-
-# ============================================================================
-# ERROR HANDLERS
-# ============================================================================
-
-@app.errorhandler(404)
-def api_not_found(error):
-    return jsonify({'error': 'Not found'}), 404
-
-@app.errorhandler(500)
-def api_internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
-
-@app.errorhandler(400)
-def api_bad_request(error):
-    return jsonify({'error': 'Bad request'}), 400
-
-# ============================================================================
-# MAIN APPLICATION
-# ============================================================================
-
-if __name__ == '__main__':
-    # Create required directories
-    os.makedirs(Config.BOOT_IMAGES_PATH, exist_ok=True)
-    os.makedirs(Config.BOOT_SCRIPTS_PATH, exist_ok=True)
-    os.makedirs(Config.CONFIG_TEMPLATES_PATH, exist_ok=True)
-    os.makedirs(Config.LOG_PATH, exist_ok=True)
+def register_web_routes(app, db, node_provisioner, status_monitor):
+    """Register web UI routes with updated paths"""
     
-    logger.info("Starting Nutanix PXE/Config Server")
-    logger.info(f"Boot server: http://{Config.PXE_SERVER_IP}:8080")
-    logger.info(f"Config API: http://{Config.PXE_SERVER_IP}:8081")
-    logger.info(f"Status Monitor: http://{Config.PXE_SERVER_IP}:8082")
-    logger.info(f"DNS Service: http://{Config.PXE_SERVER_IP}:8083")
-    logger.info(f"Cleanup Service: http://{Config.PXE_SERVER_IP}:8084")
+    @app.route('/')
+    def dashboard():
+        """Dashboard view"""
+        # Implementation remains the same
+        pass
     
-    # Run in development mode - use gunicorn for production
-    app.run(
-        host='0.0.0.0',
-        port=8080,
-        debug=Config.DEBUG
-    )
+    @app.route('/provision', methods=['GET'])
+    def provision_form():
+        """Node provisioning form"""
+        # Implementation remains the same
+        pass
+    
+    @app.route('/provision', methods=['POST'])
+    def provision_node():
+        """Process node provisioning form"""
+        # Transform form data to API format
+        api_data = transform_form_to_api(request.form)
+        
+        # Use updated API endpoint
+        result = node_provisioner.provision_node(api_data)
+        
+        if result.get('success'):
+            flash('Node provisioning started successfully!', 'success')
+            return redirect(url_for('deployments'))
+        else:
+            flash(f'Error: {result.get("error")}', 'error')
+            return render_template('provision_form.html')
+    
+    # ... other routes with updated path references ...
+```
+
+### 4. JavaScript Updates
+```javascript
+// static/js/main.js - Updated JavaScript
+
+// Update API endpoint URLs
+const API_ENDPOINTS = {
+    config: '/api/config',
+    status: '/api/status',
+    dns: '/api/dns',
+    cleanup: '/api/cleanup',
+    boot: '/boot'
+};
+
+// Update AJAX calls to use new paths
+async function provisionNode(nodeData) {
+    try {
+        const response = await fetch(`${API_ENDPOINTS.config}/nodes`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(nodeData)
+        });
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Provisioning error:', error);
+        throw error;
+    }
+}
+
+// Update status monitoring
+async function getNodeStatus(nodeId) {
+    try {
+        const response = await fetch(`${API_ENDPOINTS.status}/nodes/${nodeId}`);
+        return await response.json();
+    } catch (error) {
+        console.error('Status check error:', error);
+        throw error;
+    }
+}
+```
+
+## Backward Compatibility
+1. **Maintain Old Endpoints Temporarily**
+   - Keep old endpoints functional with deprecation warnings
+   - Implement redirects from old paths to new paths
+   - Provide migration period for clients
+
+2. **Deprecation Strategy**
+   - Add deprecation headers to old endpoints
+   - Log usage of deprecated endpoints
+   - Plan for removal in future version
+
+## Rollback Procedure
+1. **In Case of Issues**
+   - Revert to previous application code
+   - Restore previous configuration
+   - Restart application service
+   - Verify functionality
+
+2. **Monitoring During Deployment**
+   - Monitor application logs
+   - Check for errors in new endpoints
+   - Watch system resources
+   - Monitor response times
+
+## Timeline
+- **Preparation**: 2 hours
+- **Code Implementation**: 8 hours
+- **Testing**: 4 hours
+- **Production Deployment**: 2 hours
+- **Post-Deployment Monitoring**: 2 hours
+
+## Success Criteria
+- All services accessible through new path structure
+- Backward compatibility maintained during transition
+- No service interruptions
+- Successful rollback capability
+- Proper logging and error handling
+- Compatibility with updated Nginx and Gunicorn configurations
+
+This implementation plan will result in a restructured application that works efficiently with the new Nginx reverse proxy architecture.

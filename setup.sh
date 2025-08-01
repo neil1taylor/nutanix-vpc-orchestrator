@@ -867,100 +867,163 @@ EOF
 
 # Configure Nginx as reverse proxy
 log "Configuring Nginx"
-if [ "$ENABLE_HTTPS" = "true" ]; then
-    cat > /etc/nginx/sites-available/nutanix-pxe << EOF
-# HTTP to HTTPS Redirect
-server {
-    listen 80;
-    server_name $SSL_DOMAIN _;
-    
-    # Redirect all HTTP traffic to HTTPS
-    return 301 https://\$server_name\$request_uri;
-}
+# Create modular configuration structure
+mkdir -p /etc/nginx/conf.d
 
+# Create security configuration
+cat > /etc/nginx/conf.d/security.conf << 'EOF'
+# Security Headers
+add_header X-Frame-Options DENY;
+add_header X-Content-Type-Options nosniff;
+add_header X-XSS-Protection "1; mode=block";
+add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin";
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
+EOF
+
+# Create SSL configuration
+cat > /etc/nginx/conf.d/ssl.conf << 'EOF'
+# SSL Configuration
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+ssl_prefer_server_ciphers off;
+ssl_session_cache shared:SSL:10m;
+ssl_session_timeout 10m;
+ssl_stapling on;
+ssl_stapling_verify on;
+EOF
+
+# Create proxy configuration
+cat > /etc/nginx/conf.d/proxy.conf << 'EOF'
+# Proxy Settings
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Host $server_name;
+
+# WebSocket support
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+
+# Timeouts
+proxy_connect_timeout 60s;
+proxy_send_timeout 60s;
+proxy_read_timeout 60s;
+
+# Buffer settings
+proxy_buffering on;
+proxy_buffer_size 128k;
+proxy_buffers 4 256k;
+proxy_busy_buffers_size 256k;
+EOF
+
+# Create gzip configuration
+cat > /etc/nginx/conf.d/gzip.conf << 'EOF'
+# Gzip compression
+gzip on;
+gzip_vary on;
+gzip_min_length 1024;
+gzip_proxied any;
+gzip_comp_level 6;
+gzip_types
+    text/plain
+    text/css
+    text/xml
+    text/javascript
+    application/json
+    application/javascript
+    application/xml+rss
+    application/atom+xml
+    image/svg+xml;
+EOF
+
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    cat > /etc/nginx/sites-available/nutanix-pxe << 'EOF'
 # HTTPS Server Block
 server {
     listen 443 ssl http2;
-    server_name $SSL_DOMAIN _;
-
-    # SSL Configuration
-    ssl_certificate $SSL_DIR/nutanix-orchestrator.crt;
-    ssl_certificate_key $SSL_DIR/nutanix-orchestrator.key;
+    server_name _;
     
-    # SSL Security Settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
+    # SSL Configuration
+    include /etc/nginx/conf.d/ssl.conf;
     
     # Security Headers
-    add_header X-Frame-Options DENY;
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload";
-    add_header Referrer-Policy "strict-origin-when-cross-origin";
-
-    # PXE boot files
-    location /pxe/ {
-        alias /var/www/pxe/;
-        autoindex on;
-        try_files \$uri \$uri/ =404;
+    include /etc/nginx/conf.d/security.conf;
+    
+    # Boot server endpoints
+    location /boot/ {
+        proxy_pass http://127.0.0.1:8080/boot/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
     }
-
-    # API and Web Interface - Proxy to Gunicorn
+    
+    # Configuration API endpoints
+    location /api/config/ {
+        proxy_pass http://127.0.0.1:8080/api/config/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Status monitoring endpoints
+    location /api/status/ {
+        proxy_pass http://127.0.0.1:8080/api/status/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # DNS service endpoints
+    location /api/dns/ {
+        proxy_pass http://127.0.0.1:8080/api/dns/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Cleanup service endpoints
+    location /api/cleanup/ {
+        proxy_pass http://127.0.0.1:8080/api/cleanup/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Web interface
     location / {
         proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header X-Forwarded-Host \$server_name;
-        
-        # WebSocket support (for future real-time features)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-        
-        # Buffer settings
-        proxy_buffering on;
-        proxy_buffer_size 128k;
-        proxy_buffers 4 256k;
-        proxy_busy_buffers_size 256k;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
     }
-
-    # Static files (CSS, JS, images) - served directly by Nginx
+    
+    # Static files
     location /static/ {
-        alias $PROJECT_DIR/static/;
+        alias /opt/nutanix-pxe/static/;
         expires 1y;
         add_header Cache-Control "public, immutable";
-        
-        # Compress static files
         gzip on;
         gzip_vary on;
-        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
     }
-
-    # Health check endpoint (no logging)
+    
+    # Boot images and scripts
+    location /boot-images/ {
+        alias /var/www/pxe/images/;
+        expires 1h;
+        add_header Cache-Control "public";
+    }
+    
+    location /boot-scripts/ {
+        alias /var/www/pxe/scripts/;
+        expires 1h;
+        add_header Cache-Control "public";
+    }
+    
+    # Health check endpoint
     location /health {
-        proxy_pass http://127.0.0.1:8080/health;
         access_log off;
+        proxy_pass http://127.0.0.1:8080/health;
+        proxy_set_header Host $host;
     }
-
-    # Boot configuration endpoints
-    location /boot-config {
-        proxy_pass http://127.0.0.1:8080/boot-config;
-    }
-
-    location ~* ^/server-config/(.+)\$ {
-        proxy_pass http://127.0.0.1:8080/server-config/\$1;
-    }
-
+    
     # Error pages
     error_page 500 502 503 504 /50x.html;
     location = /50x.html {
@@ -968,535 +1031,100 @@ server {
     }
 }
 
-# HTTPS Server Block for Configuration API (Port 8081)
+# HTTP to HTTPS Redirect
 server {
-   listen 8081 ssl http2;
-   server_name $SSL_DOMAIN _;
-
-   # SSL Configuration (consistent with main server block)
-   ssl_certificate $SSL_DIR/nutanix-orchestrator.crt;
-   ssl_certificate_key $SSL_DIR/nutanix-orchestrator.key;
-   
-   # SSL Security Settings
-   ssl_protocols TLSv1.2 TLSv1.3;
-   ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA;
-   ssl_prefer_server_ciphers off;
-   ssl_session_cache shared:SSL:10m;
-   ssl_session_timeout 10m;
-   
-   # Security Headers
-   add_header X-Frame-Options DENY;
-   add_header X-Content-Type-Options nosniff;
-   add_header X-XSS-Protection "1; mode=block";
-   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload";
-   add_header Referrer-Policy "strict-origin-when-cross-origin";
-
-   # Configuration API endpoints
-   location ~* ^/api/v1/nodes {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       proxy_set_header X-Forwarded-Host \$server_name;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   # Error pages
-   error_page 500 502 503 504 /50x.html;
-   location = /50x.html {
-       root /var/www/html;
-   }
-}
-
-# HTTPS Server Block for Status Monitoring (Port 8082)
-server {
-   listen 8082 ssl http2;
-   server_name $SSL_DOMAIN _;
-
-   # SSL Configuration (consistent with main server block)
-   ssl_certificate $SSL_DIR/nutanix-orchestrator.crt;
-   ssl_certificate_key $SSL_DIR/nutanix-orchestrator.key;
-   
-   # SSL Security Settings
-   ssl_protocols TLSv1.2 TLSv1.3;
-   ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA;
-   ssl_prefer_server_ciphers off;
-   ssl_session_cache shared:SSL:10m;
-   ssl_session_timeout 10m;
-   
-   # Security Headers
-   add_header X-Frame-Options DENY;
-   add_header X-Content-Type-Options nosniff;
-   add_header X-XSS-Protection "1; mode=block";
-   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload";
-   add_header Referrer-Policy "strict-origin-when-cross-origin";
-
-   # Status Monitoring endpoints
-   location ~* ^/api/v1/nodes/.*/status {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       proxy_set_header X-Forwarded-Host \$server_name;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   location ~* ^/deployment-status {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       proxy_set_header X-Forwarded-Host \$server_name;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   location ~* ^/phase-update {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       proxy_set_header X-Forwarded-Host \$server_name;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   location ~* ^/api/v1/nodes/.*/history {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       proxy_set_header X-Forwarded-Host \$server_name;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   location ~* ^/api/v1/deployment/summary {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       proxy_set_header X-Forwarded-Host \$server_name;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   # Error pages
-   error_page 500 502 503 504 /50x.html;
-   location = /50x.html {
-       root /var/www/html;
-   }
-}
-
-# HTTPS Server Block for DNS Registration (Port 8083)
-server {
-   listen 8083 ssl http2;
-   server_name $SSL_DOMAIN _;
-
-   # SSL Configuration (consistent with main server block)
-   ssl_certificate $SSL_DIR/nutanix-orchestrator.crt;
-   ssl_certificate_key $SSL_DIR/nutanix-orchestrator.key;
-   
-   # SSL Security Settings
-   ssl_protocols TLSv1.2 TLSv1.3;
-   ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA;
-   ssl_prefer_server_ciphers off;
-   ssl_session_cache shared:SSL:10m;
-   ssl_session_timeout 10m;
-   
-   # Security Headers
-   add_header X-Frame-Options DENY;
-   add_header X-Content-Type-Options nosniff;
-   add_header X-XSS-Protection "1; mode=block";
-   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload";
-   add_header Referrer-Policy "strict-origin-when-cross-origin";
-
-   # DNS Registration endpoints
-   location ~* ^/api/v1/dns {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       proxy_set_header X-Forwarded-Host \$server_name;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   # Error pages
-   error_page 500 502 503 504 /50x.html;
-   location = /50x.html {
-       root /var/www/html;
-   }
-}
-
-# HTTPS Server Block for Cleanup Management (Port 8084)
-server {
-   listen 8084 ssl http2;
-   server_name $SSL_DOMAIN _;
-
-   # SSL Configuration (consistent with main server block)
-   ssl_certificate $SSL_DIR/nutanix-orchestrator.crt;
-   ssl_certificate_key $SSL_DIR/nutanix-orchestrator.key;
-   
-   # SSL Security Settings
-   ssl_protocols TLSv1.2 TLSv1.3;
-   ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA;
-   ssl_prefer_server_ciphers off;
-   ssl_session_cache shared:SSL:10m;
-   ssl_session_timeout 10m;
-   
-   # Security Headers
-   add_header X-Frame-Options DENY;
-   add_header X-Content-Type-Options nosniff;
-   add_header X-XSS-Protection "1; mode=block";
-   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload";
-   add_header Referrer-Policy "strict-origin-when-cross-origin";
-
-   # Cleanup Management endpoints
-   location ~* ^/api/v1/cleanup {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       proxy_set_header X-Forwarded-Host \$server_name;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   # Error pages
-   error_page 500 502 503 504 /50x.html;
-   location = /50x.html {
-       root /var/www/html;
-   }
+    listen 80;
+    server_name _;
+    
+    # Redirect all HTTP traffic to HTTPS
+    return 301 https://$server_name$request_uri;
 }
 EOF
 
 else
-    cat > /etc/nginx/sites-available/nutanix-pxe << EOF
+    cat > /etc/nginx/sites-available/nutanix-pxe << 'EOF'
+# HTTP Server Block
 server {
     listen 80;
     server_name _;
-
-    # Boot server (port 8080)
+    
+    # Boot server endpoints
+    location /boot/ {
+        proxy_pass http://127.0.0.1:8080/boot/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Configuration API endpoints
+    location /api/config/ {
+        proxy_pass http://127.0.0.1:8080/api/config/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Status monitoring endpoints
+    location /api/status/ {
+        proxy_pass http://127.0.0.1:8080/api/status/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # DNS service endpoints
+    location /api/dns/ {
+        proxy_pass http://127.0.0.1:8080/api/dns/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Cleanup service endpoints
+    location /api/cleanup/ {
+        proxy_pass http://127.0.0.1:8080/api/cleanup/;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
+    }
+    
+    # Web interface
     location / {
         proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        include /etc/nginx/conf.d/proxy.conf;
+        proxy_set_header Host $host;
     }
-
-    # Configuration API (port 8081)
-    location /api/ {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
+    
     # Static files
     location /static/ {
-        alias $PROJECT_DIR/static/;
-        expires 1h;
+        alias /opt/nutanix-pxe/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        gzip on;
+        gzip_vary on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
     }
-
+    
     # Boot images and scripts
-    location /images/ {
+    location /boot-images/ {
         alias /var/www/pxe/images/;
         expires 1h;
+        add_header Cache-Control "public";
     }
-
-    location /scripts/ {
+    
+    location /boot-scripts/ {
         alias /var/www/pxe/scripts/;
         expires 1h;
+        add_header Cache-Control "public";
     }
-}
-
-# Non-HTTPS Server Block for Configuration API (Port 8081)
-server {
-   listen 8081;
-   server_name _;
-
-   # Configuration API endpoints
-   location ~* ^/api/v1/nodes {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   # Error pages
-   error_page 500 502 503 504 /50x.html;
-   location = /50x.html {
-       root /var/www/html;
-   }
-}
-
-# Non-HTTPS Server Block for Status Monitoring (Port 8082)
-server {
-   listen 8082;
-   server_name _;
-
-   # Status Monitoring endpoints
-   location ~* ^/api/v1/nodes/.*/status {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   location ~* ^/deployment-status {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   location ~* ^/phase-update {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   location ~* ^/api/v1/nodes/.*/history {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   location ~* ^/api/v1/deployment/summary {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   # Error pages
-   error_page 500 502 503 504 /50x.html;
-   location = /50x.html {
-       root /var/www/html;
-   }
-}
-
-# Non-HTTPS Server Block for DNS Registration (Port 8083)
-server {
-   listen 8083;
-   server_name _;
-
-   # DNS Registration endpoints
-   location ~* ^/api/v1/dns {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   # Error pages
-   error_page 500 502 503 504 /50x.html;
-   location = /50x.html {
-       root /var/www/html;
-   }
-}
-
-# Non-HTTPS Server Block for Cleanup Management (Port 8084)
-server {
-   listen 8084;
-   server_name _;
-
-   # Cleanup Management endpoints
-   location ~* ^/api/v1/cleanup {
-       proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host \$host;
-       proxy_set_header X-Real-IP \$remote_addr;
-       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto \$scheme;
-       
-       # Timeouts
-       proxy_connect_timeout 60s;
-       proxy_send_timeout 60s;
-       proxy_read_timeout 60s;
-       
-       # Buffer settings
-       proxy_buffering on;
-       proxy_buffer_size 128k;
-       proxy_buffers 4 256k;
-       proxy_busy_buffers_size 256k;
-   }
-
-   # Error pages
-   error_page 500 502 503 504 /50x.html;
-   location = /50x.html {
-       root /var/www/html;
-   }
+    
+    # Health check endpoint
+    location /health {
+        access_log off;
+        proxy_pass http://127.0.0.1:8080/health;
+        proxy_set_header Host $host;
+    }
+    
+    # Error pages
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /var/www/html;
+    }
 }
 EOF
 fi
@@ -1509,6 +1137,14 @@ rm -f /etc/nginx/sites-enabled/default
 # Test Nginx configuration
 log "Testing Nginx configuration"
 nginx -t
+
+# Restart Nginx to apply configuration
+log "Restarting Nginx to apply configuration"
+if ! systemctl restart nginx; then
+    log "ERROR: Failed to restart Nginx"
+    exit 1
+fi
+log "Nginx restarted successfully"
 
 # Initialize database
 log "Initializing database"
