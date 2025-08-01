@@ -416,7 +416,7 @@ server {
 EOF
     fi
     
-    ln -sf "$nginx_config" /etc/nginx/sites-enabled/
+    ln -sf "$nginx_config" /etc/nginx/sites-enabled/nutanix-pxe
     rm -f /etc/nginx/sites-enabled/default
     nginx -t
     systemctl enable nginx
