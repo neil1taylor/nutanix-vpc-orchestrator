@@ -18,6 +18,7 @@ class Config:
     IBM_CLOUD_REGION = os.environ.get('IBM_CLOUD_REGION')
     VPC_ID = os.environ.get('VPC_ID')
     DNS_INSTANCE_ID = os.environ.get('DNS_INSTANCE_ID')
+    DNS_INSTANCE_CRN = os.environ.get('DNS_INSTANCE_CRN')
     DNS_ZONE_ID = os.environ.get('DNS_ZONE_ID')
     DNS_ZONE_NAME = os.environ.get('DNS_ZONE_NAME')
     

@@ -211,6 +211,9 @@ class IBMCloudClient:
             logger.info(f"DNS zone ID: {self.dns_zone_id}")
             logger.info(f"DNS service URL: {self.dns_service.service_url}")
             
+            # Log the parameters being passed to the API
+            logger.info(f"API call parameters: instance_id={self.dns_instance_id}, dnszone_id={self.dns_zone_id}, name={name}, type={record_type.upper()}, rdata={{'ip': {rdata}}}, ttl={ttl}")
+            
             # Fixed: Pass parameters directly instead of using prototype object
             if record_type.upper() == 'A':
                 result = self.dns_service.create_resource_record(
@@ -242,6 +245,9 @@ class IBMCloudClient:
             logger.error(f"Failed to create DNS record {name}: {str(e)}")
             logger.error(f"Error type: {type(e).__name__}")
             logger.error(f"Error args: {e.args}")
+            # Log the full exception traceback
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             raise
     
     def delete_dns_record(self, record_id):
