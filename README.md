@@ -136,9 +136,6 @@ sudo systemctl restart nutanix-pxe
 # View logs
 sudo journalctl -u nutanix-pxe -f
 
-# Check overall status
-/opt/nutanix-pxe/status.sh
-```
 
 ### Health Monitoring
 
