@@ -668,7 +668,7 @@ class CleanupService:
                         'message': f'Deleted DNS record {record["record_name"]} ({record["record_type"]})'
                     })
                     
-                    logger.info(f"Deleted DNS record {record['record_name']} for node {node_name}")
+                    logger.info(f"Deleted DNS record {record['record_name']} for node {node_name} in the database")
                     
                 except Exception as e:
                     operations.append({
@@ -722,7 +722,7 @@ class CleanupService:
                         'message': f'Deleted IP reservation {reservation["ip_address"]} ({reservation["ip_type"]})'
                     })
                     
-                    logger.info(f"Deleted IP reservation {reservation['ip_address']} for node {node_name}")
+                    logger.info(f"Deleted IP reservation {reservation['ip_address']} for node {node_name} in the database")
                     
                 except Exception as e:
                     operations.append({

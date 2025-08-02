@@ -173,7 +173,10 @@ class Database:
                     cur.execute("SELECT * FROM nodes WHERE id = %s", (node_id,))
                     node = cur.fetchone()
                     if node:
-                        node['nutanix_config'] = json.loads(node['nutanix_config'])
+                        # Check if nutanix_config is already a dict (JSONB field) or needs to be parsed
+                        if isinstance(node['nutanix_config'], str):
+                            node['nutanix_config'] = json.loads(node['nutanix_config'])
+                        # If it's already a dict, no need to parse it
                     return dict(node) if node else None
         except Exception as e:
             logger.error(f"Failed to get node {node_id}: {str(e)}")
@@ -187,7 +190,10 @@ class Database:
                     cur.execute("SELECT * FROM nodes WHERE management_ip = %s", (ip_address,))
                     node = cur.fetchone()
                     if node:
-                        node['nutanix_config'] = json.loads(node['nutanix_config'])
+                        # Check if nutanix_config is already a dict (JSONB field) or needs to be parsed
+                        if isinstance(node['nutanix_config'], str):
+                            node['nutanix_config'] = json.loads(node['nutanix_config'])
+                        # If it's already a dict, no need to parse it
                     return dict(node) if node else None
         except Exception as e:
             logger.error(f"Failed to get node by IP {ip_address}: {str(e)}")

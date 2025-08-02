@@ -31,9 +31,9 @@ class IBMCloudClient:
             self.vpc_service.set_service_url(f'https://{self.region}.iaas.cloud.ibm.com/v1')
             
             # Debug: Log available methods in VpcV1
-            logger.info(f"Available methods in VpcV1: {[method for method in dir(self.vpc_service) if not method.startswith('_')]}")
-            logger.info(f"VpcV1 version: {getattr(self.vpc_service, '__version__', 'Unknown')}")
-            logger.info(f"VpcV1 service URL: {self.vpc_service.service_url}")
+            # logger.info(f"Available methods in VpcV1: {[method for method in dir(self.vpc_service) if not method.startswith('_')]}")
+            # logger.info(f"VpcV1 version: {getattr(self.vpc_service, '__version__', 'Unknown')}")
+            # logger.info(f"VpcV1 service URL: {self.vpc_service.service_url}")
         except Exception as e:
             logger.error(f"Failed to initialize VPC service: {str(e)}")
             logger.error(f"Exception type: {type(e).__name__}")
@@ -82,7 +82,14 @@ class IBMCloudClient:
             )
             logger.info(f"Deleted reserved IP {reserved_ip_id}")
         except Exception as e:
-            logger.error(f"Failed to delete reserved IP {reserved_ip_id}: {str(e)}")
+            # Don't log 404 (not found) or 409 (in use) errors as errors since they're handled by cleanup service
+            error_str = str(e).lower()
+            if "404" in error_str or "not found" in error_str:
+                logger.info(f"Reserved IP {reserved_ip_id} not found (404), skipping deletion")
+            elif "409" in error_str or "in use" in error_str:
+                logger.info(f"Reserved IP {reserved_ip_id} is in use (409), cannot delete")
+            else:
+                logger.error(f"Failed to delete reserved IP {reserved_ip_id}: {str(e)}")
             raise
     
     def get_subnet_reserved_ips(self, subnet_id):
@@ -137,7 +144,14 @@ class IBMCloudClient:
             self.vpc_service.delete_virtual_network_interfaces(id=vni_id)
             logger.info(f"Deleted virtual network interface {vni_id}")
         except Exception as e:
-            logger.error(f"Failed to delete VNI {vni_id}: {str(e)}")
+            # Don't log 404 (not found) or 409 (in use) errors as errors since they're handled by cleanup service
+            error_str = str(e).lower()
+            if "404" in error_str or "not found" in error_str:
+                logger.info(f"VNI {vni_id} not found (404), skipping deletion")
+            elif "409" in error_str or "in use" in error_str:
+                logger.info(f"VNI {vni_id} is in use (409), cannot delete")
+            else:
+                logger.error(f"Failed to delete VNI {vni_id}: {str(e)}")
             raise
     
     def create_bare_metal_server(self, name, profile, image_id, primary_vni_id, ssh_key_ids, additional_vnis=None, user_data=None):
@@ -193,7 +207,14 @@ class IBMCloudClient:
             self.vpc_service.delete_bare_metal_server(id=server_id)
             logger.info(f"Deleted bare metal server {server_id}")
         except Exception as e:
-            logger.error(f"Failed to delete bare metal server {server_id}: {str(e)}")
+            # Don't log 404 (not found) or 409 (in use) errors as errors since they're handled by cleanup service
+            error_str = str(e).lower()
+            if "404" in error_str or "not found" in error_str:
+                logger.info(f"Bare metal server {server_id} not found (404), skipping deletion")
+            elif "409" in error_str or "in use" in error_str:
+                logger.info(f"Bare metal server {server_id} is in use (409), cannot delete")
+            else:
+                logger.error(f"Failed to delete bare metal server {server_id}: {str(e)}")
             raise
     
     def get_bare_metal_server(self, server_id):
@@ -282,7 +303,14 @@ class IBMCloudClient:
             )
             logger.info(f"Deleted DNS record {record_id}")
         except Exception as e:
-            logger.error(f"Failed to delete DNS record {record_id}: {str(e)}")
+            # Don't log 404 (not found) or 409 (in use) errors as errors since they're handled by cleanup service
+            error_str = str(e).lower()
+            if "404" in error_str or "not found" in error_str:
+                logger.info(f"DNS record {record_id} not found (404), skipping deletion")
+            elif "409" in error_str or "in use" in error_str:
+                logger.info(f"DNS record {record_id} is in use (409), cannot delete")
+            else:
+                logger.error(f"Failed to delete DNS record {record_id}: {str(e)}")
             raise
     
     def get_dns_records(self):
