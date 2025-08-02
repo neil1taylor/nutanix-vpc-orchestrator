@@ -37,10 +37,13 @@ class NodeProvisioner:
             
             # Step 0: Check if node with same name already exists and is successfully provisioned
             existing_node = self.db.get_node_by_name(node_name)
+            logger.info(f"Checking for existing node with name {node_name}: {existing_node}")
             if existing_node:
+                logger.info(f"Existing node found with status: {existing_node['deployment_status']}")
                 if existing_node['deployment_status'] not in ['cleanup_completed', 'failed']:
                     raise Exception(f"Node with name {node_name} already exists and is in status {existing_node['deployment_status']}")
                 # If node is in cleanup_completed or failed status, we can proceed with provisioning
+                logger.info(f"Proceeding with provisioning as existing node is in {existing_node['deployment_status']} status")
             
             # Step 1: Reserve IP addresses
             ip_allocation = self.reserve_node_ips(node_request['node_config'])

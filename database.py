@@ -226,7 +226,7 @@ class Database:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     cur.execute("""
                         SELECT id, node_name, bare_metal_id, management_ip, workload_ip,
-                               management_vnic_id, workload_vnic_id, deployment_status
+                               management_vnic_id, workload_vnic_id, deployment_status, nutanix_config
                         FROM nodes WHERE node_name = %s
                     """, (node_name,))
                     
