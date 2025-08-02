@@ -235,17 +235,24 @@ class IBMCloudClient:
             logger.error(f"Failed to get subnet info {subnet_id}: {str(e)}")
             raise
     
-    def get_custom_image_by_name(self, image_name):
-        """Get custom image by name using VPC SDK"""
+    def get_custom_image(self, image_identifier):
+        """Get custom image by name or ID using VPC SDK"""
         try:
-            result = self.vpc_service.list_images(name=image_name).get_result()
+            # Check if the identifier is an ID (starts with "r006-")
+            if image_identifier.startswith('r006-'):
+                # Filter by ID
+                result = self.vpc_service.list_images(id=image_identifier).get_result()
+            else:
+                # Filter by name
+                result = self.vpc_service.list_images(name=image_identifier).get_result()
+            
             images = result.get("images", [])
             if images:
                 return images[0]
             else:
-                raise Exception(f"Custom image {image_name} not found")
+                raise Exception(f"Custom image {image_identifier} not found")
         except Exception as e:
-            logger.error(f"Failed to get custom image {image_name}: {str(e)}")
+            logger.error(f"Failed to get custom image {image_identifier}: {str(e)}")
             raise
     
     # DNS Methods using SDK

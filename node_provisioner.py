@@ -359,14 +359,14 @@ class NodeProvisioner:
         return node_id
     
     def deploy_bare_metal_server(self, node_id, vnis, node_data):
-        """Deploy the bare metal server with custom iPXE image"""
+        """Deploy the bare metal server with IBM Cloud iPXE image"""
         logger.info(f"Deploying bare metal server for node ID {node_id}")
         
         node_config = self.db.get_node(node_id)
         
         try:
             # Get custom iPXE image
-            ipxe_image = self.ibm_cloud.get_custom_image_by_name('nutanix-ipxe-boot')
+            ipxe_image = self.ibm_cloud.get_custom_image(self.config.IPXE_IMAGE_ID)
             
             # Generate user data
             user_data = self.generate_user_data(node_id)

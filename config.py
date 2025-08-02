@@ -95,6 +95,9 @@ class Config:
     CLEANUP_API_PATH = '/api/cleanup'
     BOOT_API_PATH = '/boot'
     
+    # iPXE image configuration
+    IPXE_IMAGE_ID = os.environ.get('IPXE_IMAGE_ID', 'r006-bfef819d-11af-4252-9bd3-bae1d9dd8e1d')  # Default to IBM Cloud iPXE image
+    
     @classmethod
     def get_api_url(cls, service, endpoint):
         """Generate API URL for a specific service and endpoint"""
