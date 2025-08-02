@@ -8,7 +8,7 @@ import socket
 class Config:
     # Flask settings
     SECRET_KEY = os.environ.get('SECRET_KEY', 'nutanix-pxe-config-secret-key')
-    DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+    #DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
     
     # Database settings
     DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://nutanix:nutanix@localhost/nutanix_pxe')
@@ -78,10 +78,10 @@ class Config:
     LOG_PATH = os.environ.get('LOG_PATH', '/var/log/nutanix-pxe')
     
     # HTTPS Configuration
-    HTTPS_ENABLED = os.environ.get('HTTPS_ENABLED', 'false').lower() == 'true'
-    SSL_CERT_PATH = os.environ.get('SSL_CERT_PATH', '/opt/nutanix-pxe/ssl/nutanix-orchestrator.crt')
-    SSL_KEY_PATH = os.environ.get('SSL_KEY_PATH', '/opt/nutanix-pxe/ssl/nutanix-orchestrator.key')
-    FORCE_HTTPS = os.environ.get('FORCE_HTTPS', 'false').lower() == 'true'
+    #HTTPS_ENABLED = os.environ.get('HTTPS_ENABLED', 'false').lower() == 'true'
+    #SSL_CERT_PATH = os.environ.get('SSL_CERT_PATH', '/opt/nutanix-pxe/ssl/nutanix-orchestrator.crt')
+    #SSL_KEY_PATH = os.environ.get('SSL_KEY_PATH', '/opt/nutanix-pxe/ssl/nutanix-orchestrator.key')
+    #FORCE_HTTPS = os.environ.get('FORCE_HTTPS', 'false').lower() == 'true'
     
     # API Path Configuration
     API_BASE_PATH = '/api'
