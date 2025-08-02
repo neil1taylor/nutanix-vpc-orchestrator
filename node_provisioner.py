@@ -289,7 +289,7 @@ class NodeProvisioner:
             vnis['workload_vni'] = workload_vni
             
             # Store VNI info for cleanup
-            self.db.store_vni_info(node_config['node_name'], vnis)
+            self.db.store_vnic_info(node_config['node_name'], vnis)
             
             logger.info(f"VNI creation completed for {node_config['node_name']}")
             return vnis

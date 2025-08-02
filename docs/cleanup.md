@@ -32,7 +32,7 @@ self.db.store_dns_records(node_config['node_name'], dns_records)
 
 # Virtual Network Interfaces
 vnis = self.ibm_cloud.create_virtual_network_interface(...)
-self.db.store_vni_info(node_config['node_name'], vnis)
+self.db.store_vnic_info(node_config['node_name'], vnis)
 
 # Bare Metal Server ID stored in main nodes table
 self.db.update_node_deployment_info(node_id, bare_metal_id, status)

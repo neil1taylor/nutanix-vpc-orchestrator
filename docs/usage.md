@@ -8,10 +8,10 @@ curl -X POST http://localhost:8080/api/config/nodes \
   -d '{
     "node_config": {
       "node_name": "nutanix-poc-bm-node-01",
-      "server_profile": "bx2d-metal-48x192",
+      "server_profile": "cx3d-metal-48x128",
       "cluster_role": "compute",
       "storage_config": {
-        "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1", "nvme5n1"]
+        "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1"]
       }
     },
     "network_config": {
