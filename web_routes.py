@@ -179,24 +179,24 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
 def get_dashboard_stats(db):
     """Get dashboard statistics"""
     try:
-        cursor = db.cursor()
-        
-        # Active nodes
-        cursor.execute("SELECT COUNT(*) FROM nodes WHERE deployment_status = 'running'")
-        active_nodes = cursor.fetchone()[0]
-        
-        # Total clusters
-        cursor.execute("SELECT COUNT(DISTINCT cluster_name) FROM nodes WHERE cluster_name IS NOT NULL")
-        total_clusters = cursor.fetchone()[0]
-        
-        # Total deployments
-        cursor.execute("SELECT COUNT(*) FROM nodes")
-        total_deployments = cursor.fetchone()[0]
-        
-        # Success rate
-        cursor.execute("SELECT COUNT(*) FROM nodes WHERE deployment_status = 'running'")
-        successful = cursor.fetchone()[0]
-        success_rate = (successful / total_deployments * 100) if total_deployments > 0 else 0
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                # Active nodes
+                cursor.execute("SELECT COUNT(*) FROM nodes WHERE deployment_status = 'running'")
+                active_nodes = cursor.fetchone()[0]
+                
+                # Total clusters
+                cursor.execute("SELECT COUNT(DISTINCT cluster_name) FROM nodes WHERE cluster_name IS NOT NULL")
+                total_clusters = cursor.fetchone()[0]
+                
+                # Total deployments
+                cursor.execute("SELECT COUNT(*) FROM nodes")
+                total_deployments = cursor.fetchone()[0]
+                
+                # Success rate
+                cursor.execute("SELECT COUNT(*) FROM nodes WHERE deployment_status = 'running'")
+                successful = cursor.fetchone()[0]
+                success_rate = (successful / total_deployments * 100) if total_deployments > 0 else 0
         
         return {
             'active_nodes': active_nodes,
@@ -216,24 +216,25 @@ def get_dashboard_stats(db):
 def get_recent_deployments(db, limit=5):
     """Get recent deployments"""
     try:
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT id, node_name, deployment_status, cluster_name, created_at, progress_percentage
-            FROM nodes 
-            ORDER BY created_at DESC 
-            LIMIT %s
-        """, (limit,))
-        
-        deployments = []
-        for row in cursor.fetchall():
-            deployments.append({
-                'id': row[0],
-                'node_name': row[1],
-                'status': row[2],
-                'cluster': row[3] or 'Not assigned',
-                'created_at': row[4],
-                'progress': row[5] or 0
-            })
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, node_name, deployment_status, cluster_name, created_at, progress_percentage
+                    FROM nodes
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (limit,))
+                
+                deployments = []
+                for row in cursor.fetchall():
+                    deployments.append({
+                        'id': row[0],
+                        'node_name': row[1],
+                        'status': row[2],
+                        'cluster': row[3] or 'Not assigned',
+                        'created_at': row[4],
+                        'progress': row[5] or 0
+                    })
         
         return deployments
     except Exception as e:
@@ -243,26 +244,27 @@ def get_recent_deployments(db, limit=5):
 def get_all_nodes(db):
     """Get all nodes"""
     try:
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT id, node_name, ip_address, cluster_role, cluster_name, 
-                   server_profile, deployment_status, created_at
-            FROM nodes 
-            ORDER BY created_at DESC
-        """)
-        
-        nodes = []
-        for row in cursor.fetchall():
-            nodes.append({
-                'id': row[0],
-                'node_name': row[1],
-                'ip_address': row[2] or 'Pending',
-                'cluster_role': row[3],
-                'cluster_name': row[4] or 'Not assigned',
-                'server_profile': row[5],
-                'status': row[6],
-                'created_at': row[7]
-            })
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, node_name, ip_address, cluster_role, cluster_name,
+                           server_profile, deployment_status, created_at
+                    FROM nodes
+                    ORDER BY created_at DESC
+                """)
+                
+                nodes = []
+                for row in cursor.fetchall():
+                    nodes.append({
+                        'id': row[0],
+                        'node_name': row[1],
+                        'ip_address': row[2] or 'Pending',
+                        'cluster_role': row[3],
+                        'cluster_name': row[4] or 'Not assigned',
+                        'server_profile': row[5],
+                        'status': row[6],
+                        'created_at': row[7]
+                    })
         
         return nodes
     except Exception as e:
@@ -272,26 +274,27 @@ def get_all_nodes(db):
 def get_deployment_history(db):
     """Get deployment history"""
     try:
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT dh.id, n.node_name, dh.phase, dh.status, dh.timestamp, 
-                   dh.duration, dh.node_id
-            FROM deployment_history dh
-            JOIN nodes n ON dh.node_id = n.id
-            ORDER BY dh.timestamp DESC
-        """)
-        
-        deployments = []
-        for row in cursor.fetchall():
-            deployments.append({
-                'id': row[0],
-                'node_name': row[1],
-                'phase': row[2],
-                'status': row[3],
-                'timestamp': row[4],
-                'duration': row[5],
-                'node_id': row[6]
-            })
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT dh.id, n.node_name, dh.phase, dh.status, dh.timestamp,
+                           dh.duration, dh.node_id
+                    FROM deployment_history dh
+                    JOIN nodes n ON dh.node_id = n.id
+                    ORDER BY dh.timestamp DESC
+                """)
+                
+                deployments = []
+                for row in cursor.fetchall():
+                    deployments.append({
+                        'id': row[0],
+                        'node_name': row[1],
+                        'phase': row[2],
+                        'status': row[3],
+                        'timestamp': row[4],
+                        'duration': row[5],
+                        'node_id': row[6]
+                    })
         
         return deployments
     except Exception as e:
@@ -311,27 +314,28 @@ def get_system_health():
 def get_node_by_id(db, node_id):
     """Get node by ID"""
     try:
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT id, node_name, ip_address, cluster_role, cluster_name, 
-                   server_profile, deployment_status, created_at,
-                   progress_percentage, current_phase
-            FROM nodes 
-            WHERE id = %s
-        """, (node_id,))
-        
-        row = cursor.fetchone()
-        if row:
-            return {
-                'id': row[0],
-                'node_name': row[1],
-                'ip_address': row[2],
-                'cluster_role': row[3],
-                'cluster_name': row[4],
-                'server_profile': row[5],
-                'status': row[6],
-                'created_at': row[7],
-                'progress': row[8] or 0,
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, node_name, ip_address, cluster_role, cluster_name,
+                           server_profile, deployment_status, created_at,
+                           progress_percentage, current_phase
+                    FROM nodes
+                    WHERE id = %s
+                """, (node_id,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'node_name': row[1],
+                        'ip_address': row[2],
+                        'cluster_role': row[3],
+                        'cluster_name': row[4],
+                        'server_profile': row[5],
+                        'status': row[6],
+                        'created_at': row[7],
+                        'progress': row[8] or 0,
                 'current_phase': row[9]
             }
         return None
@@ -342,23 +346,24 @@ def get_node_by_id(db, node_id):
 def get_node_deployment_history(db, node_id):
     """Get deployment history for a specific node"""
     try:
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT phase, status, timestamp, duration, logs
-            FROM deployment_history 
-            WHERE node_id = %s 
-            ORDER BY timestamp DESC
-        """, (node_id,))
-        
-        history = []
-        for row in cursor.fetchall():
-            history.append({
-                'phase': row[0],
-                'status': row[1],
-                'timestamp': row[2],
-                'duration': row[3],
-                'logs': row[4]
-            })
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT phase, status, timestamp, duration, logs
+                    FROM deployment_history
+                    WHERE node_id = %s
+                    ORDER BY timestamp DESC
+                """, (node_id,))
+                
+                history = []
+                for row in cursor.fetchall():
+                    history.append({
+                        'phase': row[0],
+                        'status': row[1],
+                        'timestamp': row[2],
+                        'duration': row[3],
+                        'logs': row[4]
+                    })
         
         return history
     except Exception as e:
@@ -368,19 +373,20 @@ def get_node_deployment_history(db, node_id):
 def get_deployment_logs(db, deployment_id):
     """Get deployment logs"""
     try:
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT logs, timestamp, phase 
-            FROM deployment_history 
-            WHERE id = %s
-        """, (deployment_id,))
-        
-        row = cursor.fetchone()
-        if row:
-            return {
-                'logs': row[0] or 'No logs available',
-                'timestamp': row[1],
-                'phase': row[2]
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT logs, timestamp, phase
+                    FROM deployment_history
+                    WHERE id = %s
+                """, (deployment_id,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'logs': row[0] or 'No logs available',
+                        'timestamp': row[1],
+                        'phase': row[2]
             }
         return {'logs': 'Deployment not found', 'timestamp': None, 'phase': None}
     except Exception as e:
@@ -390,20 +396,21 @@ def get_deployment_logs(db, deployment_id):
 def get_deployment_by_id(db, deployment_id):
     """Get deployment by ID"""
     try:
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT dh.id, n.node_name, dh.phase, dh.status
-            FROM deployment_history dh
-            JOIN nodes n ON dh.node_id = n.id
-            WHERE dh.id = %s
-        """, (deployment_id,))
-        
-        row = cursor.fetchone()
-        if row:
-            return {
-                'id': row[0],
-                'node_name': row[1],
-                'phase': row[2],
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT dh.id, n.node_name, dh.phase, dh.status
+                    FROM deployment_history dh
+                    JOIN nodes n ON dh.node_id = n.id
+                    WHERE dh.id = %s
+                """, (deployment_id,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'node_name': row[1],
+                        'phase': row[2],
                 'status': row[3]
             }
         return None
@@ -414,18 +421,19 @@ def get_deployment_by_id(db, deployment_id):
 def get_deployment_progress(db, deployment_id):
     """Get deployment progress"""
     try:
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT n.progress_percentage, n.current_phase, n.deployment_status
-            FROM deployment_history dh
-            JOIN nodes n ON dh.node_id = n.id
-            WHERE dh.id = %s
-        """, (deployment_id,))
-        
-        row = cursor.fetchone()
-        if row:
-            return {
-                'progress': row[0] or 0,
+        with db.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT n.progress_percentage, n.current_phase, n.deployment_status
+                    FROM deployment_history dh
+                    JOIN nodes n ON dh.node_id = n.id
+                    WHERE dh.id = %s
+                """, (deployment_id,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'progress': row[0] or 0,
                 'current_phase': row[1] or 'Starting',
                 'status': row[2]
             }

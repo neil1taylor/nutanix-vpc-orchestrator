@@ -133,7 +133,8 @@ class IBMCloudClient:
     def delete_virtual_network_interface(self, vni_id):
         """Delete a virtual network interface using VPC SDK"""
         try:
-            self.vpc_service.delete_virtual_network_interface(id=vni_id)
+            # Based on the available methods in VpcV1, the correct method is:
+            self.vpc_service.delete_virtual_network_interfaces(id=vni_id)
             logger.info(f"Deleted virtual network interface {vni_id}")
         except Exception as e:
             logger.error(f"Failed to delete VNI {vni_id}: {str(e)}")

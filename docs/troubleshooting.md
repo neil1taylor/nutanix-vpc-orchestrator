@@ -7,6 +7,7 @@
 1. SSH to the pxe server
 
 ```bash
+rm -rf /var/log/nutanix-pxe
 cd /
 GITHUB_REPO="https://github.com/neil1taylor/nutanix-vpc-orchestrator"
 GITHUB_BRANCH="main"
