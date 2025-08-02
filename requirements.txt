@@ -5,7 +5,7 @@ psycopg2-binary==2.9.9
 python-dotenv==1.0.0
 Werkzeug==3.0.1
 gunicorn==21.2.0
-ibm-cloud-sdk-core==3.18.0
+ibm-cloud-sdk-core==3.24.2
 ibm-vpc==0.30.0
 ibm-cloud-networking-services==0.25.0
 cryptography==45.0.5
