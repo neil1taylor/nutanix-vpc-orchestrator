@@ -14,7 +14,7 @@ class Config:
     DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://nutanix:nutanix@localhost/nutanix_pxe')
     
     # IBM Cloud settings
-    IBM_CLOUD_API_KEY = os.environ.get('IBM_CLOUD_API_KEY')
+    RESOURCE_GROUP_ID = os.environ.get('RESOURCE_GROUP_ID')
     IBM_CLOUD_REGION = os.environ.get('IBM_CLOUD_REGION')
     VPC_ID = os.environ.get('VPC_ID')
     DNS_INSTANCE_ID = os.environ.get('DNS_INSTANCE_ID')
@@ -117,7 +117,8 @@ class Config:
         required_vars = [
             'IBM_CLOUD_REGION', 'VPC_ID', 'DNS_INSTANCE_ID', 'DNS_INSTANCE_GUID','DNS_ZONE_ID', 'DNS_ZONE_NAME',
             'MANAGEMENT_SUBNET_ID', 'WORKLOAD_SUBNET_ID', 'SSH_KEY_ID',
-            'MANAGEMENT_SECURITY_GROUP_ID', 'WORKLOAD_SECURITY_GROUP_ID', 'INTRA_NODE_SECURITY_GROUP_ID'
+            'MANAGEMENT_SECURITY_GROUP_ID', 'WORKLOAD_SECURITY_GROUP_ID', 'INTRA_NODE_SECURITY_GROUP_ID',
+            'RESOURCE_GROUP_ID'
         ]
         
         missing_vars = []

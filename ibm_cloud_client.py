@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class IBMCloudClient:
     def __init__(self):
         # Load configuration from Config class instead of direct os.getenv
+        self.config = Config
         self.region = Config.IBM_CLOUD_REGION
         self.vpc_id = Config.VPC_ID
         self.dns_instance_guid = Config.DNS_INSTANCE_GUID
@@ -110,7 +111,8 @@ class IBMCloudClient:
                 name=name,
                 subnet={'id': subnet_id},
                 primary_ip={'id': primary_ip_id},
-                security_groups=[{'id': sg_id} for sg_id in security_group_ids]
+                security_groups=[{'id': sg_id} for sg_id in security_group_ids],
+                resource_group={'id': self.config.RESOURCE_GROUP_ID}
             ).get_result()
             
             logger.info(f"Created virtual network interface {name}")
