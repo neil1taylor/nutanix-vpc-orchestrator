@@ -198,7 +198,7 @@ test_endpoints() {
     test_http "Health Check" "http://localhost:8080/health" "200" 10
     test_http "API Info" "http://localhost:8080/api/v1/info" "200" 10
     test_http "Web Interface" "http://localhost:8080/" "200" 10
-    test_http "Boot Config" "http://localhost:8080/boot-config?mgmt_ip=192.168.1.100&mgmt_mac=00:11:22:33:44:55" "200" 10
+    test_http "Boot Config" "http://localhost:8080/boot/config?mgmt_ip=192.168.1.100&mgmt_mac=00:11:22:33:44:55" "200" 10
     
     # HTTPS tests
     if [[ "$ENABLE_HTTPS" == "true" ]]; then
