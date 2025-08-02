@@ -29,7 +29,6 @@ class Database:
                         CREATE TABLE IF NOT EXISTS nodes (
                             id SERIAL PRIMARY KEY,
                             node_name VARCHAR(255) UNIQUE NOT NULL,
-                            node_position VARCHAR(10),
                             server_profile VARCHAR(100),
                             cluster_role VARCHAR(50),
                             deployment_status VARCHAR(50) DEFAULT 'pending',
@@ -138,17 +137,16 @@ class Database:
                 with conn.cursor() as cur:
                     cur.execute("""
                         INSERT INTO nodes (
-                            node_name, node_position, server_profile, cluster_role,
+                            node_name, server_profile, cluster_role,
                             deployment_status, management_vnic_id, management_ip,
                             workload_vnic_id, workload_ip, nutanix_config
                         ) VALUES (
-                            %(node_name)s, %(node_position)s, %(server_profile)s, %(cluster_role)s,
+                            %(node_name)s, %(server_profile)s, %(cluster_role)s,
                             %(deployment_status)s, %(management_vnic_id)s, %(management_ip)s,
                             %(workload_vnic_id)s, %(workload_ip)s, %(nutanix_config)s
                         ) RETURNING id;
                     """, {
                         'node_name': node_config['node_name'],
-                        'node_position': node_config['node_position'],
                         'server_profile': node_config['server_profile'],
                         'cluster_role': node_config['cluster_role'],
                         'deployment_status': node_config['deployment_status'],

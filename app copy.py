@@ -172,7 +172,7 @@ def api_provision_node():
         if not data or 'node_config' not in data:
             return jsonify({'error': 'Missing node_config'}), 400
         
-        required_fields = ['node_name', 'node_position', 'server_profile']
+        required_fields = ['node_name', 'server_profile']
         node_config = data['node_config']
         
         for field in required_fields:
@@ -206,7 +206,6 @@ def api_get_node_info(node_id):
         safe_node = {
             'id': node['id'],
             'node_name': node['node_name'],
-            'node_position': node['node_position'],
             'server_profile': node['server_profile'],
             'cluster_role': node['cluster_role'],
             'deployment_status': node['deployment_status'],

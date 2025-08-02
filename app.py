@@ -174,7 +174,7 @@ def api_provision_node():
         if not data or 'node_config' not in data:
             return jsonify({'error': 'Missing node_config'}), 400
         
-        required_fields = ['node_name', 'node_position', 'server_profile']
+        required_fields = ['node_name', 'server_profile']
         node_config = data['node_config']
         
         for field in required_fields:
@@ -208,7 +208,6 @@ def api_get_node_info(node_id):
         safe_node = {
             'id': node['id'],
             'node_name': node['node_name'],
-            'node_position': node['node_position'],
             'server_profile': node['server_profile'],
             'cluster_role': node['cluster_role'],
             'deployment_status': node['deployment_status'],
@@ -231,7 +230,7 @@ def api_list_nodes():
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT id, node_name, node_position, server_profile, cluster_role,
+                    SELECT id, node_name, server_profile, cluster_role,
                            deployment_status, management_ip, workload_ip, created_at, updated_at
                     FROM nodes 
                     ORDER BY created_at DESC
@@ -242,14 +241,13 @@ def api_list_nodes():
                     nodes.append({
                         'id': row[0],
                         'node_name': row[1],
-                        'node_position': row[2],
-                        'server_profile': row[3],
-                        'cluster_role': row[4],
-                        'deployment_status': row[5],
-                        'management_ip': str(row[6]) if row[6] else None,
-                        'workload_ip': str(row[7]) if row[7] else None,
-                        'created_at': row[8].isoformat() if row[8] else None,
-                        'updated_at': row[9].isoformat() if row[9] else None
+                        'server_profile': row[2],
+                        'cluster_role': row[3],
+                        'deployment_status': row[4],
+                        'management_ip': str(row[5]) if row[6] else None,
+                        'workload_ip': str(row[6]) if row[7] else None,
+                        'created_at': row[7].isoformat() if row[7] else None,
+                        'updated_at': row[8].isoformat() if row[8] else None
                     })
                 
                 return jsonify({'nodes': nodes})

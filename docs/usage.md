@@ -8,7 +8,6 @@ curl -X POST http://localhost:8080/api/config/nodes \
   -d '{
     "node_config": {
       "node_name": "nutanix-poc-bm-node-01",
-      "node_position": "A",
       "server_profile": "bx2d-metal-48x192",
       "cluster_role": "compute",
       "storage_config": {
@@ -110,7 +109,6 @@ curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/node
   -d '{
     "node_config": {
       "node_name": "nutanix-poc-bm-node-02",
-      "node_position": "B",
       "server_profile": "bx2d-metal-48x192",
       "cluster_role": "compute"
     },
@@ -121,6 +119,6 @@ curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/node
 ```
 
 The key differences for additional nodes:
-- Different `node_name` and `node_position`
+- Different `node_name`
 - Use `"cluster_operation": "join_existing"` instead of `"create_new"`
 - Storage config is optional for additional nodes

@@ -46,9 +46,6 @@
                 <strong>Role:</strong> {{ node.cluster_role.title() if node.cluster_role else 'Not set' }}
             </div>
             <div class="config-item">
-                <strong>Position:</strong> {{ node.node_position or 'Not set' }}
-            </div>
-            <div class="config-item">
                 <strong>Created:</strong> {{ node.created_at.strftime('%Y-%m-%d %H:%M:%S') if node.created_at else 'Unknown' }}
             </div>
             {% if node.current_phase %}

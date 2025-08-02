@@ -280,7 +280,6 @@ class NodeProvisioner:
         
         node_config = {
             'node_name': node_data['node_config']['node_name'],
-            'node_position': node_data['node_config']['node_position'],
             'server_profile': node_data['node_config']['server_profile'],
             'cluster_role': node_data['node_config']['cluster_role'],
             'deployment_status': 'provisioning',

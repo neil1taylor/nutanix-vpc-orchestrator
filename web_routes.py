@@ -70,7 +70,6 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
                 node_config = {
                     'node_config': {
                         'node_name': request.form.get('node_name'),
-                        'node_position': request.form.get('node_position'),
                         'server_profile': request.form.get('server_profile'),
                         'cluster_role': request.form.get('cluster_role'),
                         'storage_config': {
@@ -315,7 +314,7 @@ def get_node_by_id(db, node_id):
         cursor = db.cursor()
         cursor.execute("""
             SELECT id, node_name, ip_address, cluster_role, cluster_name, 
-                   server_profile, deployment_status, created_at, node_position,
+                   server_profile, deployment_status, created_at,
                    progress_percentage, current_phase
             FROM nodes 
             WHERE id = %s
@@ -332,9 +331,8 @@ def get_node_by_id(db, node_id):
                 'server_profile': row[5],
                 'status': row[6],
                 'created_at': row[7],
-                'node_position': row[8],
-                'progress': row[9] or 0,
-                'current_phase': row[10]
+                'progress': row[8] or 0,
+                'current_phase': row[9]
             }
         return None
     except Exception as e:

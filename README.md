@@ -67,7 +67,6 @@ curl -X POST http://localhost:8081/api/v1/nodes \
   -d '{
     "node_config": {
       "node_name": "nutanix-poc-bm-node-01",
-      "node_position": "A",
       "server_profile": "bx2d-metal-48x192",
       "cluster_role": "compute",
       "storage_config": {
@@ -89,8 +88,7 @@ curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/nodes \
   -H "Content-Type: application/json" \
   -d '{
     "node_config": {
-      "node_name": "nutanix-poc-bm-node-02",
-      "node_position": "B", 
+      "node_name": "nutanix-poc-bm-node-02", 
       "server_profile": "bx2d-metal-48x192",
       "cluster_role": "compute"
     },

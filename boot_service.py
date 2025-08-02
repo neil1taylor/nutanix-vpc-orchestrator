@@ -243,7 +243,6 @@ shell
                 'redundancy_factor': 1 if is_first_node else 2  # RF1 for single node, RF2 for multi-node
             },
             'node_config': {
-                'node_position': node['node_position'],
                 'hypervisor': 'ahv',
                 'hypervisor_ip': nutanix_config['ahv_ip'],
                 'hypervisor_netmask': '255.255.255.0',
