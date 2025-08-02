@@ -260,7 +260,38 @@ class CleanupService:
                         'message': f'Failed to delete orphaned IP reservation {reservation["ip_address"]}: {str(e)}'
                     })
                     
-                    logger.error(f"Failed to delete orphaned IP reservation {reservation['ip_address']}: {str(e)}")
+                    # Handle 404 (not found) and 409 (in use) errors gracefully
+                    error_str = str(e).lower()
+                    if "404" in error_str or "not found" in error_str:
+                        logger.info(f"Orphaned IP reservation {reservation['ip_address']} not found (404), skipping deletion")
+                        operations.append({
+                            'type': 'orphaned_ip_reservation_deletion',
+                            'resource_id': reservation['reservation_id'],
+                            'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                            'success': True,
+                            'message': f'Orphaned IP reservation {reservation["ip_address"]} not found (404), skipped deletion'
+                        })
+                    elif "409" in error_str or "in use" in error_str:
+                        logger.info(f"Orphaned IP reservation {reservation['ip_address']} is in use (409), cannot delete")
+                        operations.append({
+                            'type': 'orphaned_ip_reservation_deletion',
+                            'resource_id': reservation['reservation_id'],
+                            'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                            'success': False,
+                            'error': 'in_use',
+                            'message': f'Orphaned IP reservation {reservation["ip_address"]} is in use (409), cannot delete'
+                        })
+                    else:
+                        operations.append({
+                            'type': 'orphaned_ip_reservation_deletion',
+                            'resource_id': reservation['reservation_id'],
+                            'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                            'success': False,
+                            'error': str(e),
+                            'message': f'Failed to delete orphaned IP reservation {reservation["ip_address"]}: {str(e)}'
+                        })
+                        
+                        logger.error(f"Failed to delete orphaned IP reservation {reservation['ip_address']}: {str(e)}")
         
         except Exception as e:
             operations.append({
@@ -317,22 +348,44 @@ class CleanupService:
                     with self.db.get_connection() as conn:
                         with conn.cursor() as cur:
                             cur.execute("""
-                                DELETE FROM dns_records 
+                                DELETE FROM dns_records
                                 WHERE node_name = %s AND record_id = %s
                             """, (node_name, record['record_id']))
                             conn.commit()
                     
                 except Exception as e:
-                    operations.append({
-                        'type': 'orphaned_dns_record_deletion',
-                        'resource_id': record['record_id'],
-                        'resource_name': record['record_name'],
-                        'success': False,
-                        'error': str(e),
-                        'message': f'Failed to delete orphaned DNS record {record["record_name"]}: {str(e)}'
-                    })
-                    
-                    logger.error(f"Failed to delete orphaned DNS record {record['record_name']}: {str(e)}")
+                    # Handle 404 (not found) and 409 (in use) errors gracefully
+                    error_str = str(e).lower()
+                    if "404" in error_str or "not found" in error_str:
+                        logger.info(f"Orphaned DNS record {record['record_name']} not found (404), skipping deletion")
+                        operations.append({
+                            'type': 'orphaned_dns_record_deletion',
+                            'resource_id': record['record_id'],
+                            'resource_name': record['record_name'],
+                            'success': True,
+                            'message': f'Orphaned DNS record {record["record_name"]} not found (404), skipped deletion'
+                        })
+                    elif "409" in error_str or "in use" in error_str:
+                        logger.info(f"Orphaned DNS record {record['record_name']} is in use (409), cannot delete")
+                        operations.append({
+                            'type': 'orphaned_dns_record_deletion',
+                            'resource_id': record['record_id'],
+                            'resource_name': record['record_name'],
+                            'success': False,
+                            'error': 'in_use',
+                            'message': f'Orphaned DNS record {record["record_name"]} is in use (409), cannot delete'
+                        })
+                    else:
+                        operations.append({
+                            'type': 'orphaned_dns_record_deletion',
+                            'resource_id': record['record_id'],
+                            'resource_name': record['record_name'],
+                            'success': False,
+                            'error': str(e),
+                            'message': f'Failed to delete orphaned DNS record {record["record_name"]}: {str(e)}'
+                        })
+                        
+                        logger.error(f"Failed to delete orphaned DNS record {record['record_name']}: {str(e)}")
         
         except Exception as e:
             operations.append({
@@ -413,16 +466,38 @@ class CleanupService:
                             conn.commit()
                     
                 except Exception as e:
-                    operations.append({
-                        'type': 'orphaned_vni_deletion',
-                        'resource_id': vni['vnic_id'],
-                        'resource_name': vni['vnic_name'],
-                        'success': False,
-                        'error': str(e),
-                        'message': f'Failed to delete orphaned VNI {vni["vnic_name"]}: {str(e)}'
-                    })
-                    
-                    logger.error(f"Failed to delete orphaned VNI {vni['vnic_name']}: {str(e)}")
+                    # Handle 404 (not found) and 409 (in use) errors gracefully
+                    error_str = str(e).lower()
+                    if "404" in error_str or "not found" in error_str:
+                        logger.info(f"Orphaned VNI {vni['vnic_name']} not found (404), skipping deletion")
+                        operations.append({
+                            'type': 'orphaned_vni_deletion',
+                            'resource_id': vni['vnic_id'],
+                            'resource_name': vni['vnic_name'],
+                            'success': True,
+                            'message': f'Orphaned VNI {vni["vnic_name"]} not found (404), skipped deletion'
+                        })
+                    elif "409" in error_str or "in use" in error_str:
+                        logger.info(f"Orphaned VNI {vni['vnic_name']} is in use (409), cannot delete")
+                        operations.append({
+                            'type': 'orphaned_vni_deletion',
+                            'resource_id': vni['vnic_id'],
+                            'resource_name': vni['vnic_name'],
+                            'success': False,
+                            'error': 'in_use',
+                            'message': f'Orphaned VNI {vni["vnic_name"]} is in use (409), cannot delete'
+                        })
+                    else:
+                        operations.append({
+                            'type': 'orphaned_vni_deletion',
+                            'resource_id': vni['vnic_id'],
+                            'resource_name': vni['vnic_name'],
+                            'success': False,
+                            'error': str(e),
+                            'message': f'Failed to delete orphaned VNI {vni["vnic_name"]}: {str(e)}'
+                        })
+                        
+                        logger.error(f"Failed to delete orphaned VNI {vni['vnic_name']}: {str(e)}")
         
         except Exception as e:
             operations.append({
@@ -548,15 +623,35 @@ class CleanupService:
                 logger.info(f"Successfully deleted bare metal server {bare_metal_id}")
                 
             except Exception as e:
-                operations.append({
-                    'type': 'bare_metal_server_deletion',
-                    'resource_id': bare_metal_id,
-                    'success': False,
-                    'error': str(e),
-                    'message': f'Failed to delete server: {str(e)}'
-                })
-                
-                logger.error(f"Failed to delete bare metal server {bare_metal_id}: {str(e)}")
+                # Handle 404 (not found) and 409 (in use) errors gracefully
+                error_str = str(e).lower()
+                if "404" in error_str or "not found" in error_str:
+                    logger.info(f"Bare metal server {bare_metal_id} not found (404), skipping deletion")
+                    operations.append({
+                        'type': 'bare_metal_server_deletion',
+                        'resource_id': bare_metal_id,
+                        'success': True,
+                        'message': f'Bare metal server {bare_metal_id} not found (404), skipped deletion'
+                    })
+                elif "409" in error_str or "in use" in error_str:
+                    logger.info(f"Bare metal server {bare_metal_id} is in use (409), cannot delete")
+                    operations.append({
+                        'type': 'bare_metal_server_deletion',
+                        'resource_id': bare_metal_id,
+                        'success': False,
+                        'error': 'in_use',
+                        'message': f'Bare metal server {bare_metal_id} is in use (409), cannot delete'
+                    })
+                else:
+                    operations.append({
+                        'type': 'bare_metal_server_deletion',
+                        'resource_id': bare_metal_id,
+                        'success': False,
+                        'error': str(e),
+                        'message': f'Failed to delete server: {str(e)}'
+                    })
+                    
+                    logger.error(f"Failed to delete bare metal server {bare_metal_id}: {str(e)}")
         
         except Exception as e:
             operations.append({
@@ -623,16 +718,38 @@ class CleanupService:
                             conn.commit()
                     
                 except Exception as e:
-                    operations.append({
-                        'type': 'vni_deletion',
-                        'resource_id': vni['vnic_id'],
-                        'resource_name': vni['vnic_name'],
-                        'success': False,
-                        'error': str(e),
-                        'message': f'Failed to delete VNI {vni["vnic_name"]}: {str(e)}'
-                    })
-                    
-                    logger.error(f"Failed to delete VNI {vni['vnic_name']}: {str(e)}")
+                    # Handle 404 (not found) and 409 (in use) errors gracefully
+                    error_str = str(e).lower()
+                    if "404" in error_str or "not found" in error_str:
+                        logger.info(f"VNI {vni['vnic_name']} not found (404), skipping deletion")
+                        operations.append({
+                            'type': 'vni_deletion',
+                            'resource_id': vni['vnic_id'],
+                            'resource_name': vni['vnic_name'],
+                            'success': True,
+                            'message': f'VNI {vni["vnic_name"]} not found (404), skipped deletion'
+                        })
+                    elif "409" in error_str or "in use" in error_str:
+                        logger.info(f"VNI {vni['vnic_name']} is in use (409), cannot delete")
+                        operations.append({
+                            'type': 'vni_deletion',
+                            'resource_id': vni['vnic_id'],
+                            'resource_name': vni['vnic_name'],
+                            'success': False,
+                            'error': 'in_use',
+                            'message': f'VNI {vni["vnic_name"]} is in use (409), cannot delete'
+                        })
+                    else:
+                        operations.append({
+                            'type': 'vni_deletion',
+                            'resource_id': vni['vnic_id'],
+                            'resource_name': vni['vnic_name'],
+                            'success': False,
+                            'error': str(e),
+                            'message': f'Failed to delete VNI {vni["vnic_name"]}: {str(e)}'
+                        })
+                        
+                        logger.error(f"Failed to delete VNI {vni['vnic_name']}: {str(e)}")
         
         except Exception as e:
             operations.append({
@@ -671,16 +788,38 @@ class CleanupService:
                     logger.info(f"Deleted DNS record {record['record_name']} for node {node_name} in the database")
                     
                 except Exception as e:
-                    operations.append({
-                        'type': 'dns_record_deletion',
-                        'resource_id': record['record_id'],
-                        'resource_name': record['record_name'],
-                        'success': False,
-                        'error': str(e),
-                        'message': f'Failed to delete DNS record {record["record_name"]}: {str(e)}'
-                    })
-                    
-                    logger.error(f"Failed to delete DNS record {record['record_name']}: {str(e)}")
+                    # Handle 404 (not found) and 409 (in use) errors gracefully
+                    error_str = str(e).lower()
+                    if "404" in error_str or "not found" in error_str:
+                        logger.info(f"DNS record {record['record_name']} not found (404), skipping deletion")
+                        operations.append({
+                            'type': 'dns_record_deletion',
+                            'resource_id': record['record_id'],
+                            'resource_name': record['record_name'],
+                            'success': True,
+                            'message': f'DNS record {record["record_name"]} not found (404), skipped deletion'
+                        })
+                    elif "409" in error_str or "in use" in error_str:
+                        logger.info(f"DNS record {record['record_name']} is in use (409), cannot delete")
+                        operations.append({
+                            'type': 'dns_record_deletion',
+                            'resource_id': record['record_id'],
+                            'resource_name': record['record_name'],
+                            'success': False,
+                            'error': 'in_use',
+                            'message': f'DNS record {record["record_name"]} is in use (409), cannot delete'
+                        })
+                    else:
+                        operations.append({
+                            'type': 'dns_record_deletion',
+                            'resource_id': record['record_id'],
+                            'resource_name': record['record_name'],
+                            'success': False,
+                            'error': str(e),
+                            'message': f'Failed to delete DNS record {record["record_name"]}: {str(e)}'
+                        })
+                        
+                        logger.error(f"Failed to delete DNS record {record['record_name']}: {str(e)}")
         
         except Exception as e:
             operations.append({
@@ -725,16 +864,38 @@ class CleanupService:
                     logger.info(f"Deleted IP reservation {reservation['ip_address']} for node {node_name} in the database")
                     
                 except Exception as e:
-                    operations.append({
-                        'type': 'ip_reservation_deletion',
-                        'resource_id': reservation['reservation_id'],
-                        'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
-                        'success': False,
-                        'error': str(e),
-                        'message': f'Failed to delete IP reservation {reservation["ip_address"]}: {str(e)}'
-                    })
-                    
-                    logger.error(f"Failed to delete IP reservation {reservation['ip_address']}: {str(e)}")
+                    # Handle 404 (not found) and 409 (in use) errors gracefully
+                    error_str = str(e).lower()
+                    if "404" in error_str or "not found" in error_str:
+                        logger.info(f"IP reservation {reservation['ip_address']} not found (404), skipping deletion")
+                        operations.append({
+                            'type': 'ip_reservation_deletion',
+                            'resource_id': reservation['reservation_id'],
+                            'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                            'success': True,
+                            'message': f'IP reservation {reservation["ip_address"]} not found (404), skipped deletion'
+                        })
+                    elif "409" in error_str or "in use" in error_str:
+                        logger.info(f"IP reservation {reservation['ip_address']} is in use (409), cannot delete")
+                        operations.append({
+                            'type': 'ip_reservation_deletion',
+                            'resource_id': reservation['reservation_id'],
+                            'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                            'success': False,
+                            'error': 'in_use',
+                            'message': f'IP reservation {reservation["ip_address"]} is in use (409), cannot delete'
+                        })
+                    else:
+                        operations.append({
+                            'type': 'ip_reservation_deletion',
+                            'resource_id': reservation['reservation_id'],
+                            'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                            'success': False,
+                            'error': str(e),
+                            'message': f'Failed to delete IP reservation {reservation["ip_address"]}: {str(e)}'
+                        })
+                        
+                        logger.error(f"Failed to delete IP reservation {reservation['ip_address']}: {str(e)}")
         
         except Exception as e:
             operations.append({
@@ -799,31 +960,15 @@ class CleanupService:
         operations = []
         
         try:
-            # Mark node as cleaned up
-            self.db.update_node_status(node_id, 'cleanup_completed')
+            # Delete node and all related records from database
+            self.db.delete_node(node_id)
             
             operations.append({
-                'type': 'node_status_update',
+                'type': 'node_deletion',
                 'resource_id': str(node_id),
                 'resource_name': node_name,
                 'success': True,
-                'message': f'Updated node status to cleanup_completed'
-            })
-            
-            # Log cleanup completion
-            self.db.log_deployment_event(
-                node_id,
-                'cleanup_completed',
-                'success',
-                f'Resource cleanup completed for {node_name}'
-            )
-            
-            operations.append({
-                'type': 'cleanup_event_logged',
-                'resource_id': str(node_id),
-                'resource_name': node_name,
-                'success': True,
-                'message': f'Logged cleanup completion event'
+                'message': f'Deleted node and all related records from database'
             })
             
         except Exception as e:

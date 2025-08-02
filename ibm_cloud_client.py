@@ -111,8 +111,8 @@ class IBMCloudClient:
             logger.info(f"Checking if create_virtual_network_interface method exists: {hasattr(self.vpc_service, 'create_virtual_network_interface')}")
             
             # Debug: Log the VpcV1 object type and methods
-            logger.info(f"VpcV1 object type: {type(self.vpc_service)}")
-            logger.info(f"VpcV1 object methods: {[method for method in dir(self.vpc_service) if 'virtual_network_interface' in method]}")
+            #logger.info(f"VpcV1 object type: {type(self.vpc_service)}")
+            #logger.info(f"VpcV1 object methods: {[method for method in dir(self.vpc_service) if 'virtual_network_interface' in method]}")
             
             result = self.vpc_service.create_virtual_network_interface(
                 name=name,

@@ -199,6 +199,49 @@ class Database:
             logger.error(f"Failed to get node by IP {ip_address}: {str(e)}")
             raise
     
+    def delete_node(self, node_id):
+        """Delete a node from the database"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Delete related records first (foreign key constraints)
+                    cur.execute("DELETE FROM deployment_history WHERE node_id = %s", (node_id,))
+                    cur.execute("DELETE FROM ip_reservations WHERE node_name = (SELECT node_name FROM nodes WHERE id = %s)", (node_id,))
+                    cur.execute("DELETE FROM dns_records WHERE node_name = (SELECT node_name FROM nodes WHERE id = %s)", (node_id,))
+                    cur.execute("DELETE FROM vnic_info WHERE node_name = (SELECT node_name FROM nodes WHERE id = %s)", (node_id,))
+                    
+                    # Delete the node itself
+                    cur.execute("DELETE FROM nodes WHERE id = %s", (node_id,))
+                    
+                    conn.commit()
+                    logger.info(f"Node {node_id} deleted from database")
+        except Exception as e:
+            logger.error(f"Failed to delete node {node_id}: {str(e)}")
+            raise
+    
+    def get_node_by_name(self, node_name):
+        """Get node by name"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT id, node_name, bare_metal_id, management_ip, workload_ip,
+                               management_vnic_id, workload_vnic_id, deployment_status
+                        FROM nodes WHERE node_name = %s
+                    """, (node_name,))
+                    
+                    row = cur.fetchone()
+                    if row:
+                        # Check if nutanix_config is already a dict (JSONB field) or needs to be parsed
+                        if isinstance(row.get('nutanix_config'), str):
+                            row['nutanix_config'] = json.loads(row['nutanix_config'])
+                        # If it's already a dict, no need to parse it
+                        return dict(row)
+                    return None
+        except Exception as e:
+            logger.error(f"Error getting node by name {node_name}: {str(e)}")
+            raise
+    
     def update_node_status(self, node_id, status):
         """Update node deployment status"""
         try:
