@@ -25,6 +25,7 @@ bash setup.sh
 
 `deploy.sh` logs to `/var/log/nutanix-deployment.log`
 `setup.sh` logs to `/var/log/nutanix-pxe-setup.log`
+`app.py`, `ibm_cloud_client.py` logs to `/var/log/nutanix-pxe/pxe-server.log`
 
 
 ## Manualy run the app

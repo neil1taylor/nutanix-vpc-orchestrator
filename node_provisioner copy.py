@@ -1,6 +1,6 @@
 """
 Node provisioning service for Nutanix PXE/Config Server
-Updated to use Config class and integrated with CleanupService
+Updated to use Config class for all configuration settings
 """
 import ipaddress
 import base64
@@ -19,21 +19,15 @@ class NodeProvisioner:
         self.ibm_cloud = IBMCloudClient()
         self.config = Config
         
-        # Import cleanup service for error handling
-        from cleanup_service import CleanupService
-        self.cleanup_service = CleanupService()
-        
         # Validate required configuration
         self.config.validate_required_config()
         
-        logger.info("NodeProvisioner initialized with Config class and CleanupService")
+        logger.info("NodeProvisioner initialized with Config class")
     
     def provision_node(self, node_request):
         """Main node provisioning orchestration"""
-        node_name = node_request['node_config']['node_name']
-        
         try:
-            logger.info(f"Starting provisioning for node {node_name}")
+            logger.info(f"Starting provisioning for node {node_request['node_config']['node_name']}")
             
             # Step 1: Reserve IP addresses
             ip_allocation = self.reserve_node_ips(node_request['node_config'])
@@ -61,21 +55,12 @@ class NodeProvisioner:
             }
             
         except Exception as e:
-            logger.error(f"Node provisioning failed for {node_name}: {str(e)}")
-            
-            # Trigger comprehensive cleanup using CleanupService
+            logger.error(f"Node provisioning failed: {str(e)}")
+            # Cleanup on failure
             try:
-                logger.info(f"Initiating cleanup for failed provisioning: {node_name}")
-                cleanup_result = self.cleanup_service.cleanup_failed_provisioning(node_name)
-                
-                if cleanup_result.get('success'):
-                    logger.info(f"Cleanup completed successfully for {node_name}")
-                else:
-                    logger.error(f"Cleanup failed for {node_name}: {cleanup_result.get('error', 'Unknown cleanup error')}")
-                    
-            except Exception as cleanup_error:
-                logger.error(f"Cleanup service failed for {node_name}: {str(cleanup_error)}")
-            
+                self.cleanup_failed_provisioning(node_request['node_config']['node_name'])
+            except:
+                pass  # Don't fail on cleanup errors
             raise
     
     def reserve_node_ips(self, node_config):
@@ -163,21 +148,15 @@ class NodeProvisioner:
             return ip_allocation
             
         except Exception as e:
-            # Cleanup any successful reservations before re-raising
-            logger.error(f"IP reservation failed for {node_config['node_name']}, initiating cleanup")
-            self._cleanup_partial_ip_allocation(ip_allocation)
+            # Cleanup any successful reservations
+            for ip_type, ip_info in ip_allocation.items():
+                if ip_info:
+                    try:
+                        subnet_id = self.config.MANAGEMENT_SUBNET_ID if ip_type != 'workload' else self.config.WORKLOAD_SUBNET_ID
+                        self.ibm_cloud.delete_subnet_reserved_ip(subnet_id, ip_info['reservation_id'])
+                    except:
+                        pass
             raise Exception(f"IP reservation failed: {str(e)}")
-    
-    def _cleanup_partial_ip_allocation(self, ip_allocation):
-        """Clean up partially allocated IPs when reservation fails"""
-        for ip_type, ip_info in ip_allocation.items():
-            if ip_info:
-                try:
-                    subnet_id = self.config.MANAGEMENT_SUBNET_ID if ip_type != 'workload' else self.config.WORKLOAD_SUBNET_ID
-                    self.ibm_cloud.delete_subnet_reserved_ip(subnet_id, ip_info['reservation_id'])
-                    logger.info(f"Cleaned up IP reservation for {ip_type}: {ip_info['ip_address']}")
-                except Exception as cleanup_error:
-                    logger.error(f"Failed to cleanup IP reservation for {ip_type}: {str(cleanup_error)}")
     
     def get_next_available_ip(self, subnet_cidr, ip_type, existing_ips):
         """Get next available IP in the specified range"""
@@ -247,19 +226,13 @@ class NodeProvisioner:
             return dns_records
             
         except Exception as e:
-            # Cleanup any successful DNS records before re-raising
-            logger.error(f"DNS registration failed for {node_config['node_name']}, initiating cleanup")
-            self._cleanup_partial_dns_records(dns_records)
+            # Cleanup any successful DNS records
+            for record in dns_records:
+                try:
+                    self.ibm_cloud.delete_dns_record(record['id'])
+                except:
+                    pass
             raise Exception(f"DNS registration failed: {str(e)}")
-    
-    def _cleanup_partial_dns_records(self, dns_records):
-        """Clean up partially created DNS records when registration fails"""
-        for record in dns_records:
-            try:
-                self.ibm_cloud.delete_dns_record(record['id'])
-                logger.info(f"Cleaned up DNS record: {record['name']}")
-            except Exception as cleanup_error:
-                logger.error(f"Failed to cleanup DNS record {record['name']}: {str(cleanup_error)}")
     
     def create_node_vnis(self, ip_allocation, node_config):
         """Create Virtual Network Interfaces (VNIs) for the bare metal server"""
@@ -293,19 +266,13 @@ class NodeProvisioner:
             return vnis
             
         except Exception as e:
-            # Cleanup any successful VNIs before re-raising
-            logger.error(f"VNI creation failed for {node_config['node_name']}, initiating cleanup")
-            self._cleanup_partial_vnis(vnis)
+            # Cleanup any successful VNIs
+            for vni_type, vni_info in vnis.items():
+                try:
+                    self.ibm_cloud.delete_virtual_network_interface(vni_info['id'])
+                except:
+                    pass
             raise Exception(f"VNI creation failed: {str(e)}")
-    
-    def _cleanup_partial_vnis(self, vnis):
-        """Clean up partially created VNIs when creation fails"""
-        for vni_type, vni_info in vnis.items():
-            try:
-                self.ibm_cloud.delete_virtual_network_interface(vni_info['id'])
-                logger.info(f"Cleaned up VNI: {vni_info['name']}")
-            except Exception as cleanup_error:
-                logger.error(f"Failed to cleanup VNI {vni_info['name']}: {str(cleanup_error)}")
     
     def update_config_database(self, node_data, ip_allocation, vnis):
         """Update configuration database with new node"""
@@ -422,140 +389,12 @@ class NodeProvisioner:
         return (datetime.now() + timedelta(seconds=total_timeout)).isoformat()
     
     def cleanup_failed_provisioning(self, node_name):
-        """
-        Clean up resources for a failed provisioning
-        Updated to use the comprehensive CleanupService
-        """
-        logger.warning(f"Initiating comprehensive cleanup for failed provisioning: {node_name}")
+        """Clean up resources for a failed provisioning"""
+        logger.warning(f"Cleaning up failed provisioning for {node_name}")
         
         try:
-            # Use the CleanupService for comprehensive cleanup
-            cleanup_result = self.cleanup_service.cleanup_failed_provisioning(node_name)
-            
-            if cleanup_result.get('success'):
-                logger.info(f"Cleanup completed successfully for {node_name}")
-                logger.info(f"Cleanup summary: {cleanup_result.get('successful_operations', 0)}/{cleanup_result.get('total_operations', 0)} operations successful")
-                
-                # Log detailed cleanup results
-                for result in cleanup_result.get('results', []):
-                    resource_type = result.get('resource_type', 'unknown')
-                    operations = result.get('operations', [])
-                    successful_ops = len([op for op in operations if op.get('success', False)])
-                    total_ops = len(operations)
-                    
-                    if total_ops > 0:
-                        logger.info(f"Cleanup {resource_type}: {successful_ops}/{total_ops} operations successful")
-                        
-                        # Log any failed operations for troubleshooting
-                        failed_ops = [op for op in operations if not op.get('success', False)]
-                        for failed_op in failed_ops:
-                            logger.error(f"Failed cleanup operation: {failed_op.get('type', 'unknown')} - {failed_op.get('message', 'No message')}")
-                
-                return cleanup_result
-            else:
-                logger.error(f"Cleanup failed for {node_name}: {cleanup_result.get('error', 'Unknown error')}")
-                
-                # Log partial cleanup results for troubleshooting
-                if 'results' in cleanup_result:
-                    logger.info("Partial cleanup results:")
-                    for result in cleanup_result['results']:
-                        logger.info(f"  {result.get('resource_type', 'unknown')}: {len(result.get('operations', []))} operations attempted")
-                
-                return cleanup_result
-                
+            # This will be implemented in the cleanup service
+            # For now, just log the need for cleanup
+            logger.error(f"Manual cleanup required for {node_name}")
         except Exception as e:
-            logger.error(f"Cleanup service failed for {node_name}: {str(e)}")
-            
-            # Fallback: log that manual cleanup is required
-            logger.error(f"MANUAL CLEANUP REQUIRED for {node_name}")
-            logger.error("Resources that may need manual cleanup:")
-            logger.error("1. Bare metal server")
-            logger.error("2. Virtual network interfaces")
-            logger.error("3. DNS records")
-            logger.error("4. IP reservations")
-            logger.error("5. Database records")
-            
-            return {
-                'success': False,
-                'error': str(e),
-                'node_name': node_name,
-                'manual_cleanup_required': True,
-                'timestamp': datetime.now().isoformat()
-            }
-    
-    def validate_cleanup(self, node_name):
-        """
-        Validate that cleanup was completed successfully
-        """
-        try:
-            validation_result = self.cleanup_service.validate_cleanup_completion(node_name)
-            
-            if validation_result.get('cleanup_complete'):
-                logger.info(f"Cleanup validation passed for {node_name}")
-            else:
-                logger.warning(f"Cleanup validation found issues for {node_name}")
-                
-                # Log validation details
-                for result in validation_result.get('validation_results', []):
-                    status = result.get('status', 'UNKNOWN')
-                    check = result.get('check', 'unknown')
-                    message = result.get('message', 'No message')
-                    
-                    if status == 'FAIL':
-                        logger.error(f"Validation FAILED for {check}: {message}")
-                    elif status == 'ERROR':
-                        logger.error(f"Validation ERROR for {check}: {message}")
-                    else:
-                        logger.info(f"Validation PASSED for {check}: {message}")
-            
-            return validation_result
-            
-        except Exception as e:
-            logger.error(f"Cleanup validation failed for {node_name}: {str(e)}")
-            return {
-                'node_name': node_name,
-                'cleanup_complete': False,
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
-    
-    def get_cleanup_script(self, deployment_id):
-        """
-        Generate a cleanup script for manual execution
-        """
-        try:
-            script_content = self.cleanup_service.generate_cleanup_script(deployment_id)
-            logger.info(f"Generated cleanup script for deployment {deployment_id}")
-            return script_content
-            
-        except Exception as e:
-            logger.error(f"Failed to generate cleanup script for deployment {deployment_id}: {str(e)}")
-            return f"""#!/bin/bash
-# Error generating cleanup script for deployment {deployment_id}
-# Error: {str(e)}
-
-echo "Error generating cleanup script"
-echo "Please perform manual cleanup in IBM Cloud console"
-"""
-    
-    def cleanup_orphaned_resources(self, max_age_hours=24):
-        """
-        Clean up orphaned resources from failed deployments
-        """
-        try:
-            cleanup_result = self.cleanup_service.cleanup_orphaned_resources(max_age_hours)
-            
-            if cleanup_result.get('success'):
-                logger.info(f"Orphaned resource cleanup completed: {cleanup_result.get('orphaned_nodes_cleaned', 0)} nodes cleaned")
-            else:
-                logger.error(f"Orphaned resource cleanup failed: {cleanup_result.get('error', 'Unknown error')}")
-            
-            return cleanup_result
-            
-        except Exception as e:
-            logger.error(f"Orphaned resource cleanup failed: {str(e)}")
-            return {
-                'success': False,
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
+            logger.error(f"Cleanup failed for {node_name}: {str(e)}")

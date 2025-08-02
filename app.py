@@ -432,132 +432,88 @@ def api_cleanup_node(node_id):
         if not node:
             return jsonify({'error': 'Node not found'}), 404
         
-        # Get all resources associated with this node
-        cleanup_tasks = []
+        # Import cleanup service
+        from cleanup_service import CleanupService
+        cleanup_service = CleanupService()
         
-        # Cleanup DNS records
-        try:
-            dns_records = ibm_cloud.get_dns_records()
-            node_records = [r for r in dns_records if node['node_name'] in r.get('name', '')]
-            for record in node_records:
-                ibm_cloud.delete_dns_record(record['id'])
-                cleanup_tasks.append(f"Deleted DNS record: {record['name']}")
-        except Exception as e:
-            cleanup_tasks.append(f"DNS cleanup error: {str(e)}")
+        # Perform comprehensive cleanup
+        cleanup_result = cleanup_service.cleanup_failed_provisioning(node['node_name'])
         
-        # Cleanup VNIs (if bare metal server exists)
-        if node.get('bare_metal_id'):
-            try:
-                # Get server details to find VNIs
-                server = ibm_cloud.get_bare_metal_server(node['bare_metal_id'])
-                
-                # Delete bare metal server (this will also clean up VNIs)
-                ibm_cloud.delete_bare_metal_server(node['bare_metal_id'])
-                cleanup_tasks.append(f"Deleted bare metal server: {node['bare_metal_id']}")
-                
-            except Exception as e:
-                cleanup_tasks.append(f"Server cleanup error: {str(e)}")
-        
-        # Cleanup IP reservations
-        try:
-            # This would require tracking reservation IDs in the database
-            # For now, just log that manual cleanup may be required
-            cleanup_tasks.append("IP reservations may require manual cleanup")
-        except Exception as e:
-            cleanup_tasks.append(f"IP cleanup error: {str(e)}")
-        
-        # Update node status
-        db.update_node_status(node_id, 'cleanup_completed')
-        
-        return jsonify({
-            'message': f'Cleanup initiated for node {node_id}',
-            'tasks_completed': cleanup_tasks
-        })
+        if cleanup_result.get('success'):
+            return jsonify({
+                'message': f'Cleanup completed successfully for node {node_id}',
+                'node_name': node['node_name'],
+                'summary': {
+                    'total_operations': cleanup_result.get('total_operations', 0),
+                    'successful_operations': cleanup_result.get('successful_operations', 0),
+                    'success_rate': cleanup_result.get('success_rate', '0%')
+                },
+                'details': cleanup_result.get('results', []),
+                'timestamp': cleanup_result.get('timestamp')
+            })
+        else:
+            return jsonify({
+                'message': f'Cleanup completed with errors for node {node_id}',
+                'node_name': node['node_name'],
+                'error': cleanup_result.get('error'),
+                'partial_results': cleanup_result.get('results', []),
+                'timestamp': cleanup_result.get('timestamp')
+            }), 207  # Multi-Status
         
     except Exception as e:
         logger.error(f"Node cleanup error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': str(e),
+            'node_id': node_id,
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 @app.route('/api/cleanup/deployment/<deployment_id>', methods=['POST'])
 def api_cleanup_deployment(deployment_id):
     """Clean up all resources for a deployment"""
     try:
-        # Find all nodes in this deployment
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT id FROM nodes WHERE bare_metal_id = %s
-                """, (deployment_id,))
-                node_ids = [row[0] for row in cur.fetchall()]
+        # Import cleanup service
+        from cleanup_service import CleanupService
+        cleanup_service = CleanupService()
         
-        if not node_ids:
-            return jsonify({'error': f'No nodes found for deployment {deployment_id}'}), 404
+        # Perform deployment cleanup
+        cleanup_result = cleanup_service.cleanup_deployment(deployment_id)
         
-        cleanup_results = []
-        for node_id in node_ids:
-            # Call node cleanup for each node
-            try:
-                # This would normally call the node cleanup function
-                cleanup_results.append(f"Node {node_id} cleanup initiated")
-            except Exception as e:
-                cleanup_results.append(f"Node {node_id} cleanup failed: {str(e)}")
-        
-        return jsonify({
-            'message': f'Deployment cleanup initiated for {deployment_id}',
-            'results': cleanup_results
-        })
-        
+        if cleanup_result.get('success'):
+            return jsonify({
+                'message': f'Deployment cleanup completed successfully for {deployment_id}',
+                'deployment_id': deployment_id,
+                'nodes_cleaned': cleanup_result.get('nodes_cleaned', 0),
+                'results': cleanup_result.get('results', []),
+                'timestamp': cleanup_result.get('timestamp')
+            })
+        else:
+            return jsonify({
+                'message': f'Deployment cleanup completed with errors for {deployment_id}',
+                'deployment_id': deployment_id,
+                'error': cleanup_result.get('error'),
+                'partial_results': cleanup_result.get('results', []),
+                'timestamp': cleanup_result.get('timestamp')
+            }), 207  # Multi-Status
+            
     except Exception as e:
         logger.error(f"Deployment cleanup error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': str(e),
+            'deployment_id': deployment_id,
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 @app.route('/api/cleanup/script/<deployment_id>', methods=['GET'])
 def api_generate_cleanup_script(deployment_id):
     """Generate cleanup script for manual execution"""
     try:
-        # Find all nodes in this deployment
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT node_name, bare_metal_id, management_ip, workload_ip 
-                    FROM nodes WHERE bare_metal_id = %s OR id::text = %s
-                """, (deployment_id, deployment_id))
-                nodes = cur.fetchall()
+        # Import cleanup service
+        from cleanup_service import CleanupService
+        cleanup_service = CleanupService()
         
-        script_content = f"""#!/bin/bash
-# Cleanup script for deployment {deployment_id}
-# Generated on {datetime.now().isoformat()}
-
-set -e
-
-echo "Starting cleanup for deployment {deployment_id}"
-
-"""
-        
-        for node in nodes:
-            node_name, bare_metal_id, mgmt_ip, workload_ip = node
-            script_content += f"""
-# Cleanup for node {node_name}
-echo "Cleaning up node {node_name}..."
-
-# Delete bare metal server (if exists)
-if [ -n "{bare_metal_id}" ]; then
-    ibmcloud is bare-metal-server-delete {bare_metal_id} --force || echo "Failed to delete server {bare_metal_id}"
-fi
-
-# Delete DNS records
-ibmcloud dns resource-records --instance $DNS_INSTANCE_ID --zone $DNS_ZONE_ID | grep "{node_name}" | while read record; do
-    record_id=$(echo $record | awk '{{print $1}}')
-    ibmcloud dns resource-record-delete $DNS_INSTANCE_ID $DNS_ZONE_ID $record_id --force || echo "Failed to delete DNS record $record_id"
-done
-
-"""
-        
-        script_content += f"""
-echo "Cleanup completed for deployment {deployment_id}"
-echo "Note: Some resources may require manual verification"
-echo "Check IBM Cloud console for any remaining resources"
-"""
+        # Generate cleanup script
+        script_content = cleanup_service.generate_cleanup_script(deployment_id)
         
         return Response(
             script_content,
@@ -566,9 +522,243 @@ echo "Check IBM Cloud console for any remaining resources"
                 'Content-Disposition': f'attachment; filename=cleanup-{deployment_id}.sh'
             }
         )
+        
     except Exception as e:
         logger.error(f"Cleanup script generation error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        
+        # Generate error script
+        error_script = f"""#!/bin/bash
+# Cleanup script generation failed for deployment {deployment_id}
+# Generated on {datetime.now().isoformat()}
+
+echo "Error generating cleanup script: {str(e)}"
+echo "Manual cleanup required for deployment {deployment_id}"
+echo ""
+echo "Please check the following resources in IBM Cloud console:"
+echo "1. Bare metal servers"
+echo "2. Virtual network interfaces"  
+echo "3. DNS records"
+echo "4. IP reservations"
+echo ""
+echo "Use IBM Cloud CLI commands to clean up resources manually"
+"""
+        
+        return Response(
+            error_script,
+            mimetype='text/plain',
+            headers={
+                'Content-Disposition': f'attachment; filename=cleanup-error-{deployment_id}.sh'
+            }
+        )
+
+@app.route('/api/cleanup/status', methods=['GET'])
+def api_cleanup_status():
+    """Get overall cleanup status"""
+    try:
+        # Import cleanup service
+        from cleanup_service import CleanupService
+        cleanup_service = CleanupService()
+        
+        # Get optional query parameters
+        node_name = request.args.get('node_name')
+        deployment_id = request.args.get('deployment_id')
+        
+        # Get cleanup status
+        status_result = cleanup_service.get_cleanup_status(
+            node_name=node_name,
+            deployment_id=deployment_id
+        )
+        
+        return jsonify(status_result)
+        
+    except Exception as e:
+        logger.error(f"Cleanup status error: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+@app.route('/api/cleanup/validate/<int:node_id>', methods=['GET'])
+def api_validate_cleanup(node_id):
+    """Validate cleanup completion for a node"""
+    try:
+        node = db.get_node(node_id)
+        if not node:
+            return jsonify({'error': 'Node not found'}), 404
+        
+        # Import cleanup service
+        from cleanup_service import CleanupService
+        cleanup_service = CleanupService()
+        
+        # Validate cleanup
+        validation_result = cleanup_service.validate_cleanup_completion(node['node_name'])
+        
+        return jsonify(validation_result)
+        
+    except Exception as e:
+        logger.error(f"Cleanup validation error: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'node_id': node_id,
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+@app.route('/api/cleanup/orphaned', methods=['POST'])
+def api_cleanup_orphaned():
+    """Clean up orphaned resources from failed deployments"""
+    try:
+        # Get optional max_age parameter (default 24 hours)
+        max_age_hours = int(request.json.get('max_age_hours', 24)) if request.json else 24
+        
+        # Import cleanup service
+        from cleanup_service import CleanupService
+        cleanup_service = CleanupService()
+        
+        # Clean up orphaned resources
+        cleanup_result = cleanup_service.cleanup_orphaned_resources(max_age_hours)
+        
+        if cleanup_result.get('success'):
+            return jsonify({
+                'message': 'Orphaned resource cleanup completed successfully',
+                'orphaned_nodes_cleaned': cleanup_result.get('orphaned_nodes_cleaned', 0),
+                'max_age_hours': max_age_hours,
+                'results': cleanup_result.get('results', []),
+                'timestamp': cleanup_result.get('timestamp')
+            })
+        else:
+            return jsonify({
+                'message': 'Orphaned resource cleanup completed with errors',
+                'error': cleanup_result.get('error'),
+                'partial_results': cleanup_result.get('results', []),
+                'timestamp': cleanup_result.get('timestamp')
+            }), 207  # Multi-Status
+            
+    except Exception as e:
+        logger.error(f"Orphaned cleanup error: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+@app.route('/api/cleanup/batch', methods=['POST'])
+def api_batch_cleanup():
+    """Perform batch cleanup operations"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        operation = data.get('operation')
+        targets = data.get('targets', [])
+        
+        if not operation or not targets:
+            return jsonify({'error': 'Missing operation or targets'}), 400
+        
+        # Import cleanup service
+        from cleanup_service import CleanupService
+        cleanup_service = CleanupService()
+        
+        batch_results = []
+        
+        if operation == 'cleanup_nodes':
+            # Clean up multiple nodes
+            for target in targets:
+                if isinstance(target, dict) and 'node_name' in target:
+                    node_name = target['node_name']
+                elif isinstance(target, str):
+                    node_name = target
+                else:
+                    batch_results.append({
+                        'target': target,
+                        'success': False,
+                        'error': 'Invalid target format'
+                    })
+                    continue
+                
+                try:
+                    result = cleanup_service.cleanup_failed_provisioning(node_name)
+                    batch_results.append({
+                        'node_name': node_name,
+                        'success': result.get('success', False),
+                        'result': result
+                    })
+                except Exception as e:
+                    batch_results.append({
+                        'node_name': node_name,
+                        'success': False,
+                        'error': str(e)
+                    })
+        
+        elif operation == 'cleanup_deployments':
+            # Clean up multiple deployments
+            for deployment_id in targets:
+                try:
+                    result = cleanup_service.cleanup_deployment(deployment_id)
+                    batch_results.append({
+                        'deployment_id': deployment_id,
+                        'success': result.get('success', False),
+                        'result': result
+                    })
+                except Exception as e:
+                    batch_results.append({
+                        'deployment_id': deployment_id,
+                        'success': False,
+                        'error': str(e)
+                    })
+        
+        elif operation == 'validate_cleanup':
+            # Validate cleanup for multiple nodes
+            for target in targets:
+                if isinstance(target, dict) and 'node_name' in target:
+                    node_name = target['node_name']
+                elif isinstance(target, str):
+                    node_name = target
+                else:
+                    batch_results.append({
+                        'target': target,
+                        'success': False,
+                        'error': 'Invalid target format'
+                    })
+                    continue
+                
+                try:
+                    result = cleanup_service.validate_cleanup_completion(node_name)
+                    batch_results.append({
+                        'node_name': node_name,
+                        'cleanup_complete': result.get('cleanup_complete', False),
+                        'result': result
+                    })
+                except Exception as e:
+                    batch_results.append({
+                        'node_name': node_name,
+                        'cleanup_complete': False,
+                        'error': str(e)
+                    })
+        
+        else:
+            return jsonify({'error': f'Unknown operation: {operation}'}), 400
+        
+        # Calculate success rate
+        successful_operations = len([r for r in batch_results if r.get('success', r.get('cleanup_complete', False))])
+        total_operations = len(batch_results)
+        success_rate = (successful_operations / total_operations * 100) if total_operations > 0 else 0
+        
+        return jsonify({
+            'message': f'Batch {operation} completed',
+            'operation': operation,
+            'total_operations': total_operations,
+            'successful_operations': successful_operations,
+            'success_rate': f"{success_rate:.1f}%",
+            'results': batch_results,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Batch cleanup error: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 # ============================================================================
 # HEALTH AND INFO ENDPOINTS

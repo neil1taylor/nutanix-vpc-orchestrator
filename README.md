@@ -61,42 +61,11 @@ Once the PXE/Config Server is deployed, it exposes the following endpoints:
 
 ### Provision First Node (Create Cluster)
 
-```bash
-curl -X POST http://localhost:8081/api/v1/nodes \
-  -H "Content-Type: application/json" \
-  -d '{
-    "node_config": {
-      "node_name": "nutanix-poc-bm-node-01",
-      "server_profile": "bx2d-metal-48x192",
-      "cluster_role": "compute",
-      "storage_config": {
-        "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1", "nvme5n1"]
-      }
-    },
-    "network_config": {
-      "management_subnet": "auto",
-      "workload_subnet": "auto",
-      "cluster_operation": "create_new"
-    }
-  }'
-```
+
 
 ### Provision Additional Node (Join Cluster)
 
-```bash
-curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/nodes \
-  -H "Content-Type: application/json" \
-  -d '{
-    "node_config": {
-      "node_name": "nutanix-poc-bm-node-02", 
-      "server_profile": "bx2d-metal-48x192",
-      "cluster_role": "compute"
-    },
-    "network_config": {
-      "cluster_operation": "join_existing"
-    }
-  }'
-```
+
 
 ### Monitor Deployment Progress
 
