@@ -26,19 +26,18 @@ class CleanupService:
         """
         Clean up resources for a failed provisioning
         This is the main entry point for cleanup operations
+        Handles both complete nodes and orphaned resources from partial provisioning
         """
         logger.warning(f"Starting cleanup for failed provisioning: {node_name}")
         
         try:
-            # Get node information
+            # Try to get node information from main nodes table
             node = self.get_node_by_name(node_name)
+            
+            # If node not found in main table, check for orphaned resources
             if not node:
-                logger.error(f"Node {node_name} not found for cleanup")
-                return {
-                    'success': False,
-                    'error': f'Node {node_name} not found',
-                    'operations': []
-                }
+                logger.warning(f"Node {node_name} not found in nodes table, checking for orphaned resources")
+                return self.cleanup_orphaned_resources_by_name(node_name)
             
             # Reset cleanup operations list
             self.cleanup_operations = []

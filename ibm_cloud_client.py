@@ -31,6 +31,7 @@ class IBMCloudClient:
         # Initialize DNS service with trusted profile authentication
         self.dns_authenticator = VPCInstanceAuthenticator()
         self.dns_service = DnsSvcsV1(authenticator=self.dns_authenticator)
+        self.dns_service.set_service_url('https://api.dns-svcs.cloud.ibm.com/v1')
         
         logger.info("IBM Cloud client initialized with Config class and trusted profile authentication")
     
