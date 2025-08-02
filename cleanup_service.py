@@ -372,23 +372,42 @@ class CleanupService:
             
             for vni in vni_info:
                 try:
-                    self.ibm_cloud.delete_virtual_network_interface(vni['vnic_id'])
+                    # Check if VNI exists and handle different error cases
+                    try:
+                        self.ibm_cloud.delete_virtual_network_interfaces(vni['vnic_id'])
+                        
+                        operations.append({
+                            'type': 'orphaned_vni_deletion',
+                            'resource_id': vni['vnic_id'],
+                            'resource_name': vni['vnic_name'],
+                            'success': True,
+                            'message': f'Deleted orphaned VNI {vni["vnic_name"]} ({vni["vnic_id"]})'
+                        })
+                        
+                        logger.info(f"Deleted orphaned VNI {vni['vnic_name']} for node {node_name}")
+                    except Exception as delete_error:
+                        # Handle specific error cases
+                        error_str = str(delete_error)
+                        if "404" in error_str or "not found" in error_str.lower():
+                            # VNI doesn't exist, just remove from database
+                            logger.info(f"VNI {vni['vnic_id']} no longer exists, removing from database")
+                            operations.append({
+                                'type': 'orphaned_vni_deletion',
+                                'resource_id': vni['vnic_id'],
+                                'resource_name': vni['vnic_name'],
+                                'success': True,
+                                'message': f'VNI {vni["vnic_name"]} no longer exists, removed from database'
+                            })
+                        else:
+                            # Re-raise other errors
+                            logger.error(f"Unexpected error deleting VNI {vni['vnic_id']}: {str(delete_error)}")
+                            raise delete_error
                     
-                    operations.append({
-                        'type': 'orphaned_vni_deletion',
-                        'resource_id': vni['vnic_id'],
-                        'resource_name': vni['vnic_name'],
-                        'success': True,
-                        'message': f'Deleted orphaned VNI {vni["vnic_name"]} ({vni["vnic_id"]})'
-                    })
-                    
-                    logger.info(f"Deleted orphaned VNI {vni['vnic_name']} for node {node_name}")
-                    
-                    # Remove from database
+                    # Remove from database (always do this for successful deletions or 404 cases)
                     with self.db.get_connection() as conn:
                         with conn.cursor() as cur:
                             cur.execute("""
-                                DELETE FROM vnic_info 
+                                DELETE FROM vnic_info
                                 WHERE node_name = %s AND vnic_id = %s
                             """, (node_name, vni['vnic_id']))
                             conn.commit()
@@ -563,17 +582,45 @@ class CleanupService:
             
             for vni in vni_info:
                 try:
-                    self.ibm_cloud.delete_virtual_network_interface(vni['vnic_id'])
+                    # Check if VNI exists and handle different error cases
+                    try:
+                        self.ibm_cloud.delete_virtual_network_interfaces(vni['vnic_id'])
+                        
+                        operations.append({
+                            'type': 'vni_deletion',
+                            'resource_id': vni['vnic_id'],
+                            'resource_name': vni['vnic_name'],
+                            'success': True,
+                            'message': f'Deleted VNI {vni["vnic_name"]} ({vni["vnic_id"]})'
+                        })
+                        
+                        logger.info(f"Deleted VNI {vni['vnic_name']} for node {node_name}")
+                    except Exception as delete_error:
+                        # Handle specific error cases
+                        error_str = str(delete_error)
+                        if "404" in error_str or "not found" in error_str.lower():
+                            # VNI doesn't exist, just remove from database
+                            logger.info(f"VNI {vni['vnic_id']} no longer exists, removing from database")
+                            operations.append({
+                                'type': 'vni_deletion',
+                                'resource_id': vni['vnic_id'],
+                                'resource_name': vni['vnic_name'],
+                                'success': True,
+                                'message': f'VNI {vni["vnic_name"]} no longer exists, removed from database'
+                            })
+                        else:
+                            # Re-raise other errors
+                            logger.error(f"Unexpected error deleting VNI {vni['vnic_id']}: {str(delete_error)}")
+                            raise delete_error
                     
-                    operations.append({
-                        'type': 'vni_deletion',
-                        'resource_id': vni['vnic_id'],
-                        'resource_name': vni['vnic_name'],
-                        'success': True,
-                        'message': f'Deleted VNI {vni["vnic_name"]} ({vni["vnic_id"]})'
-                    })
-                    
-                    logger.info(f"Deleted VNI {vni['vnic_name']} for node {node_name}")
+                    # Remove from database (always do this for successful deletions or 404 cases)
+                    with self.db.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                DELETE FROM vnic_info
+                                WHERE node_name = %s AND vnic_id = %s
+                            """, (node_name, vni['vnic_id']))
+                            conn.commit()
                     
                 except Exception as e:
                     operations.append({
