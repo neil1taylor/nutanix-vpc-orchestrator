@@ -235,19 +235,19 @@ class IBMCloudClient:
         except Exception as e:
             logger.error(f"Failed to create DNS record {name}: {str(e)}")
             raise
-        
-        def delete_dns_record(self, record_id):
-            """Delete a DNS record using DNS Services SDK"""
-            try:
-                self.dns_service.delete_resource_record(
-                    instance_id=self.dns_instance_id,
-                    dnszone_id=self.dns_zone_id,
-                    resource_record_id=record_id
-                )
-                logger.info(f"Deleted DNS record {record_id}")
-            except Exception as e:
-                logger.error(f"Failed to delete DNS record {record_id}: {str(e)}")
-                raise
+    
+    def delete_dns_record(self, record_id):
+        """Delete a DNS record using DNS Services SDK"""
+        try:
+            self.dns_service.delete_resource_record(
+                instance_id=self.dns_instance_id,
+                dnszone_id=self.dns_zone_id,
+                resource_record_id=record_id
+            )
+            logger.info(f"Deleted DNS record {record_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete DNS record {record_id}: {str(e)}")
+            raise
     
     def get_dns_records(self):
         """Get all DNS records in the zone using DNS Services SDK"""
