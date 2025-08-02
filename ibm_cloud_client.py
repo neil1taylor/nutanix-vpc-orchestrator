@@ -240,17 +240,17 @@ class IBMCloudClient:
         try:
             # Check if the identifier is an ID (starts with "r006-")
             if image_identifier.startswith('r006-'):
-                # Filter by ID
-                result = self.vpc_service.list_images(id=image_identifier).get_result()
+                # Get image by ID using get_image method
+                result = self.vpc_service.get_image(id=image_identifier).get_result()
+                return result
             else:
-                # Filter by name
+                # Filter by name using list_images
                 result = self.vpc_service.list_images(name=image_identifier).get_result()
-            
-            images = result.get("images", [])
-            if images:
-                return images[0]
-            else:
-                raise Exception(f"Custom image {image_identifier} not found")
+                images = result.get("images", [])
+                if images:
+                    return images[0]
+                else:
+                    raise Exception(f"Custom image {image_identifier} not found")
         except Exception as e:
             logger.error(f"Failed to get custom image {image_identifier}: {str(e)}")
             raise
