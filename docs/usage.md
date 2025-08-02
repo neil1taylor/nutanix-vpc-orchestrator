@@ -21,6 +21,7 @@ curl -X POST http://localhost:8080/api/config/nodes \
     }
   }'
 ```
+tail -f /var/log/nutanix-pxe/pxe-server.log
 
 **Expected Response:**
 ```json

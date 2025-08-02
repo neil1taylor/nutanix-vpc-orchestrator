@@ -42,6 +42,11 @@ class CleanupService:
             # Reset cleanup operations list
             self.cleanup_operations = []
             
+            # Check if node exists in main nodes table
+            if not node:
+                logger.warning(f"Node {node_name} not found in nodes table, checking for orphaned resources")
+                return self.cleanup_orphaned_resources_by_name(node_name)
+            
             # Perform cleanup in reverse order of creation
             cleanup_results = []
             
@@ -90,7 +95,6 @@ class CleanupService:
                 'results': cleanup_results,
                 'timestamp': datetime.now().isoformat()
             }
-            
         except Exception as e:
             logger.error(f"Error during cleanup for {node_name}: {str(e)}")
             return {
@@ -100,6 +104,287 @@ class CleanupService:
                 'operations': self.cleanup_operations,
                 'timestamp': datetime.now().isoformat()
             }
+    
+    def cleanup_orphaned_resources_by_name(self, node_name: str) -> Dict:
+        """
+        Clean up orphaned resources for a node that failed during early provisioning
+        This handles cases where IP reservations, DNS records, or VNIs were created
+        but the node was never inserted into the main nodes table
+        """
+        logger.info(f"Cleaning up orphaned resources for {node_name}")
+        
+        cleanup_results = []
+        self.cleanup_operations = []
+        
+        try:
+            # 1. Clean up orphaned IP reservations
+            ip_result = self.cleanup_orphaned_ip_reservations(node_name)
+            if ip_result['operations']:
+                cleanup_results.append(ip_result)
+            
+            # 2. Clean up orphaned DNS records
+            dns_result = self.cleanup_orphaned_dns_records(node_name)
+            if dns_result['operations']:
+                cleanup_results.append(dns_result)
+            
+            # 3. Clean up orphaned VNIs
+            vni_result = self.cleanup_orphaned_vnis(node_name)
+            if vni_result['operations']:
+                cleanup_results.append(vni_result)
+            
+            # Calculate overall success
+            total_operations = sum(len(result.get('operations', [])) for result in cleanup_results)
+            successful_operations = sum(
+                len([op for op in result.get('operations', []) if op.get('success', False)])
+                for result in cleanup_results
+            )
+            
+            success_rate = (successful_operations / total_operations * 100) if total_operations > 0 else 100
+            
+            logger.info(f"Orphaned resource cleanup completed for {node_name}: {successful_operations}/{total_operations} operations successful ({success_rate:.1f}%)")
+            
+            return {
+                'success': success_rate > 80,
+                'node_name': node_name,
+                'total_operations': total_operations,
+                'successful_operations': successful_operations,
+                'success_rate': f"{success_rate:.1f}%",
+                'results': cleanup_results,
+                'cleanup_type': 'orphaned_resources',
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error during orphaned resource cleanup for {node_name}: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'node_name': node_name,
+                'cleanup_type': 'orphaned_resources',
+                'operations': self.cleanup_operations,
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    def cleanup_orphaned_ip_reservations(self, node_name: str) -> Dict:
+        """Clean up orphaned IP reservations for a node"""
+        operations = []
+        
+        try:
+            # Get IP reservations from database using node_name
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT ip_address, ip_type, reservation_id, subnet_id
+                        FROM ip_reservations WHERE node_name = %s
+                    """, (node_name,))
+                    
+                    ip_reservations = [
+                        {
+                            'ip_address': str(row[0]),
+                            'ip_type': row[1],
+                            'reservation_id': row[2],
+                            'subnet_id': row[3]
+                        }
+                        for row in cur.fetchall()
+                    ]
+            
+            for reservation in ip_reservations:
+                try:
+                    # Determine subnet ID based on IP type
+                    if reservation['ip_type'] == 'workload':
+                        subnet_id = self.config.WORKLOAD_SUBNET_ID
+                    else:
+                        subnet_id = self.config.MANAGEMENT_SUBNET_ID
+                    
+                    self.ibm_cloud.delete_subnet_reserved_ip(subnet_id, reservation['reservation_id'])
+                    
+                    operations.append({
+                        'type': 'orphaned_ip_reservation_deletion',
+                        'resource_id': reservation['reservation_id'],
+                        'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                        'success': True,
+                        'message': f'Deleted orphaned IP reservation {reservation["ip_address"]} ({reservation["ip_type"]})'
+                    })
+                    
+                    logger.info(f"Deleted orphaned IP reservation {reservation['ip_address']} for node {node_name}")
+                    
+                    # Remove from database
+                    with self.db.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                DELETE FROM ip_reservations 
+                                WHERE node_name = %s AND reservation_id = %s
+                            """, (node_name, reservation['reservation_id']))
+                            conn.commit()
+                    
+                except Exception as e:
+                    operations.append({
+                        'type': 'orphaned_ip_reservation_deletion',
+                        'resource_id': reservation['reservation_id'],
+                        'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                        'success': False,
+                        'error': str(e),
+                        'message': f'Failed to delete orphaned IP reservation {reservation["ip_address"]}: {str(e)}'
+                    })
+                    
+                    logger.error(f"Failed to delete orphaned IP reservation {reservation['ip_address']}: {str(e)}")
+        
+        except Exception as e:
+            operations.append({
+                'type': 'orphaned_ip_cleanup',
+                'resource_id': 'unknown',
+                'success': False,
+                'error': str(e),
+                'message': f'Orphaned IP cleanup error: {str(e)}'
+            })
+        
+        return {
+            'resource_type': 'orphaned_ip_reservations',
+            'operations': operations
+        }
+    
+    def cleanup_orphaned_dns_records(self, node_name: str) -> Dict:
+        """Clean up orphaned DNS records for a node"""
+        operations = []
+        
+        try:
+            # Get DNS records from database using node_name
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT record_name, record_type, rdata, record_id
+                        FROM dns_records WHERE node_name = %s
+                    """, (node_name,))
+                    
+                    dns_records = [
+                        {
+                            'record_name': row[0],
+                            'record_type': row[1],
+                            'rdata': row[2],
+                            'record_id': row[3]
+                        }
+                        for row in cur.fetchall()
+                    ]
+            
+            for record in dns_records:
+                try:
+                    self.ibm_cloud.delete_dns_record(record['record_id'])
+                    
+                    operations.append({
+                        'type': 'orphaned_dns_record_deletion',
+                        'resource_id': record['record_id'],
+                        'resource_name': record['record_name'],
+                        'success': True,
+                        'message': f'Deleted orphaned DNS record {record["record_name"]} ({record["record_type"]})'
+                    })
+                    
+                    logger.info(f"Deleted orphaned DNS record {record['record_name']} for node {node_name}")
+                    
+                    # Remove from database
+                    with self.db.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                DELETE FROM dns_records 
+                                WHERE node_name = %s AND record_id = %s
+                            """, (node_name, record['record_id']))
+                            conn.commit()
+                    
+                except Exception as e:
+                    operations.append({
+                        'type': 'orphaned_dns_record_deletion',
+                        'resource_id': record['record_id'],
+                        'resource_name': record['record_name'],
+                        'success': False,
+                        'error': str(e),
+                        'message': f'Failed to delete orphaned DNS record {record["record_name"]}: {str(e)}'
+                    })
+                    
+                    logger.error(f"Failed to delete orphaned DNS record {record['record_name']}: {str(e)}")
+        
+        except Exception as e:
+            operations.append({
+                'type': 'orphaned_dns_cleanup',
+                'resource_id': 'unknown',
+                'success': False,
+                'error': str(e),
+                'message': f'Orphaned DNS cleanup error: {str(e)}'
+            })
+        
+        return {
+            'resource_type': 'orphaned_dns_records',
+            'operations': operations
+        }
+    
+    def cleanup_orphaned_vnis(self, node_name: str) -> Dict:
+        """Clean up orphaned VNIs for a node"""
+        operations = []
+        
+        try:
+            # Get VNI information from database using node_name
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT vnic_name, vnic_id, vnic_type
+                        FROM vnic_info WHERE node_name = %s
+                    """, (node_name,))
+                    
+                    vni_info = [
+                        {
+                            'vnic_name': row[0],
+                            'vnic_id': row[1],
+                            'vnic_type': row[2]
+                        }
+                        for row in cur.fetchall()
+                    ]
+            
+            for vni in vni_info:
+                try:
+                    self.ibm_cloud.delete_virtual_network_interface(vni['vnic_id'])
+                    
+                    operations.append({
+                        'type': 'orphaned_vni_deletion',
+                        'resource_id': vni['vnic_id'],
+                        'resource_name': vni['vnic_name'],
+                        'success': True,
+                        'message': f'Deleted orphaned VNI {vni["vnic_name"]} ({vni["vnic_id"]})'
+                    })
+                    
+                    logger.info(f"Deleted orphaned VNI {vni['vnic_name']} for node {node_name}")
+                    
+                    # Remove from database
+                    with self.db.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                DELETE FROM vnic_info 
+                                WHERE node_name = %s AND vnic_id = %s
+                            """, (node_name, vni['vnic_id']))
+                            conn.commit()
+                    
+                except Exception as e:
+                    operations.append({
+                        'type': 'orphaned_vni_deletion',
+                        'resource_id': vni['vnic_id'],
+                        'resource_name': vni['vnic_name'],
+                        'success': False,
+                        'error': str(e),
+                        'message': f'Failed to delete orphaned VNI {vni["vnic_name"]}: {str(e)}'
+                    })
+                    
+                    logger.error(f"Failed to delete orphaned VNI {vni['vnic_name']}: {str(e)}")
+        
+        except Exception as e:
+            operations.append({
+                'type': 'orphaned_vni_cleanup',
+                'resource_id': 'unknown',
+                'success': False,
+                'error': str(e),
+                'message': f'Orphaned VNI cleanup error: {str(e)}'
+            })
+        
+        return {
+            'resource_type': 'orphaned_vnis',
+            'operations': operations
+        }
     
     def cleanup_deployment(self, deployment_id: str) -> Dict:
         """

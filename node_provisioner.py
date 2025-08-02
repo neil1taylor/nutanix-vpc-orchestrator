@@ -249,6 +249,8 @@ class NodeProvisioner:
         except Exception as e:
             # Cleanup any successful DNS records before re-raising
             logger.error(f"DNS registration failed for {node_config['node_name']}, initiating cleanup")
+            logger.error(f"Error details: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
             self._cleanup_partial_dns_records(dns_records)
             raise Exception(f"DNS registration failed: {str(e)}")
     

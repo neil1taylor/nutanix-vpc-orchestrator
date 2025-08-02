@@ -206,6 +206,11 @@ class IBMCloudClient:
     def create_dns_record(self, record_type, name, rdata, ttl=300):
         """Create a DNS record using DNS Services SDK"""
         try:
+            logger.info(f"Attempting to create DNS record: {name} ({record_type}) -> {rdata}")
+            logger.info(f"DNS instance ID: {self.dns_instance_id}")
+            logger.info(f"DNS zone ID: {self.dns_zone_id}")
+            logger.info(f"DNS service URL: {self.dns_service.service_url}")
+            
             # Fixed: Pass parameters directly instead of using prototype object
             if record_type.upper() == 'A':
                 result = self.dns_service.create_resource_record(
@@ -235,6 +240,8 @@ class IBMCloudClient:
             }
         except Exception as e:
             logger.error(f"Failed to create DNS record {name}: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error args: {e.args}")
             raise
     
     def delete_dns_record(self, record_id):
