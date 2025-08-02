@@ -51,7 +51,7 @@ class NodeProvisioner:
                 'node_id': node_id,
                 'deployment_id': deployment_result['id'],
                 'estimated_completion': self.calculate_completion_time(),
-                'monitoring_endpoint': f'/api/v1/nodes/{node_id}/status'
+                'monitoring_endpoint': f'/api/nodes/{node_id}/status'
             }
             
         except Exception as e:

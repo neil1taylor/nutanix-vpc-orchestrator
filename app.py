@@ -786,7 +786,7 @@ def api_health_check():
             'timestamp': datetime.now().isoformat()
         }), 500
 
-@app.route('/api/v1/info', methods=['GET'])
+@app.route('/api/info', methods=['GET'])
 def api_get_server_info():
     """Get PXE server information"""
     return jsonify({

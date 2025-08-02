@@ -53,8 +53,8 @@ The cloud-init used in the pase 1 script will automatically:
 
 Once the PXE/Config Server is deployed, it exposes the following endpoints:
 
-- **Node Provisioning**: `POST /api/v1/nodes`
-- **Node Status**: `GET /api/v1/nodes/{id}/status`
+- **Node Provisioning**: `POST /api/nodes`
+- **Node Status**: `GET /api/nodes/{id}/status`
 - **Boot Configuration**: `GET /boot-config` (for iPXE)
 - **Server Configuration**: `GET /server-config/{ip}` (for Foundation)
 - **Health Check**: `GET /health`
@@ -71,13 +71,13 @@ Once the PXE/Config Server is deployed, it exposes the following endpoints:
 
 ```bash
 # Check node status
-curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/nodes/1/status
+curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/nodes/1/status
 
 # Get deployment history
-curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/nodes/1/history
+curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/nodes/1/history
 
 # Get overall summary
-curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/v1/deployment/summary
+curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/deployment/summary
 ```
 
 ## Post-Deployment Setup
@@ -144,10 +144,10 @@ sudo journalctl -u nutanix-pxe -f
 curl http://localhost:8080/health
 
 # Service info
-curl http://localhost:8080/api/v1/info
+curl http://localhost:8080/api/info
 
 # Deployment summary
-curl http://localhost:8080/api/v1/deployment/summary
+curl http://localhost:8080/api/deployment/summary
 ```
 
 ### Log Management

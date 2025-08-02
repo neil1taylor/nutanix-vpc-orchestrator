@@ -291,7 +291,7 @@ These endpoints handle resource cleanup for failed or completed deployments.
 ```
 
 ### 6.2 Server Information
-**Endpoint:** `GET /api/v1/info`
+**Endpoint:** `GET /api/info`
 **Purpose:** Get PXE server information and available endpoints
 
 ## Deployment Flow and API Call Order

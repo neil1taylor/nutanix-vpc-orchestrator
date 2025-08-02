@@ -16,7 +16,7 @@ else
 fi
 
 # Report status
-curl -X POST "http://${CONFIG_SERVER}:8080/api/v1/phase-update" \
+curl -X POST "http://${CONFIG_SERVER}:8080/api/phase-update" \
     -H "Content-Type: application/json" \
     -d "{\"server_ip\":\"$(hostname -I | awk '{print $1}')\",\"phase\":\"foundation_start\",\"status\":\"success\"}" \
     2>/dev/null || echo "Warning: Could not report status"
