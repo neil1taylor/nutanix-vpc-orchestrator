@@ -304,7 +304,7 @@ class NodeProvisioner:
         """Clean up partially created VNIs when creation fails"""
         for vni_type, vni_info in vnis.items():
             try:
-                self.ibm_cloud.delete_virtual_network_interface(vni_info['id'])
+                self.ibm_cloud.delete_virtual_network_interfaces(vni_info['id'])
                 logger.info(f"Cleaned up VNI: {vni_info['name']}")
             except Exception as cleanup_error:
                 logger.error(f"Failed to cleanup VNI {vni_info['name']}: {str(cleanup_error)}")
@@ -318,13 +318,13 @@ class NodeProvisioner:
             'server_profile': node_data['node_config']['server_profile'],
             'cluster_role': node_data['node_config']['cluster_role'],
             'deployment_status': 'provisioning',
-            'management_vni': {
-                'vni_id': vnis['management_vni']['id'],
+            'management_vnic': {
+                'vnic_id': vnis['management_vni']['id'],
                 'ip': ip_allocation['management']['ip_address'],
                 'dns_name': f"{node_data['node_config']['node_name']}-mgmt.{self.config.DNS_ZONE_NAME}"
             },
-            'workload_vni': {
-                'vni_id': vnis['workload_vni']['id'],
+            'workload_vnic': {
+                'vnic_id': vnis['workload_vni']['id'],
                 'ip': ip_allocation['workload']['ip_address'],
                 'dns_name': f"{node_data['node_config']['node_name']}-workload.{self.config.DNS_ZONE_NAME}"
             },

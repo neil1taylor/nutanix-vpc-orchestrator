@@ -130,7 +130,7 @@ class IBMCloudClient:
             logger.error(f"Full traceback: {traceback.format_exc()}")
             raise
     
-    def delete_virtual_network_interface(self, vni_id):
+    def delete_virtual_network_interfaces(self, vni_id):
         """Delete a virtual network interface using VPC SDK"""
         try:
             # Based on the available methods in VpcV1, the correct method is:
@@ -232,9 +232,6 @@ class IBMCloudClient:
         """Create a DNS record using DNS Services SDK"""
         try:
             logger.info(f"Attempting to create DNS record: {name} ({record_type}) -> {rdata}")
-            logger.info(f"DNS instance GUID: {self.dns_instance_guid}")
-            logger.info(f"DNS zone ID: {self.dns_zone_id}")
-            logger.info(f"DNS service URL: {self.dns_service.service_url}")
             
             # Log the parameters being passed to the API
             logger.info(f"API call parameters: instance_id={self.dns_instance_guid}, dnszone_id={self.dns_zone_id}, name={name}, type={record_type.upper()}, rdata={{'ip': {rdata}}}, ttl={ttl}")
