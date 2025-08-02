@@ -117,20 +117,20 @@ class CleanupService:
         self.cleanup_operations = []
         
         try:
-            # 1. Clean up orphaned IP reservations
+            # 1. Clean up orphaned VNIs (must be done before IP reservations)
+            vni_result = self.cleanup_orphaned_vnis(node_name)
+            if vni_result['operations']:
+                cleanup_results.append(vni_result)
+            
+            # 2. Clean up orphaned IP reservations (after VNIs are deleted)
             ip_result = self.cleanup_orphaned_ip_reservations(node_name)
             if ip_result['operations']:
                 cleanup_results.append(ip_result)
             
-            # 2. Clean up orphaned DNS records
+            # 3. Clean up orphaned DNS records
             dns_result = self.cleanup_orphaned_dns_records(node_name)
             if dns_result['operations']:
                 cleanup_results.append(dns_result)
-            
-            # 3. Clean up orphaned VNIs
-            vni_result = self.cleanup_orphaned_vnis(node_name)
-            if vni_result['operations']:
-                cleanup_results.append(vni_result)
             
             # Calculate overall success
             total_operations = sum(len(result.get('operations', [])) for result in cleanup_results)
@@ -196,23 +196,56 @@ class CleanupService:
                     else:
                         subnet_id = self.config.MANAGEMENT_SUBNET_ID
                     
-                    self.ibm_cloud.delete_subnet_reserved_ip(subnet_id, reservation['reservation_id'])
+                    # Check if reservation exists and handle different error cases
+                    try:
+                        self.ibm_cloud.delete_subnet_reserved_ip(subnet_id, reservation['reservation_id'])
+                        
+                        operations.append({
+                            'type': 'orphaned_ip_reservation_deletion',
+                            'resource_id': reservation['reservation_id'],
+                            'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                            'success': True,
+                            'message': f'Deleted orphaned IP reservation {reservation["ip_address"]} ({reservation["ip_type"]})'
+                        })
+                        
+                        logger.info(f"Deleted orphaned IP reservation {reservation['ip_address']} for node {node_name}")
+                    except Exception as delete_error:
+                        # Handle specific error cases
+                        error_str = str(delete_error)
+                        if "404" in error_str or "not found" in error_str.lower():
+                            # Reservation doesn't exist, just remove from database
+                            logger.info(f"IP reservation {reservation['reservation_id']} no longer exists, removing from database")
+                            operations.append({
+                                'type': 'orphaned_ip_reservation_deletion',
+                                'resource_id': reservation['reservation_id'],
+                                'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                                'success': True,
+                                'message': f'IP reservation {reservation["ip_address"]} no longer exists, removed from database'
+                            })
+                        elif "409" in error_str or "in use" in error_str.lower():
+                            # Reservation is in use, log and skip deletion
+                            logger.warning(f"IP reservation {reservation['reservation_id']} is still in use, skipping deletion")
+                            operations.append({
+                                'type': 'orphaned_ip_reservation_deletion',
+                                'resource_id': reservation['reservation_id'],
+                                'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
+                                'success': False,
+                                'error': 'in_use',
+                                'message': f'IP reservation {reservation["ip_address"]} is still in use and cannot be deleted'
+                            })
+                            # Skip database removal for in-use IPs and continue to next reservation
+                            continue
+                        else:
+                            # Re-raise other errors
+                            logger.error(f"Unexpected error deleting IP reservation {reservation['reservation_id']}: {str(delete_error)}")
+                            raise delete_error
                     
-                    operations.append({
-                        'type': 'orphaned_ip_reservation_deletion',
-                        'resource_id': reservation['reservation_id'],
-                        'resource_name': f"{reservation['ip_address']} ({reservation['ip_type']})",
-                        'success': True,
-                        'message': f'Deleted orphaned IP reservation {reservation["ip_address"]} ({reservation["ip_type"]})'
-                    })
-                    
-                    logger.info(f"Deleted orphaned IP reservation {reservation['ip_address']} for node {node_name}")
-                    
-                    # Remove from database
+                    # Remove from database (always do this for successful deletions or 404 cases)
+                    # For 409 errors, we continue to the next iteration without reaching this point
                     with self.db.get_connection() as conn:
                         with conn.cursor() as cur:
                             cur.execute("""
-                                DELETE FROM ip_reservations 
+                                DELETE FROM ip_reservations
                                 WHERE node_name = %s AND reservation_id = %s
                             """, (node_name, reservation['reservation_id']))
                             conn.commit()
