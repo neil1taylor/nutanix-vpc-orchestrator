@@ -18,7 +18,7 @@ class Config:
     IBM_CLOUD_REGION = os.environ.get('IBM_CLOUD_REGION')
     VPC_ID = os.environ.get('VPC_ID')
     DNS_INSTANCE_ID = os.environ.get('DNS_INSTANCE_ID')
-    DNS_INSTANCE_CRN = os.environ.get('DNS_INSTANCE_CRN')
+    DNS_INSTANCE_GUID = os.environ.get('DNS_INSTANCE_GUID')
     DNS_ZONE_ID = os.environ.get('DNS_ZONE_ID')
     DNS_ZONE_NAME = os.environ.get('DNS_ZONE_NAME')
     
@@ -115,7 +115,7 @@ class Config:
     def validate_required_config(cls):
         """Validate that all required configuration is present"""
         required_vars = [
-            'IBM_CLOUD_REGION', 'VPC_ID', 'DNS_INSTANCE_ID', 'DNS_ZONE_ID', 'DNS_ZONE_NAME',
+            'IBM_CLOUD_REGION', 'VPC_ID', 'DNS_INSTANCE_ID', 'DNS_INSTANCE_GUID','DNS_ZONE_ID', 'DNS_ZONE_NAME',
             'MANAGEMENT_SUBNET_ID', 'WORKLOAD_SUBNET_ID', 'SSH_KEY_ID',
             'MANAGEMENT_SECURITY_GROUP_ID', 'WORKLOAD_SECURITY_GROUP_ID', 'INTRA_NODE_SECURITY_GROUP_ID'
         ]

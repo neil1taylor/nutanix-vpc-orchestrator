@@ -785,7 +785,7 @@ class CleanupService:
                 "",
                 "# Configuration",
                 f'DEPLOYMENT_ID="{deployment_id}"',
-                f'DNS_INSTANCE_ID="{self.config.DNS_INSTANCE_ID}"',
+                f'DNS_INSTANCE_GUID="{self.config.DNS_INSTANCE_GUID}"',
                 f'DNS_ZONE_ID="{self.config.DNS_ZONE_ID}"',
                 f'MANAGEMENT_SUBNET_ID="{self.config.MANAGEMENT_SUBNET_ID}"',
                 f'WORKLOAD_SUBNET_ID="{self.config.WORKLOAD_SUBNET_ID}"',

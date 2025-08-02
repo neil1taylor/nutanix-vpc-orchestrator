@@ -526,7 +526,7 @@ The cleanup service uses the same configuration as the main application:
 # Required configuration in Config class
 IBM_CLOUD_REGION = "us-south"
 VPC_ID = "vpc-12345"
-DNS_INSTANCE_ID = "instance-12345"
+DNS_INSTANCE_GUID = "instance-12345"
 DNS_ZONE_ID = "zone-12345"
 MANAGEMENT_SUBNET_ID = "subnet-mgmt-12345"
 WORKLOAD_SUBNET_ID = "subnet-workload-12345"

@@ -124,7 +124,7 @@ test_configuration() {
     log "Testing configuration..."
     
     # Environment variables
-    local required_vars=("IBM_CLOUD_REGION" "VPC_ID" "DNS_INSTANCE_ID" "DNS_ZONE_ID")
+    local required_vars=("IBM_CLOUD_REGION" "VPC_ID" "DNS_INSTANCE_ID" "DNS_INSTANCE_GUID" "DNS_ZONE_ID")
     local missing_vars=()
     
     if [[ -f "/etc/profile.d/app-vars.sh" ]]; then

@@ -17,16 +17,30 @@ class IBMCloudClient:
         # Load configuration from Config class instead of direct os.getenv
         self.region = Config.IBM_CLOUD_REGION
         self.vpc_id = Config.VPC_ID
-        self.dns_instance_id = Config.DNS_INSTANCE_ID
+        self.dns_instance_guid = Config.DNS_INSTANCE_GUID
         self.dns_zone_id = Config.DNS_ZONE_ID
         
         # Validate required configuration using Config class method
         Config.validate_required_config()
         
         # Initialize VPC service with trusted profile authentication
-        self.vpc_authenticator = VPCInstanceAuthenticator()
-        self.vpc_service = VpcV1(authenticator=self.vpc_authenticator)
-        self.vpc_service.set_service_url(f'https://{self.region}.iaas.cloud.ibm.com/v1')
+        try:
+            self.vpc_authenticator = VPCInstanceAuthenticator()
+            self.vpc_service = VpcV1(authenticator=self.vpc_authenticator)
+            self.vpc_service.set_service_url(f'https://{self.region}.iaas.cloud.ibm.com/v1')
+            
+            # Debug: Log available methods in VpcV1
+            logger.info(f"Available methods in VpcV1: {[method for method in dir(self.vpc_service) if not method.startswith('_')]}")
+            logger.info(f"VpcV1 version: {getattr(self.vpc_service, '__version__', 'Unknown')}")
+            logger.info(f"VpcV1 service URL: {self.vpc_service.service_url}")
+        except Exception as e:
+            logger.error(f"Failed to initialize VPC service: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            logger.error(f"Exception args: {e.args}")
+            # Log the full traceback
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            raise
         
         # Initialize DNS service with trusted profile authentication
         self.dns_authenticator = VPCInstanceAuthenticator()
@@ -85,15 +99,18 @@ class IBMCloudClient:
     def create_virtual_network_interface(self, subnet_id, name, primary_ip_id, security_group_ids):
         """Create a virtual network interface using VPC SDK"""
         try:
-            vni_prototype = {
-                'name': name,
-                'subnet': {'id': subnet_id},
-                'primary_ip': {'id': primary_ip_id},
-                'security_groups': [{'id': sg_id} for sg_id in security_group_ids]
-            }
+            # Debug: Check if the method exists
+            logger.info(f"Checking if create_virtual_network_interface method exists: {hasattr(self.vpc_service, 'create_virtual_network_interface')}")
+            
+            # Debug: Log the VpcV1 object type and methods
+            logger.info(f"VpcV1 object type: {type(self.vpc_service)}")
+            logger.info(f"VpcV1 object methods: {[method for method in dir(self.vpc_service) if 'virtual_network_interface' in method]}")
             
             result = self.vpc_service.create_virtual_network_interface(
-                virtual_network_interface_prototype=vni_prototype
+                name=name,
+                subnet={'id': subnet_id},
+                primary_ip={'id': primary_ip_id},
+                security_groups=[{'id': sg_id} for sg_id in security_group_ids]
             ).get_result()
             
             logger.info(f"Created virtual network interface {name}")
@@ -104,6 +121,11 @@ class IBMCloudClient:
             }
         except Exception as e:
             logger.error(f"Failed to create VNI {name}: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            logger.error(f"Exception args: {e.args}")
+            # Log the full traceback
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             raise
     
     def delete_virtual_network_interface(self, vni_id):
@@ -207,17 +229,17 @@ class IBMCloudClient:
         """Create a DNS record using DNS Services SDK"""
         try:
             logger.info(f"Attempting to create DNS record: {name} ({record_type}) -> {rdata}")
-            logger.info(f"DNS instance ID: {self.dns_instance_id}")
+            logger.info(f"DNS instance GUID: {self.dns_instance_guid}")
             logger.info(f"DNS zone ID: {self.dns_zone_id}")
             logger.info(f"DNS service URL: {self.dns_service.service_url}")
             
             # Log the parameters being passed to the API
-            logger.info(f"API call parameters: instance_id={self.dns_instance_id}, dnszone_id={self.dns_zone_id}, name={name}, type={record_type.upper()}, rdata={{'ip': {rdata}}}, ttl={ttl}")
+            logger.info(f"API call parameters: instance_id={self.dns_instance_guid}, dnszone_id={self.dns_zone_id}, name={name}, type={record_type.upper()}, rdata={{'ip': {rdata}}}, ttl={ttl}")
             
             # Fixed: Pass parameters directly instead of using prototype object
             if record_type.upper() == 'A':
                 result = self.dns_service.create_resource_record(
-                    instance_id=self.dns_instance_id,
+                    instance_id=self.dns_instance_guid,
                     dnszone_id=self.dns_zone_id,
                     name=name,
                     type=record_type.upper(),
@@ -226,7 +248,7 @@ class IBMCloudClient:
                 ).get_result()
             else:
                 result = self.dns_service.create_resource_record(
-                    instance_id=self.dns_instance_id,
+                    instance_id=self.dns_instance_guid,
                     dnszone_id=self.dns_zone_id,
                     name=name,
                     type=record_type.upper(),
@@ -254,9 +276,9 @@ class IBMCloudClient:
         """Delete a DNS record using DNS Services SDK"""
         try:
             self.dns_service.delete_resource_record(
-                instance_id=self.dns_instance_id,
+                instance_id=self.dns_instance_guid,
                 dnszone_id=self.dns_zone_id,
-                resource_record_id=record_id
+                record_id=record_id
             )
             logger.info(f"Deleted DNS record {record_id}")
         except Exception as e:
@@ -267,7 +289,7 @@ class IBMCloudClient:
         """Get all DNS records in the zone using DNS Services SDK"""
         try:
             result = self.dns_service.list_resource_records(
-                instance_id=self.dns_instance_id,
+                instance_id=self.dns_instance_guid,
                 dnszone_id=self.dns_zone_id
             ).get_result()
             
