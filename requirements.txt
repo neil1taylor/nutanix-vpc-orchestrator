@@ -9,7 +9,7 @@ ibm-cloud-sdk-core==3.24.2
 ibm-vpc==0.30.0
 ibm-cloud-networking-services==0.25.0
 cryptography==45.0.5
-PyJWT==2.8.0
+PyJWT<3.0.0
 schedule==1.2.0
 Flask-WTF==1.1.1
 WTForms==3.0.1
