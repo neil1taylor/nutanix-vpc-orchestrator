@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Database Viewer - Nutanix VPC Orchestrator{% endblock %}
+
+{% block breadcrumb %}> Database Viewer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Database Viewer</h1>
+    <div class="header-controls">
+        <button id="refresh-btn" class="btn btn-secondary" onclick="refreshCurrentTable()">
+            <span id="refresh-icon">🔄</span> Refresh
+        </button>
+        <label class="auto-refresh-toggle">
+            <input type="checkbox" id="auto-refresh-toggle" onchange="toggleAutoRefresh()">
+            Auto-refresh (10s)
+        </label>
+    </div>
+</div>
+
+<div class="db-controls">
+    <div class="form-group">
+        <label class="form-label" for="table-select">Select Table:</label>
+        <select id="table-select" class="form-select" onchange="loadTable()">
+            <option value="">Choose a table...</option>
+            {% for table in tables %}
+            <option value="{{ table.name }}" 
+                    {% if table.name == current_table %}selected{% endif %}>
+                {{ table.display_name }} ({{ table.row_count }} rows)
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    <div class="table-info">
+        <span id="last-updated">Last updated: <span id="update-time">{{ last_updated or 'Never' }}</span></span>
+        <span id="row-count">Rows: <span id="row-count-value">{{ row_count or 0 }}</span></span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <span id="table-title">{{ current_table_display or 'Select a table to view data' }}</span>
+        </h2>
+        {% if current_table %}
+        <div class="table-actions">
+            <button class="btn btn-secondary" onclick="exportTable()">Export CSV</button>
+            <button class="btn btn-secondary" onclick="showTableSchema()">Show Schema</button>
+        </div>
+        {% endif %}
+    </div>
+    <div class="card-content">
+        {% if error %}
+        <div class="alert alert-error">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% elif table_data %}
+        <div class="table-container">
+            <table class="table" id="data-table">
+                <thead>
+                    <tr>
+                        {% for column in table_data.columns %}
+                        <th>{{ column }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in table_data.rows %}
+                    <tr>
+                        {% for cell in row %}
+                        <td>{{ cell if cell is not none else '' }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="no-data">
+            <p>Select a table from the dropdown above to view its contents.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Schema Modal -->
+<div id="schema-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Table Schema: <span id="schema-table-name"></span></h3>
+            <button class="modal-close" onclick="hideSchema()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <table class="table" id="schema-table">
+                <thead>
+                    <tr>
+                        <th>Column</th>
+                        <th>Type</th>
+                        <th>Nullable</th>
+                        <th>Default</th>
+                    </tr>
+                </thead>
+                <tbody id="schema-tbody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.auto-refresh-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+}
+
+.auto-refresh-toggle input[type="checkbox"] {
+    margin: 0;
+}
+
+.db-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background-color: var(--cds-layer-01);
+    border-radius: 8px;
+    border: 1px solid var(--cds-border-subtle);
+}
+
+.table-info {
+    display: flex;
+    gap: 2rem;
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+}
+
+.table-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.table-container {
+    max-height: 600px;
+    overflow: auto;
+    border: 1px solid var(--cds-border-subtle);
+    border-radius: 4px;
+}
+
+.table {
+    margin: 0;
+}
+
+.table th {
+    position: sticky;
+    top: 0;
+    background-color: var(--cds-layer-02);
+    z-index: 10;
+}
+
+.table td {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.table td:hover {
+    overflow: visible;
+    white-space: normal;
+    word-wrap: break-word;
+}
+
+.no-data {
+    text-align: center;
+    padding: 3rem;
+    color: var(--cds-text-secondary);
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: var(--cds-layer-01);
+    border-radius: 8px;
+    border: 1px solid var(--cds-border-subtle);
+    max-width: 800px;
+    max-height: 80vh;
+    overflow: auto;
+    margin: 2rem;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--cds-border-subtle);
+}
+
+.modal-header h3 {
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--cds-text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: var(--cds-text-primary);
+    background-color: var(--cds-interactive-02);
+    border-radius: 4px;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.refresh-spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+    .db-controls {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .table-info {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .header-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .table-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/database-viewer.js') }}"></script>
+{% endblock %}

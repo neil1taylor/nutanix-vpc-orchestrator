@@ -14,49 +14,127 @@
         <h2 class="card-title">Node Configuration</h2>
     </div>
     <div class="card-content">
-        <form method="POST" action="{{url_for('web_provision_node') }}">
+        <form method="POST" action="{{url_for('web_provision_node') }}" id="provision-form">
             <div class="form-grid">
-                <div class="form-group">
-                    <label class="form-label" for="node_name">Node Name *</label>
-                    <input type="text" id="node_name" name="node_name" class="form-input" 
-                           placeholder="nutanix-poc-bm-node-01" required>
+                <!-- Basic Configuration -->
+                <div class="form-section">
+                    <h3 class="section-title">Basic Configuration</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="node_name">Node Name *</label>
+                        <input type="text" id="node_name" name="node_name" class="form-input" 
+                               placeholder="nutanix-poc-node-01" required>
+                        <div class="form-help">Unique name for this Nutanix node</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="server_profile">Server Profile *</label>
+                        <select id="server_profile" name="server_profile" class="form-select" required onchange="updateProfileInfo()">
+                            <option value="">Select server profile</option>
+                            {% for profile in server_profiles %}
+                            <option value="{{ profile.name }}" 
+                                    data-cpu="{{ profile.cpu_cores }}"
+                                    data-memory="{{ profile.memory_gb }}"
+                                    data-storage="{{ profile.storage_capacity }}"
+                                    data-role="{{ profile.recommended_role }}"
+                                    data-generation="{{ profile.generation }}">
+                                {{ profile.display_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-help">Choose the IBM Cloud bare metal server configuration</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="cluster_operation">Cluster Operation *</label>
+                        <select id="cluster_operation" name="cluster_operation" class="form-select" required>
+                            <option value="">Select operation</option>
+                            <option value="create_new">Create New Cluster</option>
+                            <option value="join_existing">Join Existing Cluster</option>
+                        </select>
+                        <div class="form-help">Choose whether to create a new cluster or join existing</div>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="server_profile">Server Profile *</label>
-                    <select id="server_profile" name="server_profile" class="form-select" required>
-                        <option value="">Select server profile</option>
-                        <option value="bx2d-metal-24x96">bx2d-metal-24x96 (24 vCPU, 96 GB RAM)</option>
-                        <option value="bx2d-metal-48x192">bx2d-metal-48x192 (48 vCPU, 192 GB RAM)</option>
-                        <option value="bx2d-metal-96x384">bx2d-metal-96x384 (96 vCPU, 384 GB RAM)</option>
-                    </select>
+                <!-- Profile Information Panel -->
+                <div class="form-section">
+                    <h3 class="section-title">Server Profile Details</h3>
+                    <div id="profile-info" class="profile-info-panel">
+                        <p class="no-selection">Select a server profile to see specifications</p>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="cluster_role">Cluster Role</label>
-                    <select id="cluster_role" name="cluster_role" class="form-select">
-                        <option value="">Select role</option>
-                        <option value="compute">Compute</option>
-                        <option value="storage">Storage</option>
-                        <option value="compute-storage">Compute + Storage</option>
-                    </select>
-                </div>
+                <!-- Advanced Configuration -->
+                <div class="form-section full-width">
+                    <h3 class="section-title">Advanced Configuration</h3>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="cluster_role">Cluster Role</label>
+                            <select id="cluster_role" name="cluster_role" class="form-select">
+                                <option value="">Use recommended role</option>
+                                <option value="compute">Compute Only</option>
+                                <option value="storage">Storage Only</option>
+                                <option value="compute-storage">Compute + Storage (HCI)</option>
+                            </select>
+                            <div class="form-help">Node role in the cluster (auto-selected based on profile if not specified)</div>
+                        </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="cluster_operation">Cluster Operation *</label>
-                    <select id="cluster_operation" name="cluster_operation" class="form-select" required>
-                        <option value="">Select operation</option>
-                        <option value="create_new">Create New Cluster</option>
-                        <option value="join_existing">Join Existing Cluster</option>
-                    </select>
+                        <div class="form-group">
+                            <label class="form-label" for="storage_template">Storage Template</label>
+                            <select id="storage_template" name="storage_template" class="form-select">
+                                {% for template in storage_templates %}
+                                <option value="{{ template.name }}" {% if template.name == 'nutanix_default' %}selected{% endif %}>
+                                    {{ template.display_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-help">Storage configuration template (drives automatically selected based on profile)</div>
+                        </div>
+                    </div>
+
+                    <div class="storage-info" id="storage-info" style="display: none;">
+                        <h4>Storage Configuration Preview</h4>
+                        <div class="storage-details">
+                            <div class="storage-item">
+                                <strong>Boot Storage:</strong> <span id="boot-storage">-</span>
+                            </div>
+                            <div class="storage-item">
+                                <strong>Data Drives:</strong> <span id="data-drives">-</span>
+                            </div>
+                            <div class="storage-item">
+                                <strong>Total Capacity:</strong> <span id="total-capacity">-</span>
+                            </div>
+                            <div class="storage-item">
+                                <strong>Configuration:</strong> <span id="storage-config">-</span>
+                            </div>
+                        </div>
+                        
+                        <div class="storage-description" id="storage-description">
+                            <p><em>Select a storage template above to see configuration details.</em></p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <div class="form-actions">
                 <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
-                <button type="submit" class="btn">Provision Node</button>
+                <button type="submit" class="btn" id="provision-btn">Provision Node</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Profile Details Modal -->
+<div id="profile-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Server Profile Details: <span id="modal-profile-name"></span></h3>
+            <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="modal-profile-details"></div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -65,9 +143,125 @@
 <style>
 .form-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
     margin-bottom: 2rem;
+}
+
+.form-section {
+    background-color: var(--cds-layer-02);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--cds-border-subtle);
+}
+
+.form-section.full-width {
+    grid-column: 1 / -1;
+}
+
+.section-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0 0 1.5rem 0;
+    color: var(--cds-text-primary);
+    border-bottom: 1px solid var(--cds-border-subtle);
+    padding-bottom: 0.5rem;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.form-help {
+    font-size: 0.875rem;
+    color: var(--cds-text-secondary);
+    margin-top: 0.25rem;
+}
+
+.profile-info-panel {
+    background-color: var(--cds-layer-01);
+    border: 1px solid var(--cds-border-subtle);
+    border-radius: 4px;
+    padding: 1rem;
+    min-height: 200px;
+}
+
+.no-selection {
+    color: var(--cds-text-secondary);
+    font-style: italic;
+    text-align: center;
+    margin: 2rem 0;
+}
+
+.profile-specs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.spec-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--cds-border-subtle);
+}
+
+.spec-label {
+    font-weight: 600;
+    color: var(--cds-text-primary);
+}
+
+.spec-value {
+    color: var(--cds-text-secondary);
+}
+
+.recommended-role {
+    background-color: var(--cds-support-success);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.storage-info {
+    background-color: var(--cds-layer-01);
+    border: 1px solid var(--cds-border-subtle);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.storage-info h4 {
+    margin: 0 0 1rem 0;
+    color: var(--cds-text-primary);
+}
+
+.storage-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.storage-description {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: var(--cds-layer-02);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: var(--cds-text-secondary);
+}
+
+.storage-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--cds-border-subtle);
 }
 
 .form-actions {
@@ -78,5 +272,420 @@
     padding-top: 2rem;
     border-top: 1px solid var(--cds-border-subtle);
 }
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: var(--cds-layer-01);
+    border-radius: 8px;
+    border: 1px solid var(--cds-border-subtle);
+    max-width: 800px;
+    max-height: 80vh;
+    overflow: auto;
+    margin: 2rem;
+    width: 100%;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--cds-border-subtle);
+}
+
+.modal-header h3 {
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--cds-text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: var(--cds-text-primary);
+    background-color: var(--cds-interactive-02);
+    border-radius: 4px;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.detail-section {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--cds-border-subtle);
+}
+
+.detail-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.detail-section h4 {
+    margin: 0 0 1rem 0;
+    color: var(--cds-text-primary);
+    font-size: 1.125rem;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    background-color: var(--cds-layer-02);
+    border-radius: 4px;
+}
+
+.detail-item strong {
+    color: var(--cds-text-primary);
+    font-weight: 600;
+}
+
+.error {
+    color: var(--cds-support-error);
+    font-style: italic;
+}
+
+.profile-details {
+    max-width: 100%;
+}
+
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.form-input.error,
+.form-select.error {
+    border-color: var(--cds-support-error);
+    box-shadow: 0 0 0 2px rgba(250, 77, 86, 0.2);
+}
+
+.form-input.success,
+.form-select.success {
+    border-color: var(--cds-support-success);
+    box-shadow: 0 0 0 2px rgba(66, 190, 101, 0.2);
+}
+
+.validation-message {
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+    padding: 0.25rem 0;
+}
+
+.validation-message.error {
+    color: var(--cds-support-error);
+}
+
+.validation-message.success {
+    color: var(--cds-support-success);
+}
+
+@media (max-width: 768px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-specs {
+        grid-template-columns: 1fr;
+    }
+
+    .storage-details {
+        grid-template-columns: 1fr;
+    }
+
+    .detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .modal-content {
+        margin: 1rem;
+        max-height: 90vh;
+    }
+}
 </style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Server profile data (populated from backend)
+const serverProfiles = {
+    {% for profile in server_profiles %}
+    '{{ profile.name }}': {
+        name: '{{ profile.name }}',
+        displayName: '{{ profile.display_name }}',
+        cpuCores: {{ profile.cpu_cores }},
+        memoryGb: {{ profile.memory_gb }},
+        storageCapacity: '{{ profile.storage_capacity }}',
+        recommendedRole: '{{ profile.recommended_role }}',
+        generation: '{{ profile.generation }}'
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+const storageTemplates = {
+    {% for template in storage_templates %}
+    '{{ template.name }}': {
+        name: '{{ template.name }}',
+        displayName: '{{ template.display_name | default(template.name | title) }}',
+        description: '{{ template.description }}'
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+function updateProfileInfo() {
+    const profileSelect = document.getElementById('server_profile');
+    const selectedProfile = profileSelect.value;
+    const profileInfoPanel = document.getElementById('profile-info');
+    const clusterRoleSelect = document.getElementById('cluster_role');
+    const storageInfo = document.getElementById('storage-info');
+    
+    if (!selectedProfile) {
+        profileInfoPanel.innerHTML = '<p class="no-selection">Select a server profile to see specifications</p>';
+        storageInfo.style.display = 'none';
+        return;
+    }
+    
+    const profile = serverProfiles[selectedProfile];
+    if (!profile) return;
+    
+    // Update profile info panel
+    profileInfoPanel.innerHTML = `
+        <div class="profile-specs">
+            <div class="spec-item">
+                <span class="spec-label">CPU Cores:</span>
+                <span class="spec-value">${profile.cpuCores} physical cores</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Memory:</span>
+                <span class="spec-value">${profile.memoryGb} GB RAM</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Storage:</span>
+                <span class="spec-value">${profile.storageCapacity}</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Generation:</span>
+                <span class="spec-value">${profile.generation ? profile.generation.toUpperCase() : 'N/A'}</span>
+            </div>
+        </div>
+        <div style="margin-top: 1rem;">
+            <strong>Recommended Role:</strong> 
+            <span class="recommended-role">${profile.recommendedRole}</span>
+        </div>
+        <div style="margin-top: 1rem;">
+            <button type="button" class="btn btn-secondary" onclick="showProfileDetails('${selectedProfile}')">
+                View Detailed Specifications
+            </button>
+        </div>
+    `;
+    
+    // Auto-select recommended cluster role if none selected
+    if (!clusterRoleSelect.value) {
+        clusterRoleSelect.value = profile.recommendedRole;
+    }
+    
+    // Update storage information
+    updateStorageInfo(selectedProfile);
+}
+
+function updateStorageInfo(profileName) {
+    const storageTemplate = document.getElementById('storage_template').value;
+    const storageInfo = document.getElementById('storage-info');
+    const storageDescription = document.getElementById('storage-description');
+    
+    if (!profileName || !storageTemplate) {
+        storageInfo.style.display = 'none';
+        return;
+    }
+    
+    // Update storage template description
+    const template = storageTemplates[storageTemplate];
+    if (template) {
+        storageDescription.innerHTML = `<p><em>${template.description}</em></p>`;
+    }
+    
+    // Make AJAX call to get storage configuration
+    fetch(`/api/web/profile-storage-config?profile=${encodeURIComponent(profileName)}&template=${encodeURIComponent(storageTemplate)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Error getting storage config:', data.error);
+                storageInfo.style.display = 'none';
+                return;
+            }
+            
+            document.getElementById('boot-storage').textContent = `${data.drive_info.boot_drive_size} RAID1 SATA M.2`;
+            document.getElementById('data-drives').textContent = `${data.drives_used} of ${data.total_drives} NVMe drives`;
+            document.getElementById('total-capacity').textContent = data.drive_info.total_storage_capacity;
+            document.getElementById('storage-config').textContent = template ? template.displayName : storageTemplate;
+            
+            storageInfo.style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error fetching storage config:', error);
+            storageInfo.style.display = 'none';
+        });
+}
+
+function showProfileDetails(profileName) {
+    const modal = document.getElementById('profile-modal');
+    const modalProfileName = document.getElementById('modal-profile-name');
+    const modalDetails = document.getElementById('modal-profile-details');
+    
+    modalProfileName.textContent = profileName;
+    modalDetails.innerHTML = '<p>Loading detailed specifications...</p>';
+    
+    // Fetch detailed profile information
+    fetch(`/api/web/profile-details?profile=${encodeURIComponent(profileName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                modalDetails.innerHTML = `<p class="error">Error loading details: ${data.error}</p>`;
+                return;
+            }
+            
+            modalDetails.innerHTML = `
+                <div class="profile-details">
+                    <div class="detail-section">
+                        <h4>Compute Resources</h4>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <strong>Physical CPU Cores:</strong> ${data.compute.cpu_cores}
+                            </div>
+                            <div class="detail-item">
+                                <strong>Memory:</strong> ${data.compute.memory_gb} GB RAM
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>Storage Configuration</h4>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <strong>Boot Drives:</strong> ${data.storage.boot_drives} × ${data.storage.boot_capacity}
+                            </div>
+                            <div class="detail-item">
+                                <strong>Data Drives:</strong> ${data.storage.data_drives} × ${data.storage.data_capacity_per_drive}
+                            </div>
+                            <div class="detail-item">
+                                <strong>Total Data Capacity:</strong> ${data.storage.total_data_capacity}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>Nutanix Suitability</h4>
+                        <div class="detail-item">
+                            <strong>Recommended Role:</strong> ${data.nutanix.recommended_role}
+                        </div>
+                        <div class="detail-item">
+                            <strong>Suitable For:</strong>
+                            <ul style="margin: 0.5rem 0 0 1rem;">
+                                ${(data.nutanix.suitable_for && Array.isArray(data.nutanix.suitable_for) ? data.nutanix.suitable_for.map(item => `<li>${item}</li>`).join('') : '')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            modalDetails.innerHTML = `<p class="error" style="color: var(--cds-support-error);">Error loading details: ${error.message}</p>`;
+        });
+    
+    modal.style.display = 'flex';
+}
+
+function closeProfileModal() {
+    document.getElementById('profile-modal').style.display = 'none';
+}
+
+// Event listeners
+document.getElementById('server_profile').addEventListener('change', function() {
+    updateProfileInfo();
+});
+
+document.getElementById('storage_template').addEventListener('change', function() {
+    const selectedProfile = document.getElementById('server_profile').value;
+    if (selectedProfile) {
+        updateStorageInfo(selectedProfile);
+    }
+});
+
+// Form validation
+document.getElementById('provision-form').addEventListener('submit', function(e) {
+    const requiredFields = this.querySelectorAll('[required]');
+    let isValid = true;
+    
+    requiredFields.forEach(field => {
+        if (!field.value.trim()) {
+            field.style.borderColor = 'var(--cds-support-error)';
+            isValid = false;
+        } else {
+            field.style.borderColor = 'var(--cds-border-subtle)';
+        }
+    });
+    
+    if (!isValid) {
+        e.preventDefault();
+        alert('Please fill in all required fields.');
+        return;
+    }
+    
+    // Show loading state
+    const submitBtn = document.getElementById('provision-btn');
+    submitBtn.textContent = 'Provisioning...';
+    submitBtn.disabled = true;
+});
+
+// Close modal when clicking outside
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('profile-modal');
+    if (event.target === modal) {
+        closeProfileModal();
+    }
+});
+</script>
 {% endblock %}

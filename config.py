@@ -133,3 +133,4 @@ class Config:
             raise ValueError(f"Missing required configuration: {', '.join(missing_vars)}")
         
         return True
+    

@@ -281,3 +281,237 @@ Kickstart References:
 4. **Network Timeouts**: Increase timeout values for slow networks
 
 This automated process eliminates manual intervention while providing full control over the installation and configuration of Nutanix CE on IBM Cloud infrastructure.
+
+## Updates?
+You're absolutely right in your assumption! Let me search through the codebase to show you exactly how these configuration parameters are used in the provisioning process.Based on my analysis of your codebase and the search results, let me explain exactly how the `cluster_role` and `storage_config` parameters are used in the Nutanix provisioning process:
+
+## Configuration Flow
+
+### 1. **Initial Configuration Storage**
+Looking at your `node_provisioner.py`, these parameters are stored in the database during provisioning:
+
+```python
+'nutanix_config': {
+    'ahv_ip': ip_allocation['ahv']['ip_address'],
+    'cvm_ip': ip_allocation['cvm']['ip_address'], 
+    'cluster_ip': ip_allocation.get('cluster', {}).get('ip_address'),
+    'storage_config': node_data['node_config'].get('storage_config', {})
+}
+```
+
+### 2. **Boot Process Configuration**
+In your `boot_service.py`, these configs are used to generate the Foundation configuration:
+
+```python
+def generate_foundation_config(self, node, is_first_node):
+    """Generate Foundation configuration from node data"""
+    nutanix_config = node['nutanix_config']
+    
+    foundation_config = {
+        'cluster_config': {
+            'cluster_name': cluster_name,
+            'cluster_external_ip': str(cluster_ip),
+            'redundancy_factor': 1 if is_first_node else 2
+        },
+        'node_config': {
+            'hypervisor': 'ahv',
+            'hypervisor_ip': nutanix_config['ahv_ip'],
+            'cvm_ip': nutanix_config['cvm_ip']
+        }
+    }
+```
+
+### 3. **Storage Configuration Usage**
+In `generate_storage_config()`, your storage drive configuration is applied:
+
+```python
+def generate_storage_config(self, node):
+    storage_config = {
+        'data_devices': [
+            '/dev/nvme2n1',
+            '/dev/nvme3n1', 
+            '/dev/nvme4n1'
+        ]
+    }
+    
+    # Adjust based on node's storage config if specified
+    if node['nutanix_config'].get('storage_config'):
+        user_storage = node['nutanix_config']['storage_config']
+        if 'data_drives' in user_storage:
+            storage_config['data_devices'] = [
+                f"/dev/{drive}" for drive in user_storage['data_drives']
+            ]
+```
+
+## What Does the Configuration
+
+Based on your code and Nutanix architecture, here's what handles the configuration:
+
+### **Nutanix Foundation Service**
+Foundation service is the primary component that handles cluster creation and node configuration. It validates IP addresses, configures CVM, Host and IPMI addresses, and creates the initial cluster configuration JSON file.
+
+### **Configuration Process**
+
+1. **iPXE Boot**: Server boots from your PXE server with custom iPXE image
+2. **Configuration Download**: Foundation downloads the server config from your `/boot/server/<server_ip>` endpoint
+3. **Foundation Initialization**: Foundation service reads the JSON configuration and applies it
+4. **Role Assignment**: Based on `cluster_role`, Foundation configures the node as:
+   - `compute-storage` (HCI Node): Full compute + storage capabilities
+   - `storage`: Storage-only node that runs AHV but focuses on storage capacity
+   - `compute`: Compute-only node with minimal storage, no CVM
+
+4. **Storage Configuration**: Foundation applies the `storage_config.data_drives` to:
+   - Configure which NVMe drives are used for the Nutanix storage pool
+   - Set up the Storage Pool spanning the specified drives
+   - Configure appropriate metadata distribution
+
+### **Your Implementation**
+
+In your `boot_service.py`, the configuration is delivered via:
+
+1. **iPXE Boot Script**: Generated in `generate_cluster_creation_script()` or `generate_node_addition_script()`
+2. **Server Config Endpoint**: `/boot/server/<server_ip>` provides the detailed JSON configuration
+3. **Foundation Scripts**: Your boot scripts (like `foundation-init.sh`) execute Foundation with the provided config
+
+### **Example Configuration Flow**
+
+```
+1. Server boots → iPXE → Your PXE Server
+2. iPXE script loads Foundation kernel/initrd  
+3. Foundation starts → calls your `/boot/server/<ip>` endpoint
+4. Your server returns JSON with:
+   {
+     "cluster_config": {...},
+     "node_config": {
+       "hypervisor": "ahv",
+       "hypervisor_ip": "10.240.0.51", 
+       "cvm_ip": "10.240.0.101"
+     },
+     "storage_config": {
+       "data_devices": ["/dev/nvme2n1", "/dev/nvme3n1", "/dev/nvme4n1"]
+     }
+   }
+5. Foundation applies configuration:
+   - Sets up node role (compute-storage)
+   - Configures specified storage drives
+   - Joins/creates cluster
+```
+
+### **The Role Impact**
+
+- **`compute-storage`**: Most common HCI node with full processing capacity (CPU), memory (RAM), and data storage capacity. Can run any supported hypervisor and user VMs
+- **`storage`**: Storage nodes only use AHV as hypervisor, no user VMs run on these nodes, used to expand storage capacity without additional hypervisor licenses  
+- **`compute`**: Compute-only nodes expand computing capacity (CPU and memory) with minimal storage, no CVM running on the node
+
+The configuration ensures proper resource allocation and cluster topology based on your specified node roles and storage requirements.
+
+Exactly! You've got it right. Let me trace through how Foundation works in your system:
+
+## Foundation in Your PXE Boot Process
+
+### 1. **Foundation is Part of the Boot Images**
+Looking at your `boot_service.py`, Foundation is delivered as part of the iPXE boot process:
+
+```python
+def generate_cluster_creation_script(self, node):
+    template = f"""#!ipxe
+echo Loading Foundation environment...
+kernel ${{base-url}}/images/vmlinuz-foundation console=tty0 console=ttyS0,115200
+initrd ${{base-url}}/images/initrd-foundation.img
+
+echo Starting cluster creation process...
+imgargs vmlinuz-foundation node_id=${{node_id}} operation=${{operation}} mgmt_ip=${{mgmt_ip}} ...
+boot || goto error
+"""
+```
+
+### 2. **Foundation Images in Your Setup**
+In your `setup.sh`, these Foundation boot files are created:
+
+```bash
+# Extract boot files from Nutanix ISO
+cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-foundation 2>/dev/null || true
+cp /mnt/boot/initrd /var/www/pxe/images/initrd-foundation.img 2>/dev/null || true
+```
+
+These contain:
+- **`vmlinuz-foundation`**: Linux kernel with Foundation service
+- **`initrd-foundation.img`**: Initial RAM disk with Foundation tools and utilities
+
+### 3. **Configuration Delivery Flow**
+
+```
+1. Server PXE boots → Downloads your iPXE script
+2. iPXE script downloads Foundation kernel + initrd from your server
+3. Foundation boots and receives parameters via kernel command line
+4. Foundation calls back to your PXE server: GET /boot/server/<server_ip>
+5. Your server returns JSON configuration
+6. Foundation applies the configuration to the bare metal server
+```
+
+### 4. **Foundation's Role**
+Foundation is essentially a **specialized Linux distribution** that:
+
+- **Boots from network**: Runs entirely in RAM
+- **Discovers hardware**: Identifies storage drives, network interfaces, etc.
+- **Configures networking**: Sets up management, AHV, and CVM IP addresses
+- **Partitions storage**: Configures drives according to your `storage_config`
+- **Installs Nutanix**: Downloads and installs AOS, AHV hypervisor, and CVM
+- **Joins/Creates cluster**: Either creates new cluster or joins existing one
+
+### 5. **Your Configuration Integration**
+
+Looking at your `boot_service.py`, Foundation receives configuration via:
+
+```python
+def get_server_config(self, server_ip):
+    # Foundation calls this endpoint to get configuration
+    return {
+        'server_info': {...},
+        'cluster_config': foundation_config['cluster_config'],
+        'node_config': foundation_config['node_config'], 
+        'storage_config': storage_config,
+        'network_config': network_config
+    }
+```
+
+### 6. **Foundation's Configuration Process**
+
+When Foundation boots on the server, it:
+
+1. **Reads kernel parameters** (node_id, operation, IP addresses)
+2. **Calls your config endpoint**: `GET /boot/server/<management_ip>`
+3. **Receives JSON config** with cluster role, storage drives, network settings
+4. **Applies configuration**:
+   - Partitions and formats the specified NVMe drives (`nvme2n1`, `nvme3n1`, `nvme4n1`)
+   - Sets up the node role (`compute-storage`, `storage`, or `compute`)
+   - Configures network interfaces with the provided IP addresses
+   - Installs and configures Nutanix software stack
+
+### 7. **What Foundation Actually Does**
+
+Based on your `storage_config`:
+```json
+{
+  "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1"],
+  "cluster_role": "compute-storage"
+}
+```
+
+Foundation will:
+- Format `/dev/nvme2n1`, `/dev/nvme3n1`, `/dev/nvme4n1` for Nutanix storage pool
+- Configure the node as a full HCI node (compute + storage)
+- Set up the Controller VM (CVM) to manage storage
+- Install AHV hypervisor for running user VMs
+- Configure cluster networking and join/create the cluster
+
+### 8. **Foundation vs Your PXE Server**
+
+| Component | Responsibility |
+|-----------|----------------|
+| **Your PXE Server** | Stores configurations, serves boot files, tracks deployment status |
+| **Foundation** | Actually configures the bare metal server hardware and software |
+
+So yes, Foundation is the "installer" that gets downloaded to each server and does all the heavy lifting of configuring Nutanix according to the specifications you provide through your PXE/Config server.
+
+Your PXE server is the "orchestrator" that tells Foundation what to do, while Foundation is the "worker" that actually makes it happen on each physical server.

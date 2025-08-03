@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from database import Database
 from ibm_cloud_client import IBMCloudClient
 from config import Config
-from server_profiles import ServerProfileConfig
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +18,7 @@ class NodeProvisioner:
         self.db = Database()
         self.ibm_cloud = IBMCloudClient()
         self.config = Config
+        self.server_profiles = ServerProfileConfig()  # Add this line
         
         # Import cleanup service for error handling
         from cleanup_service import CleanupService
@@ -27,49 +27,57 @@ class NodeProvisioner:
         # Validate required configuration
         self.config.validate_required_config()
         
-        logger.info("NodeProvisioner initialized with Config class and CleanupService")
+        logger.info("NodeProvisioner initialized with Config class, CleanupService, and ServerProfileConfig")
     
     def provision_node(self, node_request):
-        """Main node provisioning orchestration"""
+        """Main node provisioning orchestration with profile-based configuration"""
         node_name = node_request['node_config']['node_name']
+        server_profile = node_request['node_config']['server_profile']
         
         try:
-            logger.info(f"Starting provisioning for node {node_name}")
+            logger.info(f"Starting provisioning for node {node_name} with profile {server_profile}")
             
-            # Step 0: Check if node with same name already exists and is successfully provisioned
+            # Validate server profile
+            if not self.server_profiles.validate_profile(server_profile):
+                raise ValueError(f"Unsupported server profile: {server_profile}")
+            
+            # Auto-generate storage and cluster configuration based on profile
+            enhanced_node_request = self.enhance_node_config_from_profile(node_request)
+            
+            # Step 0: Check if node with same name already exists
             existing_node = self.db.get_node_by_name(node_name)
-            logger.info(f"Checking for existing node with name {node_name}: {existing_node}")
             if existing_node:
-                logger.info(f"Existing node found with status: {existing_node['deployment_status']}")
+                logger.info(f"Checking for existing node with name {node_name}: {existing_node}")
                 if existing_node['deployment_status'] not in ['cleanup_completed', 'failed']:
                     raise Exception(f"Node with name {node_name} already exists and is in status {existing_node['deployment_status']}")
-                # If node is in cleanup_completed or failed status, we can proceed with provisioning
                 logger.info(f"Proceeding with provisioning as existing node is in {existing_node['deployment_status']} status")
             
             # Step 1: Reserve IP addresses
-            ip_allocation = self.reserve_node_ips(node_request['node_config'])
+            ip_allocation = self.reserve_node_ips(enhanced_node_request['node_config'])
             
             # Step 2: Register DNS records
-            dns_records = self.register_node_dns(ip_allocation, node_request['node_config'])
-            
+            dns_records = self.register_node_dns(ip_allocation, enhanced_node_request['node_config'])
+
             # Step 3: Create Virtual Network Interfaces (VNIs)
-            vnis = self.create_node_vnis(ip_allocation, node_request['node_config'])
-            
+            vnis = self.create_node_vnis(ip_allocation, enhanced_node_request['node_config'])
+
             # Step 4: Update configuration database
-            node_id = self.update_config_database(node_request, ip_allocation, vnis)
-            
+            node_id = self.update_config_database(enhanced_node_request, ip_allocation, vnis)
+
             # Step 5: Deploy bare metal server
-            deployment_result = self.deploy_bare_metal_server(node_id, vnis, node_request)
-            
+            deployment_result = self.deploy_bare_metal_server(node_id, vnis, enhanced_node_request)
+
             # Step 6: Initialize monitoring
             self.start_deployment_monitoring(node_id)
-            
+
             return {
                 'node_id': node_id,
                 'deployment_id': deployment_result['id'],
                 'estimated_completion': self.calculate_completion_time(),
-                'monitoring_endpoint': f'/api/status/nodes/{node_id}'
+                'monitoring_endpoint': f'/api/status/nodes/{node_id}',
+                'server_profile_info': self.server_profiles.get_profile_summary(server_profile)
             }
+        
             
         except Exception as e:
             logger.error(f"Node provisioning failed for {node_name}: {str(e)}")
@@ -88,6 +96,43 @@ class NodeProvisioner:
                 logger.error(f"Cleanup service failed for {node_name}: {str(cleanup_error)}")
             
             raise
+
+    def enhance_node_config_from_profile(self, node_request):
+        """
+        Enhance node configuration with server profile-specific settings
+        """
+        server_profile = node_request['node_config']['server_profile']
+        
+        # Get storage template preference (default to nutanix_default)
+        storage_template = node_request['node_config'].get('storage_template', 'nutanix_default')
+        
+        # Get profile-based storage configuration
+        storage_config = self.server_profiles.get_storage_config(server_profile, storage_template)
+        
+        # Get recommended cluster role if not specified
+        if not node_request['node_config'].get('cluster_role'):
+            node_request['node_config']['cluster_role'] = self.server_profiles.get_recommended_cluster_role(server_profile)
+        
+        # Enhance the storage_config with profile-specific drives
+        enhanced_storage_config = {
+            'data_drives': storage_config['data_drives'],
+            'boot_device': storage_config['boot_device'],
+            'hypervisor_device': storage_config['hypervisor_device'],
+            'cvm_device': storage_config['cvm_device'],
+            'raid_config': storage_config['raid_config'],
+            'drive_info': storage_config['drive_info'],
+            'profile_summary': storage_config
+        }
+        
+        # Update the node request with enhanced configuration
+        enhanced_request = node_request.copy()
+        enhanced_request['node_config']['storage_config'] = enhanced_storage_config
+        enhanced_request['node_config']['profile_info'] = self.server_profiles.get_profile_summary(server_profile)
+        
+        logger.info(f"Enhanced storage config for {server_profile}: {len(enhanced_storage_config['data_drives'])} data drives")
+        logger.info(f"Storage drives: {enhanced_storage_config['data_drives']}")
+        
+        return enhanced_request
     
     def reserve_node_ips(self, node_config):
         """Reserve IP addresses for all node components"""
@@ -321,8 +366,11 @@ class NodeProvisioner:
                 logger.error(f"Failed to cleanup VNI {vni_info['name']}: {str(cleanup_error)}")
     
     def update_config_database(self, node_data, ip_allocation, vnis):
-        """Update configuration database with new node"""
+        """Update configuration database with profile-enhanced node data"""
         logger.info(f"Updating database for {node_data['node_config']['node_name']}")
+        
+        # Extract enhanced storage config
+        storage_config = node_data['node_config'].get('storage_config', {})
         
         node_config = {
             'node_name': node_data['node_config']['node_name'],
@@ -346,15 +394,25 @@ class NodeProvisioner:
                 'cvm_dns': f"{node_data['node_config']['node_name']}-cvm.{self.config.DNS_ZONE_NAME}",
                 'cluster_ip': ip_allocation.get('cluster', {}).get('ip_address'),
                 'cluster_dns': f'cluster01.{self.config.DNS_ZONE_NAME}' if ip_allocation.get('cluster') else None,
-                'storage_config': node_data['node_config'].get('storage_config', {})
+                'storage_config': storage_config,  # Include enhanced storage config
+                'profile_info': node_data['node_config'].get('profile_info')  # Include profile summary
             }
         }
         
         # Insert into database
         node_id = self.db.insert_node(node_config)
         
+        # Log storage configuration details
+        if storage_config.get('data_drives'):
+            self.db.log_deployment_event(
+                node_id, 
+                'storage_config', 
+                'success', 
+                f"Storage configured: {len(storage_config['data_drives'])} drives ({storage_config.get('drive_info', {}).get('total_storage_capacity', 'unknown')} total)"
+            )
+        
         # Initialize deployment tracking
-        self.db.log_deployment_event(node_id, 'provisioning', 'success', 'Node configuration created')
+        self.db.log_deployment_event(node_id, 'provisioning', 'success', 'Node configuration created with profile-based storage')
         
         logger.info(f"Database update completed for node ID {node_id}")
         return node_id
