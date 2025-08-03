@@ -472,7 +472,7 @@ class NodeProvisioner:
         user_data = {
             'node_id': node_id,
             'pxe_server': self.config.PXE_SERVER_DNS,
-            'config_endpoint': f'http://{self.config.PXE_SERVER_DNS}:8081/server-config'
+            'config_endpoint': f'http://{self.config.PXE_SERVER_DNS}:8080/server-config'
         }
         
         return base64.b64encode(json.dumps(user_data).encode()).decode()

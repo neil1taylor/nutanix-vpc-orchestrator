@@ -31,7 +31,7 @@ These endpoints handle the iPXE boot process and serve boot-related files.
 
 **Example:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10&mgmt_mac=00:11:22:33:44:55"
+curl "http://localhost:8080/boot/config?mgmt_ip=10.240.0.10&mgmt_mac=00:11:22:33:44:55"
 ```
 
 ### 1.2 Server Configuration
@@ -43,7 +43,7 @@ curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10
 
 **Example:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10"
+curl "http://localhost:8080/boot/server/10.240.0.10"
 ```
 
 ### 1.3 Boot Images
