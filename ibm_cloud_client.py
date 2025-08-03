@@ -163,8 +163,8 @@ class IBMCloudClient:
                 'virtual_network_interface': {'id': primary_vni_id}
             }
             
-            # Additional network attachments
-            network_attachments = [primary_network_attachment]
+            # Additional network attachments (excluding primary)
+            network_attachments = []
             if additional_vnis:
                 for i, vni in enumerate(additional_vnis):
                     attachment = {
