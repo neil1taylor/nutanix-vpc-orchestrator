@@ -37,6 +37,7 @@ class Database:
                             management_ip INET,
                             workload_vnic_id VARCHAR(255),
                             workload_ip INET,
+                            workload_vnics JSONB,
                             nutanix_config JSONB,
                             progress_percentage INTEGER DEFAULT 0,
                             current_phase VARCHAR(100),
@@ -139,11 +140,11 @@ class Database:
                         INSERT INTO nodes (
                             node_name, server_profile, cluster_role,
                             deployment_status, management_vnic_id, management_ip,
-                            workload_vnic_id, workload_ip, nutanix_config
+                            workload_vnic_id, workload_ip, workload_vnics, nutanix_config
                         ) VALUES (
                             %(node_name)s, %(server_profile)s, %(cluster_role)s,
                             %(deployment_status)s, %(management_vnic_id)s, %(management_ip)s,
-                            %(workload_vnic_id)s, %(workload_ip)s, %(nutanix_config)s
+                            %(workload_vnic_id)s, %(workload_ip)s, %(workload_vnics)s, %(nutanix_config)s
                         ) RETURNING id;
                     """, {
                         'node_name': node_config['node_name'],
@@ -154,6 +155,7 @@ class Database:
                         'management_ip': node_config['management_vnic']['ip'],
                         'workload_vnic_id': node_config['workload_vnic']['vnic_id'],
                         'workload_ip': node_config['workload_vnic']['ip'],
+                        'workload_vnics': json.dumps(node_config.get('workload_vnics', {})),
                         'nutanix_config': json.dumps(node_config['nutanix_config'])
                     })
                     
@@ -226,7 +228,7 @@ class Database:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     cur.execute("""
                         SELECT id, node_name, bare_metal_id, management_ip, workload_ip,
-                               management_vnic_id, workload_vnic_id, deployment_status, nutanix_config
+                               management_vnic_id, workload_vnic_id, workload_vnics, deployment_status, nutanix_config
                         FROM nodes WHERE node_name = %s
                     """, (node_name,))
                     

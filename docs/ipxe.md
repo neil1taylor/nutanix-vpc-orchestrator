@@ -22,10 +22,10 @@ The automated boot process follows this sequence:
 
 **Key Functions**:
 ```ipxe
-dhcp                            # Get IP address from DHCP server
-kernel http://server/vmlinuz    # Download and load kernel
-initrd http://server/initrd.img # Download initial ramdisk
-boot                            # Start the kernel
+dhcp                                # Get IP address from DHCP server
+kernel http://pxe-server/vmlinuz    # Download and load kernel
+initrd http://pxe-server/initrd.img # Download initial ramdisk
+boot                                # Start the kernel
 ```
 
 **Boot Parameters Passed**:
@@ -45,7 +45,7 @@ boot                            # Start the kernel
 - Process scheduling
 - Network stack
 
-**In our context**:
+**In this context**:
 - Extracted from Nutanix CE ISO
 - Contains drivers needed for IBM Cloud bare metal hardware
 - Includes network drivers for downloading additional components
@@ -70,14 +70,12 @@ boot                            # Start the kernel
 - Python/shell scripts for automation
 
 **Key Functions**:
-```bash
-# Inside initrd, these processes happen:
+Inside initrd, these processes happen:
 - Hardware detection
 - Network interface initialization
 - Download of kickstart file
 - Preparation for main installation
 - Mounting of installation media
-```
 
 **Why it's needed**:
 - Provides tools needed before the main filesystem is available
@@ -138,7 +136,7 @@ curl               # HTTP client
 ```bash
 %pre --log=/tmp/kickstart-pre.log
 # Downloads configuration files before installation
-wget -O /tmp/nutanix-config.json http://server/config.json
+wget -O /tmp/nutanix-config.json http://pxe-server/config.json
 %end
 ```
 
@@ -155,10 +153,10 @@ wget -O /tmp/nutanix-config.json http://server/config.json
 
 ### Step-by-Step Process
 
-1. **Server Powers On**
+1. **Bare Metal Server Powers On**
    - BIOS/UEFI configured for network boot
    - PXE ROM requests IP via DHCP
-   - DHCP server responds with IP and iPXE script location
+   - The IBM Cloud DHCP server responds with IP and iPXE script location
 
 2. **iPXE Execution**
    ```bash
@@ -222,7 +220,7 @@ IBM Cloud Bare Metal Server    PXE Config Server
 
 ## File Dependencies
 
-### PXE Server Directory Structure
+### PXE/Conifg Server Directory Structure
 ```
 /var/www/pxe/
 ├── configs
@@ -239,14 +237,14 @@ IBM Cloud Bare Metal Server    PXE Config Server
 ### Boot Parameter Flow
 ```bash
 iPXE Script Parameters:
-├── inst.repo=http://server/nutanix-ce/repo
-├── inst.ks=http://server/config/kickstart.cfg
+├── inst.repo=http://pxe-server/nutanix-ce/repo
+├── inst.ks=http://pxe-server/config/kickstart.cfg
 ├── console=tty0 console=ttyS0,115200
 └── ip=dhcp
 
 Kickstart References:
-├── wget http://server/config/nutanix-config.json
-└── wget http://server/nutanix-ce-installer.tar.gz
+├── wget http://pxe-server/config/nutanix-config.json
+└── wget http://pxe-server/nutanix-ce-installer.tar.gz
 ```
 
 ## Security Considerations
@@ -282,13 +280,10 @@ Kickstart References:
 
 This automated process eliminates manual intervention while providing full control over the installation and configuration of Nutanix CE on IBM Cloud infrastructure.
 
-## Updates?
-You're absolutely right in your assumption! Let me search through the codebase to show you exactly how these configuration parameters are used in the provisioning process.Based on my analysis of your codebase and the search results, let me explain exactly how the `cluster_role` and `storage_config` parameters are used in the Nutanix provisioning process:
-
 ## Configuration Flow
 
 ### 1. **Initial Configuration Storage**
-Looking at your `node_provisioner.py`, these parameters are stored in the database during provisioning:
+In `node_provisioner.py`, these parameters are stored in the database during provisioning:
 
 ```python
 'nutanix_config': {
@@ -300,7 +295,7 @@ Looking at your `node_provisioner.py`, these parameters are stored in the databa
 ```
 
 ### 2. **Boot Process Configuration**
-In your `boot_service.py`, these configs are used to generate the Foundation configuration:
+In `boot_service.py`, these configs are used to generate the Foundation configuration:
 
 ```python
 def generate_foundation_config(self, node, is_first_node):
@@ -345,15 +340,13 @@ def generate_storage_config(self, node):
 
 ## What Does the Configuration
 
-Based on your code and Nutanix architecture, here's what handles the configuration:
-
 ### **Nutanix Foundation Service**
 Foundation service is the primary component that handles cluster creation and node configuration. It validates IP addresses, configures CVM, Host and IPMI addresses, and creates the initial cluster configuration JSON file.
 
 ### **Configuration Process**
 
-1. **iPXE Boot**: Server boots from your PXE server with custom iPXE image
-2. **Configuration Download**: Foundation downloads the server config from your `/boot/server/<server_ip>` endpoint
+1. **iPXE Boot**: Server boots from the PXE/Config server with custom iPXE image
+2. **Configuration Download**: Foundation downloads the server config from the `/boot/server/<bare_metal_server_mgmt_ip>` endpoint hosted on the PXE/Config server
 3. **Foundation Initialization**: Foundation service reads the JSON configuration and applies it
 4. **Role Assignment**: Based on `cluster_role`, Foundation configures the node as:
    - `compute-storage` (HCI Node): Full compute + storage capabilities
@@ -365,21 +358,21 @@ Foundation service is the primary component that handles cluster creation and no
    - Set up the Storage Pool spanning the specified drives
    - Configure appropriate metadata distribution
 
-### **Your Implementation**
+### **Implementation**
 
-In your `boot_service.py`, the configuration is delivered via:
+In `boot_service.py`, the configuration is delivered via:
 
 1. **iPXE Boot Script**: Generated in `generate_cluster_creation_script()` or `generate_node_addition_script()`
 2. **Server Config Endpoint**: `/boot/server/<server_ip>` provides the detailed JSON configuration
-3. **Foundation Scripts**: Your boot scripts (like `foundation-init.sh`) execute Foundation with the provided config
+3. **Foundation Scripts**: The boot scripts (like `foundation-init.sh`) execute Foundation with the provided config
 
 ### **Example Configuration Flow**
 
-```
 1. Server boots → iPXE → Your PXE Server
 2. iPXE script loads Foundation kernel/initrd  
 3. Foundation starts → calls your `/boot/server/<ip>` endpoint
 4. Your server returns JSON with:
+   ```bash
    {
      "cluster_config": {...},
      "node_config": {
@@ -391,11 +384,11 @@ In your `boot_service.py`, the configuration is delivered via:
        "data_devices": ["/dev/nvme2n1", "/dev/nvme3n1", "/dev/nvme4n1"]
      }
    }
+   ```
 5. Foundation applies configuration:
    - Sets up node role (compute-storage)
    - Configures specified storage drives
    - Joins/creates cluster
-```
 
 ### **The Role Impact**
 
@@ -405,12 +398,10 @@ In your `boot_service.py`, the configuration is delivered via:
 
 The configuration ensures proper resource allocation and cluster topology based on your specified node roles and storage requirements.
 
-Exactly! You've got it right. Let me trace through how Foundation works in your system:
-
-## Foundation in Your PXE Boot Process
+## Foundation in the PXE Boot Process
 
 ### 1. **Foundation is Part of the Boot Images**
-Looking at your `boot_service.py`, Foundation is delivered as part of the iPXE boot process:
+In `boot_service.py`, Foundation is delivered as part of the iPXE boot process:
 
 ```python
 def generate_cluster_creation_script(self, node):
@@ -426,7 +417,7 @@ boot || goto error
 ```
 
 ### 2. **Foundation Images in Your Setup**
-In your `setup.sh`, these Foundation boot files are created:
+In `setup.sh`, these Foundation boot files are extracted from the Nutanix CE ISO that is downloaded:
 
 ```bash
 # Extract boot files from Nutanix ISO
@@ -441,15 +432,16 @@ These contain:
 ### 3. **Configuration Delivery Flow**
 
 ```
-1. Server PXE boots → Downloads your iPXE script
-2. iPXE script downloads Foundation kernel + initrd from your server
+1. Bare Metal server PXE boots → Downloads the iPXE script from the PXE/Config server
+2. The iPXE script downloads the Foundation kernel and initrd from he PXE/Config server
 3. Foundation boots and receives parameters via kernel command line
-4. Foundation calls back to your PXE server: GET /boot/server/<server_ip>
-5. Your server returns JSON configuration
+4. Foundation calls back to the PXE/Config server: GET /boot/server/<bare_metal_server_mgmt_ip>
+5. The PXE/Config server returns JSON configuration
 6. Foundation applies the configuration to the bare metal server
 ```
 
 ### 4. **Foundation's Role**
+
 Foundation is essentially a **specialized Linux distribution** that:
 
 - **Boots from network**: Runs entirely in RAM
@@ -459,9 +451,9 @@ Foundation is essentially a **specialized Linux distribution** that:
 - **Installs Nutanix**: Downloads and installs AOS, AHV hypervisor, and CVM
 - **Joins/Creates cluster**: Either creates new cluster or joins existing one
 
-### 5. **Your Configuration Integration**
+### 5. **Configuration Integration**
 
-Looking at your `boot_service.py`, Foundation receives configuration via:
+In `boot_service.py`, Foundation receives configuration via:
 
 ```python
 def get_server_config(self, server_ip):
@@ -477,7 +469,7 @@ def get_server_config(self, server_ip):
 
 ### 6. **Foundation's Configuration Process**
 
-When Foundation boots on the server, it:
+When Foundation boots on the bare metal server, it:
 
 1. **Reads kernel parameters** (node_id, operation, IP addresses)
 2. **Calls your config endpoint**: `GET /boot/server/<management_ip>`
@@ -490,7 +482,7 @@ When Foundation boots on the server, it:
 
 ### 7. **What Foundation Actually Does**
 
-Based on your `storage_config`:
+In `storage_config`:
 ```json
 {
   "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1"],
@@ -509,9 +501,9 @@ Foundation will:
 
 | Component | Responsibility |
 |-----------|----------------|
-| **Your PXE Server** | Stores configurations, serves boot files, tracks deployment status |
+| **PXE Server** | Stores configurations, serves boot files, tracks deployment status |
 | **Foundation** | Actually configures the bare metal server hardware and software |
 
-So yes, Foundation is the "installer" that gets downloaded to each server and does all the heavy lifting of configuring Nutanix according to the specifications you provide through your PXE/Config server.
+Foundation is the "installer" that gets downloaded to each server and does all the heavy lifting of configuring Nutanix according to the specifications provided through the PXE/Config server.
 
-Your PXE server is the "orchestrator" that tells Foundation what to do, while Foundation is the "worker" that actually makes it happen on each physical server.
+The PXE/Config server is the "orchestrator" that tells Foundation what to do, while Foundation is the "worker" that actually makes it happen on each physical server.

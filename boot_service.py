@@ -237,6 +237,10 @@ shell
             'cluster_type': node['nutanix_config'].get('cluster_type', 'multi_node')
         }
         
+        # Add workload_vnics data if it exists
+        if node.get('workload_vnics'):
+            response['server_info']['workload_vnics'] = node['workload_vnics']
+        
         return response
     
     def generate_foundation_config(self, node, is_first_node):
@@ -343,5 +347,19 @@ shell
                 'data_services_ip': node['nutanix_config'].get('cluster_ip')
             }
         }
+        
+        # Add additional workload networks if they exist
+        if node.get('workload_vnics'):
+            network_config['additional_workload_networks'] = []
+            for vnic_key, vnic_info in node['workload_vnics'].items():
+                # Skip the first workload network as it's already handled above
+                if vnic_key != 'workload_vni_1':
+                    network_config['additional_workload_networks'].append({
+                        'interface': f"eth{len(network_config['additional_workload_networks']) + 2}",  # eth2, eth3, etc.
+                        'ip': vnic_info['ip'],
+                        'netmask': '255.255.255.0',
+                        'gateway': '10.241.0.1',  # Assuming same gateway for all workload networks
+                        'vlan_config': 'bridge_mode'
+                    })
         
         return network_config

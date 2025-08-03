@@ -335,3 +335,12 @@ class IBMCloudClient:
         except Exception as e:
             logger.error(f"Failed to get DNS records: {str(e)}")
             raise
+    
+    def list_subnets(self):
+        """List all subnets in the VPC using VPC SDK"""
+        try:
+            result = self.vpc_service.list_subnets().get_result()
+            return result.get("subnets", [])
+        except Exception as e:
+            logger.error(f"Failed to list subnets: {str(e)}")
+            raise

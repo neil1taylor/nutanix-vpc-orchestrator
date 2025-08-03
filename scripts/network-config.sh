@@ -20,20 +20,42 @@ if curl -f -o /tmp/network-config.json "$CONFIG_URL" 2>/dev/null; then
     echo "Network configuration downloaded successfully"
     
     # Apply network configuration
-    # This is a placeholder for actual network configuration logic
-    # In a real implementation, this would configure interfaces based on the JSON config
-    
     echo "Applying network configuration..."
     
-    # Example of how network configuration might be applied:
-    # MANAGEMENT_IP=$(jq -r '.network_config.management_network.ip' /tmp/network-config.json)
-    # MANAGEMENT_NETMASK=$(jq -r '.network_config.management_network.netmask' /tmp/network-config.json)
-    # MANAGEMENT_GATEWAY=$(jq -r '.network_config.management_network.gateway' /tmp/network-config.json)
-    # 
-    # if [ -n "$MANAGEMENT_IP" ] && [ "$MANAGEMENT_IP" != "null" ]; then
-    #     echo "Configuring management interface with IP $MANAGEMENT_IP"
-    #     # Actual network configuration commands would go here
-    # fi
+    # Configure management interface
+    MANAGEMENT_IP=$(jq -r '.network_config.management_network.ip' /tmp/network-config.json)
+    MANAGEMENT_NETMASK=$(jq -r '.network_config.management_network.netmask' /tmp/network-config.json)
+    MANAGEMENT_GATEWAY=$(jq -r '.network_config.management_network.gateway' /tmp/network-config.json)
+    
+    if [ -n "$MANAGEMENT_IP" ] && [ "$MANAGEMENT_IP" != "null" ]; then
+        echo "Configuring management interface with IP $MANAGEMENT_IP"
+        # Actual network configuration commands would go here
+    fi
+    
+    # Configure primary workload interface
+    WORKLOAD_IP=$(jq -r '.network_config.workload_network.ip' /tmp/network-config.json)
+    WORKLOAD_NETMASK=$(jq -r '.network_config.workload_network.netmask' /tmp/network-config.json)
+    WORKLOAD_GATEWAY=$(jq -r '.network_config.workload_network.gateway' /tmp/network-config.json)
+    
+    if [ -n "$WORKLOAD_IP" ] && [ "$WORKLOAD_IP" != "null" ]; then
+        echo "Configuring workload interface with IP $WORKLOAD_IP"
+        # Actual network configuration commands would go here
+    fi
+    
+    # Configure additional workload interfaces if they exist
+    ADDITIONAL_WORKLOAD_COUNT=$(jq '.network_config.additional_workload_networks | length' /tmp/network-config.json)
+    
+    if [ "$ADDITIONAL_WORKLOAD_COUNT" != "null" ] && [ "$ADDITIONAL_WORKLOAD_COUNT" -gt 0 ]; then
+        echo "Configuring $ADDITIONAL_WORKLOAD_COUNT additional workload interfaces"
+        
+        for i in $(seq 0 $((ADDITIONAL_WORKLOAD_COUNT - 1))); do
+            INTERFACE_IP=$(jq -r ".network_config.additional_workload_networks[$i].ip" /tmp/network-config.json)
+            if [ -n "$INTERFACE_IP" ] && [ "$INTERFACE_IP" != "null" ]; then
+                echo "Configuring additional workload interface $((i + 2)) with IP $INTERFACE_IP"
+                # Actual network configuration commands would go here
+            fi
+        done
+    fi
     
     echo "Network configuration applied successfully"
 else

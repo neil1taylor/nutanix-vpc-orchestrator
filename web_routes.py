@@ -166,7 +166,7 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
                     },
                     'network_config': {
                         'management_subnet': 'auto',  # Using config defaults
-                        'workload_subnet': 'auto',
+                        'workload_subnets': request.form.getlist('workload_subnets'),
                         'cluster_operation': request.form.get('cluster_operation')
                     },
                     'cluster_config': {
@@ -217,9 +217,19 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
             server_profiles = get_available_server_profiles()
             storage_templates = get_storage_templates()
             
-            return render_template('provision_form.html', 
+            # Get list of workload subnets
+            try:
+                workload_subnets = ibm_cloud.list_subnets()
+                # Filter subnets to only include those in the same VPC
+                workload_subnets = [subnet for subnet in workload_subnets if subnet.get('vpc', {}).get('id') == ibm_cloud.vpc_id]
+            except Exception as e:
+                logger.error(f"Error getting workload subnets: {e}")
+                workload_subnets = []
+            
+            return render_template('provision_form.html',
                                  server_profiles=server_profiles,
-                                 storage_templates=storage_templates)
+                                 storage_templates=storage_templates,
+                                 workload_subnets=workload_subnets)
         except Exception as e:
             logger.error(f"Error loading provision form: {e}")
             flash('Error loading provision form', 'error')

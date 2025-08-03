@@ -63,6 +63,16 @@
                         </select>
                         <div class="form-help">Choose cluster type (single node requires manual cluster creation)</div>
                     </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="workload_subnets">Workload Subnets</label>
+                        <select id="workload_subnets" name="workload_subnets" class="form-select" multiple size="4">
+                            {% for subnet in workload_subnets %}
+                            <option value="{{ subnet.id }}">{{ subnet.name }} ({{ subnet.ipv4_cidr_block }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-help">Select one or more workload subnets for this node (hold Ctrl/Cmd to select multiple)</div>
+                    </div>
                 </div>
 
                 <!-- Profile Information Panel -->

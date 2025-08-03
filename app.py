@@ -188,6 +188,10 @@ def api_provision_node():
         if 'cluster_config' in data:
             node_config['cluster_config'] = data['cluster_config']
         
+        # Add network_config if it exists
+        if 'network_config' in data:
+            node_config['network_config'] = data['network_config']
+        
         # Start provisioning
         result = node_provisioner.provision_node(data)
         

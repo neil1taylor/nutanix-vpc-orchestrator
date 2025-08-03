@@ -89,7 +89,7 @@ These endpoints handle node provisioning and configuration management.
   },
   "network_config": {
     "management_subnet": "auto",
-    "workload_subnet": "auto",
+    "workload_subnets": ["auto"],
     "cluster_operation": "create_new"
   },
   "cluster_config": {
@@ -102,6 +102,10 @@ These endpoints handle node provisioning and configuration management.
 - `cluster_config.cluster_type` (optional): Specify cluster type
   - `"multi_node"` (default): Standard multi-node cluster (3+ nodes)
   - `"single_node"`: Single node cluster requiring manual creation
+- `network_config.workload_subnets` (optional): Specify workload subnets
+  - Array of subnet IDs or "auto" for automatic selection
+  - Default: `["auto"]` (single workload subnet)
+  - Multiple subnets can be specified for multi-homed configurations
 
 **Response:**
 ```json
@@ -131,7 +135,7 @@ curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/node
     },
     "network_config": {
       "management_subnet": "auto",
-      "workload_subnet": "auto",
+      "workload_subnets": ["auto"],
       "cluster_operation": "create_new"
     }
   }'
@@ -152,7 +156,7 @@ curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/node
     },
     "network_config": {
       "management_subnet": "auto",
-      "workload_subnet": "auto",
+      "workload_subnets": ["auto"],
       "cluster_operation": "create_new"
     },
     "cluster_config": {

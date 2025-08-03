@@ -290,14 +290,27 @@ class NodeProvisioner:
             )
             vnis['management_vni'] = mgmt_vni
             
-            # Create workload VNI
-            workload_vni = self.ibm_cloud.create_virtual_network_interface(
-                self.config.WORKLOAD_SUBNET_ID,
-                f"{node_config['node_name']}-workload-vni",
-                ip_allocation['workload']['reservation_id'],
-                [self.config.WORKLOAD_SECURITY_GROUP_ID]
-            )
-            vnis['workload_vni'] = workload_vni
+            # Get workload subnets from node config or use default
+            workload_subnets = node_config.get('network_config', {}).get('workload_subnets', [])
+            if not workload_subnets:
+                # Use default workload subnet if none specified
+                workload_subnets = [self.config.WORKLOAD_SUBNET_ID]
+            
+            # Create workload VNIs for each subnet
+            workload_vnis = []
+            for i, subnet_id in enumerate(workload_subnets):
+                workload_vni = self.ibm_cloud.create_virtual_network_interface(
+                    subnet_id,
+                    f"{node_config['node_name']}-workload-vni-{i+1}",
+                    ip_allocation['workload']['reservation_id'],
+                    [self.config.WORKLOAD_SECURITY_GROUP_ID]
+                )
+                workload_vnis.append(workload_vni)
+            
+            # Store first workload VNI as primary for backward compatibility
+            vnis['workload_vni'] = workload_vnis[0] if workload_vnis else None
+            # Store all workload VNIs
+            vnis['workload_vnis'] = workload_vnis
             
             # Store VNI info for cleanup
             self.db.store_vnic_info(node_config['node_name'], vnis)
@@ -314,15 +327,46 @@ class NodeProvisioner:
     def _cleanup_partial_vnis(self, vnis):
         """Clean up partially created VNIs when creation fails"""
         for vni_type, vni_info in vnis.items():
-            try:
-                self.ibm_cloud.delete_virtual_network_interfaces(vni_info['id'])
-                logger.info(f"Cleaned up VNI: {vni_info['name']}")
-            except Exception as cleanup_error:
-                logger.error(f"Failed to cleanup VNI {vni_info['name']}: {str(cleanup_error)}")
+            # Handle list of VNIs (e.g., workload_vnis)
+            if isinstance(vni_info, list):
+                for vni in vni_info:
+                    self._delete_single_vni(vni)
+            else:
+                # Handle single VNI
+                self._delete_single_vni(vni_info)
+    
+    def _delete_single_vni(self, vni_info):
+        """Delete a single VNI with proper error handling"""
+        try:
+            # First check if the VNI exists
+            self.ibm_cloud.get_virtual_network_interface(vni_info['id'])
+            logger.info(f"Found existing VNI {vni_info['name']}, proceeding with cleanup")
+            
+            # Attempt deletion
+            self.ibm_cloud.delete_virtual_network_interfaces(vni_info['id'])
+            logger.info(f"Successfully cleaned up VNI: {vni_info['name']}")
+        except Exception as cleanup_error:
+            logger.error(f"Failed to cleanup VNI {vni_info['name']}: {str(cleanup_error)}")
+            logger.error(f"VNI info: {json.dumps(vni_info, indent=2)}")
+            if "not found" in str(cleanup_error).lower():
+                logger.warning(f"VNI {vni_info['name']} not found - skipping deletion")
     
     def update_config_database(self, node_data, ip_allocation, vnis):
         """Update configuration database with new node"""
         logger.info(f"Updating database for {node_data['node_config']['node_name']}")
+        
+        # Prepare workload VNIs data
+        workload_vnics_data = {}
+        if 'workload_vnis' in vnis:
+            workload_vnics_data = {
+                f"workload_vni_{i+1}": {
+                    'vnic_id': vni['id'],
+                    'ip': ip_allocation['workload']['ip_address'],  # Same IP for all workload interfaces
+                    'dns_name': f"{node_data['node_config']['node_name']}-workload-{i+1}.{self.config.DNS_ZONE_NAME}",
+                    'subnet_id': vni.get('subnet_id', '')
+                }
+                for i, vni in enumerate(vnis['workload_vnis'])
+            }
         
         node_config = {
             'node_name': node_data['node_config']['node_name'],
@@ -339,6 +383,7 @@ class NodeProvisioner:
                 'ip': ip_allocation['workload']['ip_address'],
                 'dns_name': f"{node_data['node_config']['node_name']}-workload.{self.config.DNS_ZONE_NAME}"
             },
+            'workload_vnics': workload_vnics_data,
             'nutanix_config': {
                 'ahv_ip': ip_allocation['ahv']['ip_address'],
                 'ahv_dns': f"{node_data['node_config']['node_name']}-ahv.{self.config.DNS_ZONE_NAME}",
@@ -380,7 +425,7 @@ class NodeProvisioner:
                 image_id=ipxe_image['id'],
                 primary_vni_id=vnis['management_vni']['id'],
                 ssh_key_ids=[self.config.SSH_KEY_ID],
-                additional_vnis=[vnis['workload_vni']],
+                additional_vnis=vnis.get('workload_vnis', [vnis['workload_vni']]) if vnis.get('workload_vni') else [],
                 user_data=user_data
             )
             
