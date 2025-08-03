@@ -43,7 +43,9 @@ class BootService:
         cluster_operation = self.determine_cluster_operation(node)
         
         # Generate appropriate boot script
-        if cluster_operation == 'create_new':
+        if isinstance(cluster_operation, str) and cluster_operation == 'create_new':
+            boot_script = self.generate_cluster_creation_script(node)
+        elif isinstance(cluster_operation, dict) and cluster_operation.get('operation') == 'create_new':
             boot_script = self.generate_cluster_creation_script(node)
         else:
             boot_script = self.generate_node_addition_script(node, cluster_operation)
@@ -53,26 +55,44 @@ class BootService:
     
     def determine_cluster_operation(self, node):
         """Determine if this node should create or join a cluster"""
-        existing_nodes = self.db.get_nodes_with_status('deployed')
+        # Get cluster information from database
+        cluster_info = self.db.get_cluster_info()
         
+        # If there's an active cluster, join it
+        if cluster_info and cluster_info['status'] == 'active':
+            logger.info(f"Node {node['node_name']} will join existing cluster {cluster_info['cluster_name']}")
+            return {
+                'operation': 'join_existing',
+                'cluster_ip': cluster_info['cluster_ip'],
+                'cluster_name': cluster_info['cluster_name'],
+                'cluster_dns': cluster_info['cluster_dns']
+            }
+        
+        # If this is a single node cluster, prepare for manual creation
+        cluster_type = node['nutanix_config'].get('cluster_type', 'multi_node')
+        if cluster_type == 'single_node':
+            logger.info(f"Node {node['node_name']} is a single node cluster - will be created manually")
+            return {
+                'operation': 'create_new',
+                'cluster_type': 'single_node'
+            }
+        
+        # For multi-node clusters, check if this is the first node
+        existing_nodes = self.db.get_nodes_with_status('deployed')
         if len(existing_nodes) == 0:
-            # This is the first node - create new cluster
-            logger.info(f"Node {node['node_name']} will create new cluster")
-            return 'create_new'
+            # This is the first node - prepare for cluster creation
+            logger.info(f"Node {node['node_name']} will create new multi-node cluster")
+            return {
+                'operation': 'create_new',
+                'cluster_type': 'multi_node'
+            }
         else:
-            # Join existing cluster
-            cluster_info = self.db.get_cluster_info()
-            if cluster_info:
-                logger.info(f"Node {node['node_name']} will join existing cluster {cluster_info['cluster_name']}")
-                return {
-                    'operation': 'join_existing',
-                    'cluster_ip': cluster_info['cluster_ip'],
-                    'cluster_name': cluster_info['cluster_name'],
-                    'cluster_dns': cluster_info['cluster_dns']
-                }
-            else:
-                logger.warning("Existing nodes found but no cluster info - creating new cluster")
-                return 'create_new'
+            # This is an additional node for a multi-node cluster
+            logger.info(f"Node {node['node_name']} will join multi-node cluster after creation")
+            return {
+                'operation': 'join_existing',
+                'cluster_type': 'multi_node'
+            }
     
     def generate_cluster_creation_script(self, node):
         """Generate iPXE script for creating a new cluster"""
@@ -213,7 +233,8 @@ shell
                 'network_setup': '/scripts/network-config.sh',
                 'post_install': '/scripts/post-install.sh'
             },
-            'cluster_operation': cluster_operation
+            'cluster_operation': cluster_operation,
+            'cluster_type': node['nutanix_config'].get('cluster_type', 'multi_node')
         }
         
         return response

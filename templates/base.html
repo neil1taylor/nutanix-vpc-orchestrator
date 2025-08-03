@@ -15,6 +15,7 @@
             <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
             <a href="{{ url_for('nodes') }}" class="nav-item {% if request.endpoint == 'nodes' %}active{% endif %}">Cluster Nodes</a>
             <a href="{{ url_for('deployments') }}" class="nav-item {% if request.endpoint == 'deployments' %}active{% endif %}">Deployments</a>
+            <a href="{{ url_for('clusters') }}" class="nav-item {% if request.endpoint == 'clusters' %}active{% endif %}">Clusters</a>
             <a href="{{ url_for('monitoring') }}" class="nav-item {% if request.endpoint == 'monitoring' %}active{% endif %}">Monitoring</a>
             <a href="{{ url_for('database_viewer') }}" class="nav-item {% if request.endpoint == 'database_viewer' %}active{% endif %}">Database</a>
         </nav>

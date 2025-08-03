@@ -66,6 +66,90 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
             flash('Error loading monitoring data', 'error')
             return render_template('monitoring.html', health_data={})
 
+    @app.route('/clusters')
+    def clusters():
+        """Cluster management view"""
+        try:
+            # Get all clusters
+            clusters = get_all_clusters(db)
+            return render_template('clusters.html', clusters=clusters)
+        except Exception as e:
+            logger.error(f"Error loading clusters: {e}")
+            flash('Error loading clusters data', 'error')
+            return render_template('clusters.html', clusters=[])
+
+    @app.route('/clusters/create', methods=['GET', 'POST'])
+    def web_create_cluster():
+        """Create cluster form"""
+        if request.method == 'POST':
+            try:
+                # Get form data
+                cluster_config = {
+                    'cluster_config': {
+                        'cluster_operation': 'create_new',
+                        'cluster_name': request.form.get('cluster_name'),
+                        'cluster_type': request.form.get('cluster_type'),
+                        'nodes': request.form.getlist('nodes')
+                    }
+                }
+                
+                # Validate required fields
+                if not cluster_config['cluster_config']['cluster_name']:
+                    flash('Please enter a cluster name', 'error')
+                    return render_template('cluster_form.html', available_nodes=get_available_nodes(db))
+                
+                if not cluster_config['cluster_config']['nodes']:
+                    flash('Please select at least one node', 'error')
+                    return render_template('cluster_form.html', available_nodes=get_available_nodes(db))
+                
+                # Validate node count for multi-node clusters
+                if cluster_config['cluster_config']['cluster_type'] == 'multi_node' and len(cluster_config['cluster_config']['nodes']) < 3:
+                    flash('Multi-node clusters require at least 3 nodes', 'warning')
+                
+                # Submit to cluster manager
+                try:
+                    # Import cluster manager
+                    from cluster_manager import ClusterManager
+                    cluster_manager = ClusterManager()
+                    result = cluster_manager.create_cluster(cluster_config)
+                    
+                    flash(f'Cluster "{cluster_config["cluster_config"]["cluster_name"]}" creation started successfully!', 'success')
+                    return redirect(url_for('clusters'))
+                    
+                except Exception as e:
+                    logger.error(f"Error creating cluster: {e}")
+                    flash(f'Error creating cluster: {str(e)}', 'error')
+                    
+            except Exception as e:
+                logger.error(f"Error processing cluster form: {e}")
+                flash(f'Error processing form: {str(e)}', 'error')
+        
+        # GET request - show form
+        try:
+            available_nodes = get_available_nodes(db)
+            return render_template('cluster_form.html', available_nodes=available_nodes)
+        except Exception as e:
+            logger.error(f"Error loading cluster form: {e}")
+            flash('Error loading cluster form', 'error')
+            return redirect(url_for('clusters'))
+
+    @app.route('/cluster/<int:cluster_id>')
+    def cluster_details(cluster_id):
+        """Individual cluster details view"""
+        try:
+            cluster = get_cluster_by_id(db, cluster_id)
+            if not cluster:
+                flash('Cluster not found', 'error')
+                return redirect(url_for('clusters'))
+            
+            # Get nodes in this cluster
+            nodes = get_nodes_by_cluster(db, cluster_id)
+            return render_template('cluster_details.html', cluster=cluster, nodes=nodes)
+        except Exception as e:
+            logger.error(f"Error loading cluster details: {e}")
+            flash('Error loading cluster details', 'error')
+            return redirect(url_for('clusters'))
+
     @app.route('/provision', methods=['GET', 'POST'])
     def web_provision_node():
         """Node provisioning form with server profile integration"""
@@ -84,6 +168,9 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
                         'management_subnet': 'auto',  # Using config defaults
                         'workload_subnet': 'auto',
                         'cluster_operation': request.form.get('cluster_operation')
+                    },
+                    'cluster_config': {
+                        'cluster_type': request.form.get('cluster_type', 'multi_node')
                     }
                 }
                 
@@ -501,7 +588,7 @@ def get_dashboard_stats(db):
                 active_nodes = cursor.fetchone()[0]
                 
                 # Total clusters
-                cursor.execute("SELECT COUNT(DISTINCT cluster_name) FROM nodes WHERE cluster_name IS NOT NULL")
+                cursor.execute("SELECT COUNT(*) FROM clusters")
                 total_clusters = cursor.fetchone()[0]
                 
                 # Total deployments
@@ -981,3 +1068,118 @@ def get_profile_details(server_profile):
     except Exception as e:
         logger.error(f"Error getting profile details for {server_profile}: {e}")
         return None
+def get_all_clusters(db):
+    """Get all clusters"""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, cluster_name, cluster_ip, cluster_dns, node_count, status, created_at, updated_at
+                    FROM clusters 
+                    ORDER BY created_at DESC
+                """)
+                
+                clusters = []
+                for row in cur.fetchall():
+                    clusters.append({
+                        'id': row[0],
+                        'cluster_name': row[1],
+                        'cluster_ip': str(row[2]) if row[2] else None,
+                        'cluster_dns': row[3],
+                        'node_count': row[4],
+                        'status': row[5],
+                        'created_at': row[6],
+                        'updated_at': row[7]
+                    })
+                
+                return clusters
+    except Exception as e:
+        logger.error(f"Error getting clusters: {e}")
+        return []
+
+def get_available_nodes(db):
+    """Get nodes that are not yet assigned to a cluster"""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, node_name, server_profile, deployment_status
+                    FROM nodes 
+                    WHERE cluster_name IS NULL OR cluster_name = ''
+                    ORDER BY created_at DESC
+                """)
+                
+                nodes = []
+                for row in cur.fetchall():
+                    nodes.append({
+                        'id': row[0],
+                        'node_name': row[1],
+                        'server_profile': row[2],
+                        'deployment_status': row[3]
+                    })
+                
+                return nodes
+    except Exception as e:
+        logger.error(f"Error getting available nodes: {e}")
+        return []
+
+def get_cluster_by_id(db, cluster_id):
+    """Get cluster by ID"""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, cluster_name, cluster_ip, cluster_dns, created_by_node, node_count, status, created_at, updated_at
+                    FROM clusters 
+                    WHERE id = %s
+                """, (cluster_id,))
+                
+                row = cur.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'cluster_name': row[1],
+                        'cluster_ip': str(row[2]) if row[2] else None,
+                        'cluster_dns': row[3],
+                        'created_by_node': row[4],
+                        'node_count': row[5],
+                        'status': row[6],
+                        'created_at': row[7],
+                        'updated_at': row[8]
+                    }
+                return None
+    except Exception as e:
+        logger.error(f"Error getting cluster {cluster_id}: {e}")
+        return None
+
+def get_nodes_by_cluster(db, cluster_id):
+    """Get nodes in a specific cluster"""
+    try:
+        # First get the cluster name
+        cluster = get_cluster_by_id(db, cluster_id)
+        if not cluster:
+            return []
+        
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, node_name, server_profile, management_ip, deployment_status
+                    FROM nodes 
+                    WHERE cluster_name = %s
+                    ORDER BY created_at DESC
+                """, (cluster['cluster_name'],))
+                
+                nodes = []
+                for row in cur.fetchall():
+                    nodes.append({
+                        'id': row[0],
+                        'node_name': row[1],
+                        'server_profile': row[2],
+                        'management_ip': str(row[3]) if row[3] else None,
+                        'deployment_status': row[4]
+                    })
+                
+                return nodes
+    except Exception as e:
+        logger.error(f"Error getting nodes for cluster {cluster_id}: {e}")
+        return []

@@ -1,6 +1,6 @@
 Here are the exact curl commands for Phase 1 steps 1 and 2:
 
-## Step 1: Provision First Node (Create New Cluster)
+## Step 1: Provision Node
 
 ```bash
 curl -X POST http://localhost:8080/api/config/nodes \
@@ -10,19 +10,12 @@ curl -X POST http://localhost:8080/api/config/nodes \
       "node_name": "nutanix-poc-bm-node-01",
       "server_profile": "cx3d-metal-48x128",
       "cluster_role": "compute-storage",
-      "storage_config": {
-        "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1"]
-      }
     },
     "network_config": {
-      "management_subnet": "auto",
-      "workload_subnet": "auto",
-      "cluster_operation": "create_new"
+      "workload_subnets": ["WORKLOAD_SUBNET_1_ID" ...]
     }
   }'
 ```
-tail -f /var/log/nutanix-pxe/pxe-server.log
-tail -50 /var/log/nutanix-pxe/pxe-server.log
 
 **Expected Response:**
 ```json
@@ -34,6 +27,65 @@ tail -50 /var/log/nutanix-pxe/pxe-server.log
   "monitoring_endpoint": "/api/status/nodes/1"
 }
 ```
+
+## Step 2: Create Cluster
+
+After the node is deployed, create the cluster:
+
+### For Single Node Cluster:
+```bash
+curl -X POST http://localhost:8080/api/config/clusters \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cluster_config": {
+      "cluster_operation": "create_new",
+      "cluster_name": "single-node-cluster",
+      "cluster_type": "single_node",
+      "nodes": ["nutanix-poc-bm-node-01"]
+    }
+  }'
+```
+
+### For Multi-Node Cluster:
+```bash
+curl -X POST http://localhost:8080/api/config/clusters \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cluster_config": {
+      "cluster_operation": "create_new",
+      "cluster_name": "multi-node-cluster",
+      "cluster_type": "multi_node",
+      "nodes": ["nutanix-poc-bm-node-01", "nutanix-poc-bm-node-02", "nutanix-poc-bm-node-03"]
+    }
+  }'
+```
+
+### Join to an Cluster:
+```bash
+curl -X POST http://localhost:8080/api/config/clusters \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cluster_config": {
+      "cluster_operation": "join_existing",
+      "cluster_name": "multi-node-cluster",
+      "cluster_type": "multi_node",
+      "nodes": ["nutanix-poc-bm-node-04"]
+    }
+  }'
+```
+
+The key points:
+- Node deployment and cluster creation are separate steps
+- Nodes are deployed first with their configuration
+- Clusters are created afterward using the cluster management API
+- For single node clusters, the cluster is created manually via the API
+- For multi-node clusters, Foundation handles cluster creation during node deployment
+
+
+tail -f /var/log/nutanix-pxe/pxe-server.log
+tail -50 /var/log/nutanix-pxe/pxe-server.log
+
+
 
 ## Step 2: Monitor Deployment Progress
 

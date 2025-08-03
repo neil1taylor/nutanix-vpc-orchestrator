@@ -295,3 +295,60 @@ export GITHUB_BRANCH="v1.0.0"
    - Monitor access logs
 
 This deployment guide provides a complete framework for implementing automated Nutanix CE provisioning on IBM Cloud VPC infrastructure using GitHub-based deployment and the two-phase approach.
+
+
+# Single Node Cluster
+Foundation alone will not configure a single node cluster in Nutanix CE. Here's what actually happens:
+
+What Foundation Does:
+
+- Imaging and installation of AOS and hypervisor onto the bare metal server
+- Network configuration (IP addresses for hypervisor, CVM)
+- Initial node preparation but stops short of cluster creation
+- Can be automated via JSON configuration files for unattended installation
+
+Foundation will prepare the node but won't automatically create the single-node cluster
+
+Phase 1: iPXE/PXE Setup Process:
+
+- iPXE boot loads Foundation installer from your PXE server
+- Foundation uses your supplied JSON config file to:
+    - Install AOS and AHV
+    - Configure network settings (CVM IP, host IP, etc.)
+    - Prepare storage devices
+    - Complete initial node setup
+
+Phase 2: Manual Cluster Creation (Post-Foundation), a post-installation script in the PXE orchestration:
+
+- Script waits for CVM to be ready
+- Script SSH into the CVM: ssh nutanix@<cvm_ip> (password: nutanix/4u)
+- Manually create the cluster:
+    - For RF1: cluster -s <cvm_ip> --redundancy_factor=1 --dns_servers <dns_ip> create-
+    - For RF2: cluster -s <cvm_ip> --redundancy_factor=2 --dns_servers <dns_ip> create
+
+# Standard cluster
+Foundation does handle cluster creation for 3+ node clusters automatically.
+
+3+ Node Clusters (Standard):
+- Foundation **automatically creates the cluster** as part of the installation process
+- After imaging all nodes, Foundation proceeds with cluster creation without requiring manual intervention
+- Foundation will then proceed with the imaging (if necessary) and cluster creation process
+
+**Single Node Clusters:**
+- Nutanix removed the checkbox to create a one node cluster
+- Foundation only does the imaging/preparation, then stops
+- Requires manual cluster creation via CLI
+
+## Foundation Multi-Node Process
+
+**Standard 3+ Node Flow:**
+1. **Discovery:** Foundation discovers all nodes to be clustered
+2. **Configuration:** Input cluster details, network settings, node IPs
+3. **Validation:** Network validation across all nodes
+4. **Imaging:** Install AOS and hypervisor on all nodes (if needed)
+5. **Cluster Creation:** Foundation automatically creates the cluster
+6. **Completion:** Once the creation is successful you'll get a completion screen
+
+**Command Reference:**
+- Multi-node: The command to create a three node cluster is: cluster -s <cvm ip1>,<cvm ip2>,<cvm ip3> –dns_servers 1.1.1.1 create
+- Foundation handles this automatically for 3+ nodes

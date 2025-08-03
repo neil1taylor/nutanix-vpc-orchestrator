@@ -269,7 +269,7 @@ setup_system() {
         python3 python3-pip python3-venv \
         postgresql postgresql-contrib \
         nginx git curl wget unzip \
-        bc netstat-nat openssl
+        bc netstat-nat openssl sshpass
 }
 
 setup_ssl() {
@@ -306,6 +306,30 @@ setup_user_and_directories() {
     
     # Set ownership
     chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR" /var/www/pxe /var/log/nutanix-pxe
+}
+
+setup_ssh_keys() {
+    log "Setting up SSH keys for $SERVICE_USER..."
+    
+    # Create .ssh directory for the service user
+    sudo -u "$SERVICE_USER" mkdir -p "/home/$SERVICE_USER/.ssh"
+    sudo -u "$SERVICE_USER" chmod 700 "/home/$SERVICE_USER/.ssh"
+    
+    # Generate SSH key pair if it doesn't exist
+    if [[ ! -f "/home/$SERVICE_USER/.ssh/id_rsa" ]]; then
+        sudo -u "$SERVICE_USER" ssh-keygen -t rsa -b 4096 -f "/home/$SERVICE_USER/.ssh/id_rsa" -N "" -C "nutanix-orchestrator@$(hostname)"
+        log "SSH key pair generated for $SERVICE_USER"
+    else
+        log "SSH key pair already exists for $SERVICE_USER"
+    fi
+    
+    # Set proper permissions
+    sudo -u "$SERVICE_USER" chmod 600 "/home/$SERVICE_USER/.ssh/id_rsa"
+    sudo -u "$SERVICE_USER" chmod 644 "/home/$SERVICE_USER/.ssh/id_rsa.pub"
+    
+    # Create authorized_keys file
+    sudo -u "$SERVICE_USER" touch "/home/$SERVICE_USER/.ssh/authorized_keys"
+    sudo -u "$SERVICE_USER" chmod 600 "/home/$SERVICE_USER/.ssh/authorized_keys"
 }
 
 setup_python() {
@@ -501,6 +525,14 @@ create_utilities() {
 
     chmod +x "$PROJECT_DIR/scripts/run-tests.sh"
     chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/run-tests.sh"
+
+    # Make post-install script executable
+    chmod +x "$PROJECT_DIR/scripts/post-install.sh"
+    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/post-install.sh"
+
+    # Make network-config script executable
+    chmod +x "$PROJECT_DIR/scripts/network-config.sh"
+    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/network-config.sh"
 }
 
 # ============================================================================
@@ -514,6 +546,7 @@ main() {
     # Setup phase
     setup_system
     setup_user_and_directories
+    setup_ssh_keys
     setup_ssl
     setup_python
     setup_database

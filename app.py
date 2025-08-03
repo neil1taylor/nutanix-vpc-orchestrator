@@ -14,6 +14,7 @@ from node_provisioner import NodeProvisioner
 from boot_service import BootService
 from status_monitor import StatusMonitor
 from ibm_cloud_client import IBMCloudClient
+from cluster_manager import ClusterManager
 
 # Configure logging
 class ProxyAwareLogHandler(logging.Handler):
@@ -91,6 +92,7 @@ node_provisioner = NodeProvisioner()
 boot_service = BootService()
 status_monitor = StatusMonitor()
 ibm_cloud = IBMCloudClient()
+cluster_manager = ClusterManager()
 
 # Register web UI routes
 register_web_routes(app, db, node_provisioner, status_monitor)
@@ -182,6 +184,10 @@ def api_provision_node():
             if field not in node_config:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
+        # Add cluster_config if it exists
+        if 'cluster_config' in data:
+            node_config['cluster_config'] = data['cluster_config']
+        
         # Start provisioning
         result = node_provisioner.provision_node(data)
         
@@ -195,6 +201,77 @@ def api_provision_node():
         
     except Exception as e:
         logger.error(f"Node provisioning error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# CLUSTER MANAGEMENT API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/config/clusters', methods=['POST'])
+def api_create_cluster():
+    """Create a new Nutanix cluster from deployed nodes"""
+    try:
+        data = request.get_json()
+        
+        # Validate request
+        if not data or 'cluster_config' not in data:
+            return jsonify({'error': 'Missing cluster_config'}), 400
+        
+        cluster_config = data['cluster_config']
+        required_fields = ['nodes']
+        
+        for field in required_fields:
+            if field not in cluster_config:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Create cluster
+        result = cluster_manager.create_cluster(data)
+        
+        return jsonify({
+            'message': 'Cluster creation initiated successfully',
+            'cluster_id': result['cluster_id'],
+            'cluster_name': result['cluster_name'],
+            'cluster_ip': result['cluster_ip'],
+            'status': result['status'],
+            'message': result['message']
+        }), 202
+        
+    except Exception as e:
+        logger.error(f"Cluster creation error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/clusters/<int:cluster_id>', methods=['GET'])
+def api_get_cluster_info(cluster_id):
+    """Get cluster information"""
+    try:
+        cluster = cluster_manager.get_cluster(cluster_id)
+        if not cluster:
+            return jsonify({'error': 'Cluster not found'}), 404
+        
+        return jsonify(cluster)
+        
+    except Exception as e:
+        logger.error(f"Get cluster error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/clusters', methods=['GET'])
+def api_list_clusters():
+    """List all clusters"""
+    try:
+        clusters = cluster_manager.list_clusters()
+        return jsonify({'clusters': clusters})
+    except Exception as e:
+        logger.error(f"List clusters error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/clusters/<int:cluster_id>', methods=['DELETE'])
+def api_delete_cluster(cluster_id):
+    """Delete cluster information"""
+    try:
+        cluster_manager.delete_cluster(cluster_id)
+        return jsonify({'message': f'Cluster {cluster_id} deleted successfully'})
+    except Exception as e:
+        logger.error(f"Delete cluster error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/config/nodes/<int:node_id>', methods=['GET'])

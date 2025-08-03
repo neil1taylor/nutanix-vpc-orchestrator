@@ -91,9 +91,17 @@ These endpoints handle node provisioning and configuration management.
     "management_subnet": "auto",
     "workload_subnet": "auto",
     "cluster_operation": "create_new"
+  },
+  "cluster_config": {
+    "cluster_type": "single_node"
   }
 }
 ```
+
+**Additional Parameters:**
+- `cluster_config.cluster_type` (optional): Specify cluster type
+  - `"multi_node"` (default): Standard multi-node cluster (3+ nodes)
+  - `"single_node"`: Single node cluster requiring manual creation
 
 **Response:**
 ```json
@@ -108,7 +116,7 @@ These endpoints handle node provisioning and configuration management.
 
 **Examples:**
 
-Create First Node (New Cluster):
+Create First Node (Multi-Node Cluster - Default):
 ```bash
 curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes \
   -H "Content-Type: application/json" \
@@ -125,6 +133,30 @@ curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/node
       "management_subnet": "auto",
       "workload_subnet": "auto",
       "cluster_operation": "create_new"
+    }
+  }'
+```
+
+Create First Node (Single Node Cluster):
+```bash
+curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "node_config": {
+      "node_name": "nutanix-poc-bm-node-01",
+      "server_profile": "bx2d-metal-48x192",
+      "cluster_role": "compute",
+      "storage_config": {
+        "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1", "nvme5n1"]
+      }
+    },
+    "network_config": {
+      "management_subnet": "auto",
+      "workload_subnet": "auto",
+      "cluster_operation": "create_new"
+    },
+    "cluster_config": {
+      "cluster_type": "single_node"
     }
   }'
 ```
@@ -168,6 +200,96 @@ curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes"
 These endpoints provide deployment progress tracking and monitoring.
 
 ### 3.1 Node Status
+
+## 4. Cluster Management API (`/api/config/clusters`)
+
+These endpoints handle cluster creation and configuration after node deployment.
+
+### 4.1 Create Cluster
+**Endpoint:** `POST /api/config/clusters`
+**Purpose:** Create a new Nutanix cluster from deployed nodes
+**Usage:** Create either single node or multi-node clusters after nodes are deployed
+
+**Request Body:**
+```json
+{
+  "cluster_config": {
+    "cluster_operation": "create_new",
+    "cluster_name": "my-cluster",
+    "cluster_type": "single_node",
+    "nodes": ["nutanix-poc-bm-node-01"]
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Cluster creation initiated successfully",
+  "cluster_id": 1,
+  "cluster_name": "my-cluster",
+  "cluster_ip": "10.240.0.200",
+  "status": "creating",
+  "message": "Single node cluster registered. Use cluster manager to create the cluster."
+}
+```
+
+**Examples:**
+
+Create Single Node Cluster:
+```bash
+curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cluster_config": {
+      "cluster_operation": "create_new",
+      "cluster_name": "single-node-cluster",
+      "cluster_type": "single_node",
+      "nodes": ["nutanix-poc-bm-node-01"]
+    }
+  }'
+```
+
+Create Multi-Node Cluster:
+```bash
+curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cluster_config": {
+      "cluster_operation": "create_new",
+      "cluster_name": "multi-node-cluster",
+      "cluster_type": "multi_node",
+      "nodes": ["nutanix-poc-bm-node-01", "nutanix-poc-bm-node-02", "nutanix-poc-bm-node-03"]
+    }
+  }'
+```
+
+### 4.2 Get Cluster Information
+**Endpoint:** `GET /api/config/clusters/<cluster_id>`
+**Purpose:** Retrieve detailed information about a specific cluster
+
+**Example:**
+```bash
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters/1"
+```
+
+### 4.3 List All Clusters
+**Endpoint:** `GET /api/config/clusters`
+**Purpose:** List all provisioned clusters
+
+**Example:**
+```bash
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters"
+```
+
+### 4.4 Delete Cluster Information
+**Endpoint:** `DELETE /api/config/clusters/<cluster_id>`
+**Purpose:** Delete cluster information from database (does not delete actual cluster)
+
+**Example:**
+```bash
+curl -X DELETE "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters/1"
+```
 **Endpoint:** `GET /api/status/nodes/<node_id>`
 **Purpose:** Get deployment status for a specific node
 **Usage:** Monitor deployment progress by node ID

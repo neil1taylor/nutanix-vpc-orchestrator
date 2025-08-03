@@ -346,7 +346,8 @@ class NodeProvisioner:
                 'cvm_dns': f"{node_data['node_config']['node_name']}-cvm.{self.config.DNS_ZONE_NAME}",
                 'cluster_ip': ip_allocation.get('cluster', {}).get('ip_address'),
                 'cluster_dns': f'cluster01.{self.config.DNS_ZONE_NAME}' if ip_allocation.get('cluster') else None,
-                'storage_config': node_data['node_config'].get('storage_config', {})
+                'storage_config': node_data['node_config'].get('storage_config', {}),
+                'cluster_type': node_data['node_config'].get('cluster_config', {}).get('cluster_type', 'multi_node')
             }
         }
         

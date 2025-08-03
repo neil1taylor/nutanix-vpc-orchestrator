@@ -157,14 +157,18 @@ class IBMCloudClient:
     def create_bare_metal_server(self, name, profile, image_id, primary_vni_id, ssh_key_ids, additional_vnis=None, user_data=None):
         """Create a bare metal server using VPC SDK"""
         try:
+            # Build network attachments list
+            # Include primary network attachment and any additional ones
+            network_attachments = []
+            
             # Primary network attachment
-            primary_network_attachment = {
+            primary_attachment = {
                 'name': f"{name}-primary-attachment",
                 'virtual_network_interface': {'id': primary_vni_id}
             }
+            network_attachments.append(primary_attachment)
             
-            # Additional network attachments (excluding primary)
-            network_attachments = []
+            # Additional network attachments
             if additional_vnis:
                 for i, vni in enumerate(additional_vnis):
                     attachment = {
@@ -177,7 +181,6 @@ class IBMCloudClient:
                 'name': name,
                 'profile': {'name': profile},
                 'image': {'id': image_id},
-                'primary_network_attachment': primary_network_attachment,
                 'network_attachments': network_attachments,
                 'vpc': {'id': self.vpc_id},
                 'zone': {'name': f"{self.region}-1"},

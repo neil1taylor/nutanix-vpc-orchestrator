@@ -414,6 +414,26 @@ class Database:
             logger.error(f"Failed to register cluster: {str(e)}")
             raise
     
+    def update_node_with_cluster_info(self, node_id, cluster_id, cluster_config):
+        """Update node with cluster information"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE nodes
+                        SET cluster_name = %s, deployment_status = %s, updated_at = NOW()
+                        WHERE id = %s
+                    """, (
+                        cluster_config['cluster_name'],
+                        'cluster_assigned',
+                        node_id
+                    ))
+                    conn.commit()
+                    logger.info(f"Node {node_id} updated with cluster {cluster_config['cluster_name']}")
+        except Exception as e:
+            logger.error(f"Failed to update node {node_id} with cluster info: {str(e)}")
+            raise
+    
     def get_cluster_by_ip(self, cluster_ip):
         """Get cluster by IP address"""
         try:
@@ -456,4 +476,16 @@ class Database:
                     return dict(result) if result else None
         except Exception as e:
             logger.error(f"Failed to get cluster info: {str(e)}")
+            return None
+    
+    def get_cluster_by_id(self, cluster_id):
+        """Get cluster by ID"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("SELECT * FROM clusters WHERE id = %s", (cluster_id,))
+                    result = cur.fetchone()
+                    return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Failed to get cluster {cluster_id}: {str(e)}")
             return None

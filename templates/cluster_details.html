@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Cluster Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1>Cluster Details</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('clusters') }}">Clusters</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">{{ cluster.cluster_name }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{{ cluster.cluster_name }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Cluster Information</h6>
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>ID:</strong></td>
+                                    <td>{{ cluster.id }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Name:</strong></td>
+                                    <td>{{ cluster.cluster_name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Cluster IP:</strong></td>
+                                    <td>{{ cluster.cluster_ip or 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Cluster DNS:</strong></td>
+                                    <td>{{ cluster.cluster_dns or 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if cluster.status == 'active' else 'warning' if cluster.status == 'creating' else 'danger' }}">
+                                            {{ cluster.status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Node Count:</strong></td>
+                                    <td>{{ cluster.node_count }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>{{ cluster.created_at.strftime('%Y-%m-%d %H:%M') if cluster.created_at else 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Last Updated:</strong></td>
+                                    <td>{{ cluster.updated_at.strftime('%Y-%m-%d %H:%M') if cluster.updated_at else 'N/A' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Actions</h6>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-primary" id="refresh-btn">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                                <button class="btn btn-danger" id="delete-btn">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if nodes %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Cluster Nodes</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Node Name</th>
+                                    <th>Server Profile</th>
+                                    <th>Management IP</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for node in nodes %}
+                                <tr>
+                                    <td>{{ node.node_name }}</td>
+                                    <td>{{ node.server_profile }}</td>
+                                    <td>{{ node.management_ip or 'N/A' }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if node.deployment_status == 'deployed' else 'warning' if node.deployment_status == 'provisioning' else 'secondary' }}">
+                                            {{ node.deployment_status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('node_details', node_id=node.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const clusterId = "{{ cluster.id }}";
+        
+        // Handle refresh button
+        document.getElementById('refresh-btn').addEventListener('click', function() {
+            location.reload();
+        });
+        
+        // Handle delete button
+        document.getElementById('delete-btn').addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete this cluster information? This will not delete the actual cluster.')) {
+                fetch(`/api/config/clusters/${clusterId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Error deleting cluster: ' + data.error);
+                    } else {
+                        alert('Cluster deleted successfully');
+                        window.location.href = '/clusters';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error deleting cluster: ' + error.message);
+                });
+            }
+        });
+    });
+</script>
+{% endblock %}

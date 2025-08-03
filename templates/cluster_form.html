@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Create Cluster{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1>Create New Cluster</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('clusters') }}">Clusters</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Create Cluster</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Cluster Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="cluster-form" method="POST">
+                        <div class="mb-3">
+                            <label for="cluster_name" class="form-label">Cluster Name</label>
+                            <input type="text" class="form-control" id="cluster_name" name="cluster_name" required>
+                            <div class="form-text">Enter a unique name for your cluster</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="cluster_type" class="form-label">Cluster Type</label>
+                            <select class="form-select" id="cluster_type" name="cluster_type" required>
+                                <option value="single_node">Single Node Cluster</option>
+                                <option value="multi_node">Multi-Node Cluster</option>
+                            </select>
+                            <div class="form-text">Select the type of cluster to create</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Available Nodes</label>
+                            <div id="available-nodes-container">
+                                {% if available_nodes %}
+                                    {% for node in available_nodes %}
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input node-checkbox" type="checkbox" 
+                                               name="nodes" value="{{ node.node_name }}" 
+                                               id="node_{{ node.id }}">
+                                        <label class="form-check-label" for="node_{{ node.id }}">
+                                            {{ node.node_name }} ({{ node.server_profile }}) - {{ node.deployment_status }}
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted">No available nodes found. Please deploy nodes first.</p>
+                                {% endif %}
+                            </div>
+                            <div class="form-text">Select nodes to include in the cluster</div>
+                        </div>
+
+                        <div class="mb-3" id="node-count-warning" style="display: none;">
+                            <div class="alert alert-warning" role="alert">
+                                <strong>Warning:</strong> Multi-node clusters require at least 3 nodes for production use.
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('clusters') }}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Create Cluster</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const clusterTypeSelect = document.getElementById('cluster_type');
+        const nodeCheckboxes = document.querySelectorAll('.node-checkbox');
+        const submitBtn = document.getElementById('submit-btn');
+        const nodeCountWarning = document.getElementById('node-count-warning');
+        
+        // Update form validation when cluster type changes
+        clusterTypeSelect.addEventListener('change', updateFormValidation);
+        
+        // Update form validation when node selection changes
+        nodeCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateFormValidation);
+        });
+        
+        // Form submission handler
+        document.getElementById('cluster-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get selected nodes
+            const selectedNodes = Array.from(nodeCheckboxes)
+                .filter(checkbox => checkbox.checked)
+                .map(checkbox => checkbox.value);
+            
+            if (selectedNodes.length === 0) {
+                alert('Please select at least one node');
+                return;
+            }
+            
+            // Get cluster type
+            const clusterType = clusterTypeSelect.value;
+            
+            // Validate node count for multi-node clusters
+            if (clusterType === 'multi_node' && selectedNodes.length < 3) {
+                if (!confirm('Multi-node clusters should have at least 3 nodes for production use. Continue anyway?')) {
+                    return;
+                }
+            }
+            
+            // Get cluster name
+            const clusterName = document.getElementById('cluster_name').value;
+            if (!clusterName) {
+                alert('Please enter a cluster name');
+                return;
+            }
+            
+            // Submit form via AJAX
+            submitClusterCreation(clusterName, clusterType, selectedNodes);
+        });
+        
+        function updateFormValidation() {
+            const clusterType = clusterTypeSelect.value;
+            const selectedNodes = Array.from(nodeCheckboxes)
+                .filter(checkbox => checkbox.checked)
+                .map(checkbox => checkbox.value);
+            
+            // Enable submit button if at least one node is selected
+            submitBtn.disabled = selectedNodes.length === 0;
+            
+            // Show warning for multi-node clusters with less than 3 nodes
+            if (clusterType === 'multi_node' && selectedNodes.length > 0 && selectedNodes.length < 3) {
+                nodeCountWarning.style.display = 'block';
+            } else {
+                nodeCountWarning.style.display = 'none';
+            }
+        }
+        
+        function submitClusterCreation(clusterName, clusterType, nodes) {
+            const formData = {
+                cluster_config: {
+                    cluster_operation: 'create_new',
+                    cluster_name: clusterName,
+                    cluster_type: clusterType,
+                    nodes: nodes
+                }
+            };
+            
+            fetch('/api/config/clusters', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error creating cluster: ' + data.error);
+                } else {
+                    alert('Cluster creation initiated successfully!');
+                    window.location.href = '/clusters';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error creating cluster: ' + error.message);
+            });
+        }
+    });
+</script>
+{% endblock %}

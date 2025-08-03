@@ -47,12 +47,21 @@
 
                     <div class="form-group">
                         <label class="form-label" for="cluster_operation">Cluster Operation *</label>
-                        <select id="cluster_operation" name="cluster_operation" class="form-select" required>
+                        <select id="cluster_operation" name="cluster_operation" class="form-select" required onchange="updateClusterOptions()">
                             <option value="">Select operation</option>
                             <option value="create_new">Create New Cluster</option>
                             <option value="join_existing">Join Existing Cluster</option>
                         </select>
                         <div class="form-help">Choose whether to create a new cluster or join existing</div>
+                    </div>
+
+                    <div class="form-group" id="cluster_type_group" style="display: none;">
+                        <label class="form-label" for="cluster_type">Cluster Type</label>
+                        <select id="cluster_type" name="cluster_type" class="form-select">
+                            <option value="multi_node" selected>Multi-Node Cluster (3+ nodes)</option>
+                            <option value="single_node">Single Node Cluster</option>
+                        </select>
+                        <div class="form-help">Choose cluster type (single node requires manual cluster creation)</div>
                     </div>
                 </div>
 
@@ -646,6 +655,17 @@ function closeProfileModal() {
 document.getElementById('server_profile').addEventListener('change', function() {
     updateProfileInfo();
 });
+
+function updateClusterOptions() {
+    const clusterOperation = document.getElementById('cluster_operation').value;
+    const clusterTypeGroup = document.getElementById('cluster_type_group');
+    
+    if (clusterOperation === 'create_new') {
+        clusterTypeGroup.style.display = 'block';
+    } else {
+        clusterTypeGroup.style.display = 'none';
+    }
+}
 
 document.getElementById('storage_template').addEventListener('change', function() {
     const selectedProfile = document.getElementById('server_profile').value;
