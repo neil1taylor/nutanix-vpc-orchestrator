@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}System Monitoring - Nutanix VPC Orchestrator{% endblock %}
+
+{% block breadcrumb %}> System Monitoring{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">System Monitoring</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">System Health Status</h2>
+    </div>
+    <div class="card-content">
+        {% if health_data %}
+        <div class="health-grid">
+            <div class="health-card">
+                <div class="health-icon">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div class="health-info">
+                    <h3>PXE Server</h3>
+                    <span class="status-badge status-{{ health_data.pxe_server.status }}">{{ health_data.pxe_server.status }}</span>
+                    <p>Response Time: {{ health_data.pxe_server.response_time }}</p>
+                </div>
+            </div>
+            
+            <div class="health-card">
+                <div class="health-icon">
+                    <i class="fas fa-database"></i>
+                </div>
+                <div class="health-info">
+                    <h3>Database</h3>
+                    <span class="status-badge status-{{ health_data.database.status }}">{{ health_data.database.status }}</span>
+                    <p>Response Time: {{ health_data.database.response_time }}</p>
+                </div>
+            </div>
+            
+            <div class="health-card">
+                <div class="health-icon">
+                    <i class="fas fa-cloud"></i>
+                </div>
+                <div class="health-info">
+                    <h3>IBM Cloud API</h3>
+                    <span class="status-badge status-{{ health_data.ibm_cloud_api.status }}">{{ health_data.ibm_cloud_api.status }}</span>
+                    <p>Response Time: {{ health_data.ibm_cloud_api.response_time }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ health_data.disk_usage }}</div>
+                <div class="stat-label">Disk Usage</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ health_data.avg_deploy_time }}</div>
+                <div class="stat-label">Avg. Deploy Time</div>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-heartbeat"></i>
+            </div>
+            <h3>No Health Data Available</h3>
+            <p>System health monitoring data is not currently available.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

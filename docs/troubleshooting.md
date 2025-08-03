@@ -2,7 +2,7 @@
 
 ## Run the setup script
 
-`setup.sh` is run during the cloud-int stage via `deploy.sh` but can be run again. Some things will fail as they have been configured
+`setup.sh` is run during the cloud-int stage via `deploy.sh` but can be run again and the output seen on the console as well as `/var/log/nutanix-pxe-setup.log`. When run subsequent times, some things, like the database user, will fail as they have already been configured.
 
 1. SSH to the pxe server
 
@@ -25,8 +25,10 @@ bash setup.sh
 ## Log files
 
 `deploy.sh` logs to `/var/log/nutanix-deployment.log`
-`setup.sh` logs to `/var/log/nutanix-pxe-setup.log`
+`setup.sh` logs to `/var/log/nutanix-pxe-setup.log` tests are logged to `nutanix-pxe-tests.log`
 `app.py`, `ibm_cloud_client.py` logs to `/var/log/nutanix-pxe/pxe-server.log`
+`nginx` logs to `access.log` and `error.log`
+`gunicorn` logs to `/var/log/nutanix-pxe/gunicorn-access.log` and `/var/log/nutanix-pxe/gunicorn-error.log`
 
 
 ## Manualy run the app

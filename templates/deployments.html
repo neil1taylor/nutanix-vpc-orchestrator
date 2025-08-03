@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Deployment History - Nutanix VPC Orchestrator{% endblock %}
+
+{% block breadcrumb %}> Deployment History{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Deployment History</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Recent Deployments</h2>
+    </div>
+    <div class="card-content">
+        {% if deployments %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Deployment ID</th>
+                        <th>Node Name</th>
+                        <th>Phase</th>
+                        <th>Status</th>
+                        <th>Timestamp</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for deployment in deployments %}
+                    <tr>
+                        <td>{{ deployment.id }}</td>
+                        <td>{{ deployment.node_name }}</td>
+                        <td>{{ deployment.phase }}</td>
+                        <td>
+                            <span class="status-badge status-{{ deployment.status }}">
+                                {{ deployment.status }}
+                            </span>
+                        </td>
+                        <td>{{ deployment.timestamp }}</td>
+                        <td>
+                            <a href="{{ url_for('node_details', node_id=deployment.node_id) }}" 
+                               class="btn btn-sm btn-secondary">View Details</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-history"></i>
+            </div>
+            <h3>No Deployment History</h3>
+            <p>No deployment history found in the system.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

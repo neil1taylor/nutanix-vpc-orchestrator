@@ -326,8 +326,8 @@ def api_list_nodes():
                         'server_profile': row[2],
                         'cluster_role': row[3],
                         'deployment_status': row[4],
-                        'management_ip': str(row[5]) if row[6] else None,
-                        'workload_ip': str(row[6]) if row[7] else None,
+                        'management_ip': str(row[5]) if row[5] else None,
+                        'workload_ip': str(row[6]) if row[6] else None,
                         'created_at': row[7].isoformat() if row[7] else None,
                         'updated_at': row[8].isoformat() if row[8] else None
                     })

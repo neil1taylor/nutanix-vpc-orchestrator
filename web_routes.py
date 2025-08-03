@@ -659,7 +659,7 @@ def get_all_nodes(db):
         with db.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    SELECT id, node_name, ip_address, cluster_role, cluster_name,
+                    SELECT id, node_name, management_ip, cluster_role, cluster_name,
                            server_profile, deployment_status, created_at
                     FROM nodes
                     ORDER BY created_at DESC
@@ -690,7 +690,7 @@ def get_deployment_history(db):
             with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT dh.id, n.node_name, dh.phase, dh.status, dh.timestamp,
-                           dh.duration, dh.node_id
+                           dh.node_id
                     FROM deployment_history dh
                     JOIN nodes n ON dh.node_id = n.id
                     ORDER BY dh.timestamp DESC
@@ -704,8 +704,7 @@ def get_deployment_history(db):
                         'phase': row[2],
                         'status': row[3],
                         'timestamp': row[4],
-                        'duration': row[5],
-                        'node_id': row[6]
+                        'node_id': row[5]
                     })
         
         return deployments
@@ -729,7 +728,7 @@ def get_node_by_id(db, node_id):
         with db.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    SELECT id, node_name, ip_address, cluster_role, cluster_name,
+                    SELECT id, node_name, management_ip, cluster_role, cluster_name,
                            server_profile, deployment_status, created_at,
                            progress_percentage, current_phase
                     FROM nodes
@@ -761,7 +760,7 @@ def get_node_deployment_history(db, node_id):
         with db.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    SELECT phase, status, timestamp, duration, logs
+                    SELECT phase, status, timestamp
                     FROM deployment_history
                     WHERE node_id = %s
                     ORDER BY timestamp DESC
@@ -772,9 +771,7 @@ def get_node_deployment_history(db, node_id):
                     history.append({
                         'phase': row[0],
                         'status': row[1],
-                        'timestamp': row[2],
-                        'duration': row[3],
-                        'logs': row[4]
+                        'timestamp': row[2]
                     })
         
         return history

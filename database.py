@@ -68,6 +68,7 @@ class Database:
                             phase VARCHAR(100),
                             status VARCHAR(50),
                             message TEXT,
+                            duration INTEGER DEFAULT 0,
                             timestamp TIMESTAMP DEFAULT NOW()
                         );
                     """)

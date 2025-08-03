@@ -1,4 +1,6 @@
-Here are the exact curl commands for Phase 1 steps 1 and 2:
+# Quick Test
+
+Here are the exact curl commands that can be used for a quick test of the deployment and configuration of a Nutanix node on an IBM Cloud VPC Bare Metal Server:
 
 ## Step 1: Provision Node
 
@@ -12,10 +14,12 @@ curl -X POST http://localhost:8080/api/config/nodes \
       "cluster_role": "compute-storage",
     },
     "network_config": {
-      "workload_subnets": ["WORKLOAD_SUBNET_1_ID" ...]
+      "workload_subnets": ['\"$WORKLOAD_SUBNET_ID\"']
     }
   }'
 ```
+
+`$WORKLOAD_SUBNET_ID` is an environment variable that is loaded from `/etc/profile.d/app-vars.sh`. Files in `/etc/profile.d/` are run when a user logs in and are generally used to set environment variables.
 
 **Expected Response:**
 ```json
@@ -47,6 +51,9 @@ curl -X POST http://localhost:8080/api/config/clusters \
 ```
 
 ### For Multi-Node Cluster:
+
+You need to deploy three bare metal servers
+
 ```bash
 curl -X POST http://localhost:8080/api/config/clusters \
   -H "Content-Type: application/json" \
@@ -136,7 +143,7 @@ while true; do
 done
 ```
 
-## Alternative: Using jq for Better Output
+## Alternative: Using jq for better output
 
 If you have `jq` installed for better JSON parsing:
 
@@ -152,27 +159,3 @@ curl -s http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/status/nodes/1 |
     elapsed_time: .elapsed_time_seconds
   }'
 ```
-
-## For Subsequent Nodes
-
-Once your first node is deployed, add additional nodes with:
-
-```bash
-curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes \
-  -H "Content-Type: application/json" \
-  -d '{
-    "node_config": {
-      "node_name": "nutanix-poc-bm-node-02",
-      "server_profile": "bx2d-metal-48x192",
-      "cluster_role": "compute"
-    },
-    "network_config": {
-      "cluster_operation": "join_existing"
-    }
-  }'
-```
-
-The key differences for additional nodes:
-- Different `node_name`
-- Use `"cluster_operation": "join_existing"` instead of `"create_new"`
-- Storage config is optional for additional nodes
