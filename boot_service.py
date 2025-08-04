@@ -27,7 +27,15 @@ class BootService:
         if mgmt_ip:
             node = self.db.get_node_by_management_ip(mgmt_ip)
         elif node_id:
-            node = self.db.get_node(node_id)
+            # Convert node_id to integer if it's a string
+            try:
+                node_id_int = int(node_id)
+                node = self.db.get_node(node_id_int)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid node_id format: {node_id}")
+                return self.generate_error_boot_script(
+                    f"Invalid node_id format: {node_id}"
+                )
         else:
             logger.warning("No mgmt_ip or node_id provided in iPXE boot request")
             return self.generate_error_boot_script(
