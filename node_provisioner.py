@@ -319,9 +319,16 @@ class NodeProvisioner:
             return vnis
             
         except Exception as e:
+            # Log the VNI information for debugging
+            logger.error(f"VNI creation failed for {node_config['node_name']}, VNI info: {vnis}")
             # Cleanup any successful VNIs before re-raising
             logger.error(f"VNI creation failed for {node_config['node_name']}, initiating cleanup")
-            self._cleanup_partial_vnis(vnis)
+            try:
+                self._cleanup_partial_vnis(vnis)
+                logger.info(f"VNI cleanup completed for {node_config['node_name']}")
+            except Exception as cleanup_error:
+                logger.error(f"VNI cleanup also failed for {node_config['node_name']}: {str(cleanup_error)}")
+                logger.error("WARNING: Orphaned VNIs may exist in IBM Cloud that need manual cleanup")
             raise Exception(f"VNI creation failed: {str(e)}")
     
     def _cleanup_partial_vnis(self, vnis):
@@ -338,16 +345,38 @@ class NodeProvisioner:
     def _delete_single_vni(self, vni_info):
         """Delete a single VNI with proper error handling"""
         try:
+            # Check if vni_info is valid
+            if not vni_info or not isinstance(vni_info, dict):
+                logger.warning(f"Invalid VNI info provided for cleanup: {vni_info}")
+                return
+                
+            # Check if required fields exist
+            if 'id' not in vni_info or 'name' not in vni_info:
+                logger.warning(f"VNI info missing required fields (id/name): {vni_info}")
+                return
+            
             # First check if the VNI exists
-            self.ibm_cloud.get_virtual_network_interface(vni_info['id'])
-            logger.info(f"Found existing VNI {vni_info['name']}, proceeding with cleanup")
+            try:
+                self.ibm_cloud.get_virtual_network_interface(vni_info['id'])
+                logger.info(f"Found existing VNI {vni_info['name']}, proceeding with cleanup")
+            except Exception as check_error:
+                error_str = str(check_error).lower()
+                if "404" in error_str or "not found" in error_str:
+                    logger.info(f"VNI {vni_info['name']} not found (404), no cleanup needed")
+                    return
+                else:
+                    logger.warning(f"Error checking VNI {vni_info['name']} existence: {str(check_error)}, proceeding with deletion attempt")
             
             # Attempt deletion
             self.ibm_cloud.delete_virtual_network_interfaces(vni_info['id'])
             logger.info(f"Successfully cleaned up VNI: {vni_info['name']}")
         except Exception as cleanup_error:
-            logger.error(f"Failed to cleanup VNI {vni_info['name']}: {str(cleanup_error)}")
-            logger.error(f"VNI info: {json.dumps(vni_info, indent=2)}")
+            error_str = str(cleanup_error).lower()
+            if "404" in error_str or "not found" in error_str:
+                logger.info(f"VNI {vni_info.get('name', 'unknown')} not found during deletion, cleanup successful")
+            else:
+                logger.error(f"Failed to cleanup VNI {vni_info.get('name', 'unknown')}: {str(cleanup_error)}")
+                logger.error(f"VNI info: {json.dumps(vni_info, indent=2, default=str)}")
             if "not found" in str(cleanup_error).lower():
                 logger.warning(f"VNI {vni_info['name']} not found - skipping deletion")
     
