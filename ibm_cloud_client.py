@@ -211,7 +211,6 @@ class IBMCloudClient:
                 profile=BareMetalServerProfileIdentityByName(name=profile),
                 initialization=initialization,
                 primary_network_attachment=primary_attachment,
-                network_attachments=network_attachments if network_attachments else None,
                 vpc=VPCIdentityById(id=self.vpc_id),
                 zone=ZoneIdentityByName(name=f"{self.region}-1")
             )

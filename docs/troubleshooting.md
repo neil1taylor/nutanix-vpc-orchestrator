@@ -18,9 +18,22 @@ cd "$PROJECT_DIR"
 chmod +x setup.sh
 bash setup.sh
 bash scripts/reset-database.sh --clear-data --yes
-```
 
-`cat /var/log/nutanix-pxe/pxe-server.log`
+curl -X POST http://localhost:8080/api/config/nodes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "node_config": {
+      "node_name": "nutanix-poc-bm-node-01",
+      "server_profile": "cx3d-metal-48x128",
+      "cluster_role": "compute-storage"
+    },
+    "network_config": {
+      "workload_subnets": ['\"$WORKLOAD_SUBNET_ID\"']
+    }
+  }'
+
+cat /var/log/nutanix-pxe/pxe-server.log
+```
 
 2. Monitor the install in the console
 
