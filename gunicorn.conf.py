@@ -36,7 +36,7 @@ secure_scheme_headers = {
 errorlog = "/var/log/nutanix-pxe/gunicorn-error.log"
 accesslog = "/var/log/nutanix-pxe/gunicorn-access.log"
 loglevel = "info"
-access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
+access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s %(B)s %(p)s'
 
 # Enable access logging. capture_output = True means stdout/stderr from the application will be captured by Gunicorn
 capture_output = True

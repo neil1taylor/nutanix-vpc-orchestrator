@@ -154,6 +154,16 @@ class IBMCloudClient:
                 logger.error(f"Failed to delete VNI {vni_id}: {str(e)}")
             raise
     
+    def get_virtual_network_interface(self, vni_id):
+        """Get a virtual network interface details using VPC SDK"""
+        try:
+            # Based on the available methods in VpcV1, the correct method is:
+            response = self.vpc_service.get_virtual_network_interface(id=vni_id)
+            return response.get_result()
+        except Exception as e:
+            logger.error(f"Failed to get VNI {vni_id}: {str(e)}")
+            raise
+    
     def create_bare_metal_server(self, name, profile, image_id, primary_vni_id, ssh_key_ids, additional_vnis=None, user_data=None):
         """Create a bare metal server using VPC SDK"""
         try:

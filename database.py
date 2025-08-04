@@ -395,16 +395,33 @@ class Database:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     for vnic_type, vnic_info in vnics.items():
-                        cur.execute("""
-                            INSERT INTO vnic_info 
-                            (node_name, vnic_name, vnic_id, vnic_type)
-                            VALUES (%s, %s, %s, %s)
-                        """, (
-                            node_name,
-                            vnic_info['name'],
-                            vnic_info['id'],
-                            vnic_type
-                        ))
+                        # Handle both individual VNI dictionaries and lists of VNI dictionaries
+                        if isinstance(vnic_info, list):
+                            # Handle list of VNIs
+                            for i, vni in enumerate(vnic_info):
+                                if vni and isinstance(vni, dict):
+                                    cur.execute("""
+                                        INSERT INTO vnic_info
+                                        (node_name, vnic_name, vnic_id, vnic_type)
+                                        VALUES (%s, %s, %s, %s)
+                                    """, (
+                                        node_name,
+                                        vni.get('name', f'{vnic_type}_{i}'),
+                                        vni.get('id', ''),
+                                        f'{vnic_type}_{i}'
+                                    ))
+                        elif vnic_info and isinstance(vnic_info, dict):
+                            # Handle individual VNI dictionary
+                            cur.execute("""
+                                INSERT INTO vnic_info
+                                (node_name, vnic_name, vnic_id, vnic_type)
+                                VALUES (%s, %s, %s, %s)
+                            """, (
+                                node_name,
+                                vnic_info.get('name', vnic_type),
+                                vnic_info.get('id', ''),
+                                vnic_type
+                            ))
                     conn.commit()
                     logger.info(f"vNIC info stored for {node_name}")
         except Exception as e:

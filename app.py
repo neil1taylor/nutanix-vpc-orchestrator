@@ -173,16 +173,25 @@ def api_provision_node():
     try:
         data = request.get_json()
         
+        # Log incoming request data
+        logger.info(f"API Request received: {request.method} {request.url}")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request data: {data}")
+        
         # Validate request
         if not data or 'node_config' not in data:
-            return jsonify({'error': 'Missing node_config'}), 400
+            error_response = {'error': 'Missing node_config'}
+            logger.warning(f"Validation failed: {error_response}")
+            return jsonify(error_response), 400
         
         required_fields = ['node_name', 'server_profile']
         node_config = data['node_config']
         
         for field in required_fields:
             if field not in node_config:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
+                error_response = {'error': f'Missing required field: {field}'}
+                logger.warning(f"Validation failed: {error_response}")
+                return jsonify(error_response), 400
         
         # Add cluster_config if it exists
         if 'cluster_config' in data:
@@ -192,20 +201,29 @@ def api_provision_node():
         if 'network_config' in data:
             node_config['network_config'] = data['network_config']
         
+        # Log processed configuration
+        logger.info(f"Processed node configuration: {node_config}")
+        
         # Start provisioning
         result = node_provisioner.provision_node(data)
         
-        return jsonify({
+        # Log successful response
+        response_data = {
             'message': 'Node provisioning initiated successfully',
             'node_id': result['node_id'],
             'deployment_id': result['deployment_id'],
             'estimated_completion': result['estimated_completion'],
             'monitoring_endpoint': result['monitoring_endpoint']
-        }), 202
+        }
+        logger.info(f"API Response (202): {response_data}")
+        
+        return jsonify(response_data), 202
         
     except Exception as e:
+        error_response = {'error': str(e)}
         logger.error(f"Node provisioning error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error response: {error_response}")
+        return jsonify(error_response), 500
 
 # ============================================================================
 # CLUSTER MANAGEMENT API ENDPOINTS
