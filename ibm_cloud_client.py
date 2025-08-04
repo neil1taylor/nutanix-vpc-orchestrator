@@ -192,8 +192,11 @@ class IBMCloudClient:
                     network_attachments.append(attachment)
             
             # Primary network attachment
-            primary_attachment = BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById(
-                id=primary_vni_id
+            primary_attachment = BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface(
+                name=f"{name}-primary-attachment",
+                virtual_network_interface=BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById(
+                    id=primary_vni_id
+                )
             )
             
             # Create initialization prototype
