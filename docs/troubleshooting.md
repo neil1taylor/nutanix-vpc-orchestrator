@@ -20,6 +20,8 @@ bash setup.sh
 bash scripts/reset-database.sh --clear-data --yes
 ```
 
+`cat /var/log/nutanix-pxe/pxe-server.log`
+
 2. Monitor the install in the console
 
 
