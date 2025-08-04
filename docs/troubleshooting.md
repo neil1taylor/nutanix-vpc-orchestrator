@@ -18,6 +18,7 @@ cd "$PROJECT_DIR"
 chmod +x setup.sh
 bash setup.sh
 bash scripts/reset-database.sh --clear-data --yes
+```
 
 2. Monitor the install in the console
 

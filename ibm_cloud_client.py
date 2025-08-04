@@ -185,7 +185,6 @@ class IBMCloudClient:
             
             # Primary network attachment
             primary_attachment = BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface(
-                name=f"{name}-primary-attachment",
                 virtual_network_interface=BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById(
                     id=primary_vni_id
                 )
@@ -196,7 +195,6 @@ class IBMCloudClient:
             if additional_vnis:
                 for i, vni in enumerate(additional_vnis):
                     attachment = BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface(
-                        name=f"{name}-attachment-{i+1}",
                         virtual_network_interface=BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById(
                             id=vni['id']
                         )
