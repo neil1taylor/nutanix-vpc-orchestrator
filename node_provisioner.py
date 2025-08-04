@@ -486,11 +486,8 @@ class NodeProvisioner:
     
     def generate_user_data(self, node_id):
         """Generate user data for server initialization"""
-        # Create iPXE script for network boot
-        user_data = f"""#!ipxe
-dhcp
-chain http://{self.config.PXE_SERVER_DNS}:8080/boot/node/{node_id}
-"""
+        # Create URL for iPXE boot script
+        user_data = f"http://{self.config.PXE_SERVER_DNS}:8080/boot/config?node_id={node_id}"
         
         return base64.b64encode(user_data.encode()).decode()
     

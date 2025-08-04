@@ -207,6 +207,7 @@ class IBMCloudClient:
             )
             
             if user_data:
+                logger.info(f"User data being sent: {user_data}")
                 initialization.user_data = user_data
             
             # Create bare metal server prototype

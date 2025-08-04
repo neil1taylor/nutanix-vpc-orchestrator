@@ -207,3 +207,19 @@ BareMetalServerPrototype.
 ```
 
 `python3 -c "from ibm_vpc.vpc_v1 import BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface; print(BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface.__doc__)"`
+
+This iPXE script:
+
+Uses the #!ipxe shebang to indicate it's an iPXE script
+Issues a dhcp command to configure the network interface
+Uses the chain command to load another iPXE script from our PXE server at the endpoint /boot/node/{node_id}
+
+
+#!ipxe
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+ntp time.adn.networklayer.com
+initrd --name initrd http://pxe-server/initrd.img
+kernel http://pxe-server/vmlinuz console=tty0 console=ttyS0,115200
+boot
