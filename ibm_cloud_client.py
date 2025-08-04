@@ -167,38 +167,63 @@ class IBMCloudClient:
     def create_bare_metal_server(self, name, profile, image_id, primary_vni_id, ssh_key_ids, additional_vnis=None, user_data=None):
         """Create a bare metal server using VPC SDK"""
         try:
+            from ibm_vpc.vpc_v1 import (
+                BareMetalServerPrototype,
+                BareMetalServerProfileIdentityByName,
+                BareMetalServerInitializationPrototype,
+                ImageIdentityById,
+                KeyIdentityById,
+                VPCIdentityById,
+                ZoneIdentityByName,
+                BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface,
+                BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById
+            )
+            
             # Build network attachments list
             # Include primary network attachment and any additional ones
             network_attachments = []
             
             # Primary network attachment
-            primary_attachment = {
-                'name': f"{name}-primary-attachment",
-                'virtual_network_interface': {'id': primary_vni_id}
-            }
+            primary_attachment = BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface(
+                name=f"{name}-primary-attachment",
+                virtual_network_interface=BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById(
+                    id=primary_vni_id
+                )
+            )
             network_attachments.append(primary_attachment)
             
             # Additional network attachments
             if additional_vnis:
                 for i, vni in enumerate(additional_vnis):
-                    attachment = {
-                        'name': f"{name}-attachment-{i+1}",
-                        'virtual_network_interface': {'id': vni['id']}
-                    }
+                    attachment = BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface(
+                        name=f"{name}-attachment-{i+1}",
+                        virtual_network_interface=BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById(
+                            id=vni['id']
+                        )
+                    )
                     network_attachments.append(attachment)
             
-            bare_metal_server_prototype = {
-                'name': name,
-                'profile': {'name': profile},
-                'image': {'id': image_id},
-                'network_attachments': network_attachments,
-                'vpc': {'id': self.vpc_id},
-                'zone': {'name': f"{self.region}-1"},
-                'keys': [{'id': key_id} for key_id in ssh_key_ids]
-            }
+            # Create initialization prototype
+            initialization = BareMetalServerInitializationPrototype(
+                image=ImageIdentityById(id=image_id),
+                keys=[KeyIdentityById(id=key_id) for key_id in ssh_key_ids]
+            )
             
             if user_data:
-                bare_metal_server_prototype['user_data'] = user_data
+                initialization.user_data = user_data
+            
+            # Create bare metal server prototype
+            bare_metal_server_prototype = BareMetalServerPrototype(
+                name=name,
+                profile=BareMetalServerProfileIdentityByName(name=profile),
+                initialization=initialization,
+                network_attachments=network_attachments,
+                vpc=VPCIdentityById(id=self.vpc_id),
+                zone=ZoneIdentityByName(name=f"{self.region}-1")
+            )
+            
+            # Debug logging to see what parameters are being passed
+            logger.info(f"Bare metal server prototype: {bare_metal_server_prototype.to_dict()}")
             
             result = self.vpc_service.create_bare_metal_server(
                 bare_metal_server_prototype=bare_metal_server_prototype
@@ -212,6 +237,11 @@ class IBMCloudClient:
             }
         except Exception as e:
             logger.error(f"Failed to create bare metal server {name}: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            logger.error(f"Exception args: {e.args}")
+            # Log the full traceback
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             raise
     
     def delete_bare_metal_server(self, server_id):
