@@ -128,6 +128,26 @@ class Database:
                     
                     conn.commit()
                     logger.info("Database initialized successfully")
+                    
+                    # Add missing columns to existing tables if needed
+                    try:
+                        # Add workload_vnics column to nodes table if it doesn't exist
+                        cur.execute("""
+                            ALTER TABLE nodes
+                            ADD COLUMN IF NOT EXISTS workload_vnics JSONB
+                        """)
+                        
+                        # Add duration column to deployment_history table if it doesn't exist
+                        cur.execute("""
+                            ALTER TABLE deployment_history
+                            ADD COLUMN IF NOT EXISTS duration INTEGER DEFAULT 0
+                        """)
+                        
+                        conn.commit()
+                        logger.info("Database schema updated successfully")
+                    except Exception as e:
+                        logger.error(f"Failed to update database schema: {str(e)}")
+                        conn.rollback()
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")
             raise

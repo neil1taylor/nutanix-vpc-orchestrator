@@ -11,7 +11,7 @@ curl -X POST http://localhost:8080/api/config/nodes \
     "node_config": {
       "node_name": "nutanix-poc-bm-node-01",
       "server_profile": "cx3d-metal-48x128",
-      "cluster_role": "compute-storage",
+      "cluster_role": "compute-storage"
     },
     "network_config": {
       "workload_subnets": ['\"$WORKLOAD_SUBNET_ID\"']
