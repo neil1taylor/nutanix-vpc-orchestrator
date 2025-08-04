@@ -176,7 +176,8 @@ class IBMCloudClient:
                 VPCIdentityById,
                 ZoneIdentityByName,
                 BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface,
-                BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById
+                BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById,
+                BareMetalServerPrototypeBareMetalServerByNetworkAttachment
             )
             
             # Build network attachments list
@@ -207,10 +208,11 @@ class IBMCloudClient:
                 initialization.user_data = user_data
             
             # Create bare metal server prototype
-            bare_metal_server_prototype = BareMetalServerPrototype(
+            bare_metal_server_prototype = BareMetalServerPrototypeBareMetalServerByNetworkAttachment(
                 name=name,
                 profile=BareMetalServerProfileIdentityByName(name=profile),
                 initialization=initialization,
+                network_attachments=network_attachments,
                 vpc=VPCIdentityById(id=self.vpc_id),
                 zone=ZoneIdentityByName(name=f"{self.region}-1")
             )
