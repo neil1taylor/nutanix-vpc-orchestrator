@@ -19,24 +19,39 @@ class BootService:
         workload_ip = request_args.get('workload_ip')
         workload_mac = request_args.get('workload_mac')
         server_serial = request_args.get('serial')
+        node_id = request_args.get('node_id')
         
         logger.info(f"iPXE boot request from {mgmt_ip} (MAC: {mgmt_mac})")
         
         # Look up server in database
-        node = self.db.get_node_by_management_ip(mgmt_ip)
+        if mgmt_ip:
+            node = self.db.get_node_by_management_ip(mgmt_ip)
+        elif node_id:
+            node = self.db.get_node(node_id)
+        else:
+            logger.warning("No mgmt_ip or node_id provided in iPXE boot request")
+            return self.generate_error_boot_script(
+                "No mgmt_ip or node_id provided in iPXE boot request"
+            )
         
         if not node:
-            logger.warning(f"Server {mgmt_ip} not found in configuration database")
-            return self.generate_error_boot_script(
-                f"Server {mgmt_ip} not found in configuration database"
-            )
+            if mgmt_ip:
+                logger.warning(f"Server {mgmt_ip} not found in configuration database")
+                return self.generate_error_boot_script(
+                    f"Server {mgmt_ip} not found in configuration database"
+                )
+            else:
+                logger.warning(f"Node {node_id} not found in configuration database")
+                return self.generate_error_boot_script(
+                    f"Node {node_id} not found in configuration database"
+                )
         
         # Update deployment status
         self.db.log_deployment_event(
-            node['id'], 
-            'ipxe_boot', 
+            node['id'],
+            'ipxe_boot',
             'in_progress',
-            f"iPXE boot initiated from {mgmt_ip}"
+            f"iPXE boot initiated from {mgmt_ip or node.get('management_ip', 'unknown')}"
         )
         
         # Determine cluster operation

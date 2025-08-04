@@ -497,6 +497,17 @@ class Database:
             logger.error(f"Failed to get nodes with status {status}: {str(e)}")
             return []
     
+    def get_all_nodes(self):
+        """Get all nodes in the database"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("SELECT * FROM nodes ORDER BY created_at DESC")
+                    return [dict(row) for row in cur.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to get all nodes: {str(e)}")
+            return []
+    
     def is_first_node(self):
         """Check if this is the first node (no existing deployed nodes)"""
         try:

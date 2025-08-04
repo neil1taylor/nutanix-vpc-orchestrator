@@ -178,13 +178,21 @@ class IBMCloudClient:
                 BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterface,
                 BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById,
                 BareMetalServerPrototypeBareMetalServerByNetworkAttachment,
-                BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfacePrototypeBareMetalServerNetworkAttachmentContext
+                BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfacePrototypeBareMetalServerNetworkAttachmentContext,
+                ResourceGroupIdentityById
             )
             
             # Build network attachments list
             # Include primary network attachment and any additional ones
-            # Additional network attachments (excluding primary)
             network_attachments = []
+            
+            # Primary network attachment
+            primary_attachment = BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById(
+                id=primary_vni_id
+            )
+            network_attachments.append(primary_attachment)
+            
+            # Additional network attachments
             if additional_vnis:
                 for i, vni in enumerate(additional_vnis):
                     attachment = BareMetalServerNetworkAttachmentPrototypeVirtualNetworkInterfaceVirtualNetworkInterfaceIdentityVirtualNetworkInterfaceIdentityById(
@@ -192,8 +200,8 @@ class IBMCloudClient:
                     )
                     network_attachments.append(attachment)
             
-            # Primary network attachment
-            primary_attachment = {
+            # Primary network attachment (for backward compatibility)
+            primary_attachment_dict = {
                 'name': f"{name}-primary-attachment",
                 'virtual_network_interface': {
                     'id': primary_vni_id
@@ -215,9 +223,10 @@ class IBMCloudClient:
                 name=name,
                 profile=BareMetalServerProfileIdentityByName(name=profile),
                 initialization=initialization,
-                primary_network_attachment=primary_attachment,
+                network_attachments=network_attachments,
                 vpc=VPCIdentityById(id=self.vpc_id),
-                zone=ZoneIdentityByName(name=f"{self.region}-1")
+                zone=ZoneIdentityByName(name=f"{self.region}-1"),
+                resource_group=ResourceGroupIdentityById(id=self.config.RESOURCE_GROUP_ID)
             )
             
             # Debug logging to see what parameters are being passed
