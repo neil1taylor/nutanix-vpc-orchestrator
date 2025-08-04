@@ -533,6 +533,10 @@ create_utilities() {
     # Make network-config script executable
     chmod +x "$PROJECT_DIR/scripts/network-config.sh"
     chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/network-config.sh"
+
+    # Make database reset script executable
+    chmod +x "$PROJECT_DIR/scripts/reset-database.sh"
+    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/reset-database.sh"
 }
 
 # ============================================================================
