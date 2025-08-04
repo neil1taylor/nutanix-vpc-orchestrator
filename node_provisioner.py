@@ -489,7 +489,7 @@ class NodeProvisioner:
         # Create URL for iPXE boot script
         user_data = f"http://{self.config.PXE_SERVER_DNS}:8080/boot/config?node_id={node_id}"
         
-        return base64.b64encode(user_data.encode()).decode()
+        return user_data
     
     def start_deployment_monitoring(self, node_id):
         """Initialize deployment monitoring for the node"""
