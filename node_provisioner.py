@@ -486,13 +486,21 @@ class NodeProvisioner:
     
     def generate_user_data(self, node_id):
         """Generate user data for server initialization"""
-        user_data = {
-            'node_id': node_id,
-            'pxe_server': self.config.PXE_SERVER_DNS,
-            'config_endpoint': f'http://{self.config.PXE_SERVER_DNS}:8080/server-config'
-        }
+        # Create iPXE script for network boot
+        user_data = f"""#!ipxe
+echo Loading Foundation environment...
+kernel http://{self.config.PXE_SERVER_DNS}/images/vmlinuz-foundation console=tty0 console=ttyS0,115200 node_id={node_id}
+initrd http://{self.config.PXE_SERVER_DNS}/images/initrd-foundation.img
+echo Starting cluster creation process...
+imgargs vmlinuz-foundation node_id={node_id} pxe_server={self.config.PXE_SERVER_DNS} config_endpoint=http://{self.config.PXE_SERVER_DNS}:8080/server-config
+boot || goto error
+
+:error
+echo Boot failed, dropping to shell
+shell
+"""
         
-        return base64.b64encode(json.dumps(user_data).encode()).decode()
+        return base64.b64encode(user_data.encode()).decode()
     
     def start_deployment_monitoring(self, node_id):
         """Initialize deployment monitoring for the node"""
