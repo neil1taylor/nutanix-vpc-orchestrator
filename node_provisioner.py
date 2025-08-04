@@ -486,8 +486,13 @@ class NodeProvisioner:
     
     def generate_user_data(self, node_id):
         """Generate user data for server initialization"""
-        # Create URL for iPXE boot script
-        user_data = f"http://{self.config.PXE_SERVER_DNS}:8080/boot/config?node_id={node_id}"
+        # Get node information
+        node = self.db.get_node(node_id)
+        if not node:
+            raise Exception(f"Node with ID {node_id} not found")
+        
+        # Create URL for iPXE boot script with both node_id and mgmt_ip
+        user_data = f"http://{self.config.PXE_SERVER_DNS}:8080/boot/config?node_id={node_id}&mgmt_ip={node['management_ip']}"
         
         return user_data
     
