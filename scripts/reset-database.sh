@@ -11,6 +11,9 @@ DB_NAME="${DB_NAME:-nutanix_pxe}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 
+# Global flag to skip confirmation prompts
+SKIP_CONFIRMATION=false
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -34,6 +37,7 @@ Usage: $0 [OPTIONS]
 Options:
     --clear-data    Clear all data from tables (keeps schema)
     --drop-create   Drop and recreate the database
+    -y, --yes       Skip confirmation prompts
     --help, -h      Show this help message
 
 Environment Variables:
@@ -46,7 +50,9 @@ Environment Variables:
 Examples:
     $0 --clear-data
     $0 --drop-create
-    DB_USER=admin DB_PASSWORD=secret $0 --clear-data
+    $0 --clear-data -y
+    $0 --drop-create --yes
+    DB_USER=admin DB_PASSWORD=secret $0 --clear-data -y
 
 EOF
 }
@@ -83,11 +89,16 @@ test_connection() {
 # Function to clear all data from tables
 clear_data() {
     log_warning "This will DELETE ALL DATA from the database!"
-    read -p "Are you sure you want to continue? (type 'yes' to confirm): " confirmation
     
-    if [[ "$confirmation" != "yes" ]]; then
-        log_info "Operation cancelled"
-        exit 0
+    if [[ "$SKIP_CONFIRMATION" != true ]]; then
+        read -p "Are you sure you want to continue? (type 'yes' to confirm): " confirmation
+        
+        if [[ "$confirmation" != "yes" ]]; then
+            log_info "Operation cancelled"
+            exit 0
+        fi
+    else
+        log_info "Skipping confirmation as requested"
     fi
     
     log_info "Clearing all data from tables..."
@@ -114,11 +125,16 @@ clear_data() {
 drop_create_database() {
     log_warning "This will DROP and RECREATE the entire database!"
     log_warning "ALL DATA will be permanently lost!"
-    read -p "Are you sure you want to continue? (type 'yes' to confirm): " confirmation
     
-    if [[ "$confirmation" != "yes" ]]; then
-        log_info "Operation cancelled"
-        exit 0
+    if [[ "$SKIP_CONFIRMATION" != true ]]; then
+        read -p "Are you sure you want to continue? (type 'yes' to confirm): " confirmation
+        
+        if [[ "$confirmation" != "yes" ]]; then
+            log_info "Operation cancelled"
+            exit 0
+        fi
+    else
+        log_info "Skipping confirmation as requested"
     fi
     
     log_info "Dropping database $DB_NAME..."
@@ -147,26 +163,48 @@ main() {
     check_dependencies
     
     # Parse command line arguments
-    case "${1:-}" in
-        "--clear-data")
-            test_connection
+    local operation=""
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --clear-data)
+                operation="clear"
+                shift
+                ;;
+            --drop-create)
+                operation="drop"
+                shift
+                ;;
+            -y|--yes)
+                SKIP_CONFIRMATION=true
+                shift
+                ;;
+            --help|-h)
+                usage
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Check if operation was specified
+    if [[ -z "$operation" ]]; then
+        usage
+        exit 1
+    fi
+    
+    # Execute the specified operation
+    test_connection
+    case "$operation" in
+        clear)
             clear_data
             ;;
-        "--drop-create")
-            test_connection
+        drop)
             drop_create_database
-            ;;
-        "--help"|"-h")
-            usage
-            ;;
-        "")
-            usage
-            exit 1
-            ;;
-        *)
-            log_error "Unknown option: $1"
-            usage
-            exit 1
             ;;
     esac
 }

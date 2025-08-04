@@ -17,8 +17,7 @@ git clone --branch "$GITHUB_BRANCH" "$GITHUB_REPO" "$PROJECT_DIR"
 cd "$PROJECT_DIR"
 chmod +x setup.sh
 bash setup.sh
-bash scripts/reset-database.sh --clear-data
-```
+bash scripts/reset-database.sh --clear-data --yes
 
 2. Monitor the install in the console
 
