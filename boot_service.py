@@ -123,29 +123,24 @@ class BootService:
 echo ===============================================
 echo Nutanix CE Cluster Creation
 echo ===============================================
-echo Node: {node['node_name']}
+echo Node ID: {node['node_name']}
 echo Management IP: {node['management_ip']}
 echo AHV IP: {node['nutanix_config']['ahv_ip']}
 echo CVM IP: {node['nutanix_config']['cvm_ip']}
-echo Cluster IP: {node['nutanix_config']['cluster_ip']}
 echo ===============================================
+echo Starting Nutanix Foundation deployment...
 
-set base-url http://{Config.PXE_SERVER_DNS}:8080
-set operation create_cluster
-set node_id {node['id']}
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
+set node_id {node['node_name']}
 set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
-set cluster_ip {node['nutanix_config']['cluster_ip']}
-set config_server {Config.PXE_SERVER_DNS}
-
-echo Loading Foundation environment...
-kernel ${{base-url}}/images/vmlinuz-foundation console=tty0 console=ttyS0,115200
-initrd ${{base-url}}/images/initrd-foundation.img
-
-echo Starting cluster creation process...
-imgargs vmlinuz-foundation node_id=${{node_id}} operation=${{operation}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} cluster_ip=${{cluster_ip}} config_server=${{config_server}}
-
+kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200
+initrd ${{base-url}}/initrd-foundation.img
+imgargs vmlinuz-foundation node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
 boot || goto error
 
 :error
@@ -160,31 +155,24 @@ shell
 echo ===============================================
 echo Nutanix CE Node Addition
 echo ===============================================
-echo Node: {node['node_name']}
-echo Cluster: {cluster_operation['cluster_name']}
-echo Cluster IP: {cluster_operation['cluster_ip']}
-echo Node Management IP: {node['management_ip']}
-echo Node AHV IP: {node['nutanix_config']['ahv_ip']}
-echo Node CVM IP: {node['nutanix_config']['cvm_ip']}
+echo Node ID: {node['node_name']}
+echo Management IP: {node['management_ip']}
+echo AHV IP: {node['nutanix_config']['ahv_ip']}
+echo CVM IP: {node['nutanix_config']['cvm_ip']}
 echo ===============================================
+echo Starting Nutanix Foundation deployment...
 
-set base-url http://{Config.PXE_SERVER_DNS}:8080
-set operation add_node
-set node_id {node['id']}
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
+set node_id {node['node_name']}
 set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
-set cluster_ip {cluster_operation['cluster_ip']}
-set cluster_name {cluster_operation['cluster_name']}
-set config_server {Config.PXE_SERVER_DNS}
-
-echo Loading Foundation environment...
-kernel ${{base-url}}/images/vmlinuz-foundation console=tty0 console=ttyS0,115200
-initrd ${{base-url}}/images/initrd-foundation.img
-
-echo Starting node addition process...
-imgargs vmlinuz-foundation node_id=${{node_id}} operation=${{operation}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} cluster_ip=${{cluster_ip}} cluster_name=${{cluster_name}} config_server=${{config_server}}
-
+kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200
+initrd ${{base-url}}/initrd-foundation.img
+imgargs vmlinuz-foundation node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
 boot || goto error
 
 :error
@@ -227,42 +215,26 @@ shell
             f'Configuration delivered to {server_ip}'
         )
         
-        # Determine cluster operation for storage config
-        cluster_operation = self.determine_cluster_operation(node)
-        is_first_node = cluster_operation == 'create_new'
+        # Generate storage configuration in the documented format
+        storage_config = self.generate_documented_storage_config(node)
         
-        # Generate Foundation configuration
-        foundation_config = self.generate_foundation_config(node, is_first_node)
-        
-        # Generate storage configuration
-        storage_config = self.generate_storage_config(node)
-        
-        # Generate network configuration
-        network_config = self.generate_network_config(node)
-        
-        response = {
-            'server_info': {
-                'server_name': node['node_name'],
-                'server_id': node['id'],
-                'mgmt_ip': str(node['management_ip']),
-                'workload_ip': str(node['workload_ip'])
-            },
-            'cluster_config': foundation_config['cluster_config'],
-            'node_config': foundation_config['node_config'],
-            'storage_config': storage_config,
-            'network_config': network_config,
-            'deployment_scripts': {
-                'foundation_init': '/scripts/foundation-init.sh',
-                'network_setup': '/scripts/network-config.sh',
-                'post_install': '/scripts/post-install.sh'
-            },
-            'cluster_operation': cluster_operation,
-            'cluster_type': node['nutanix_config'].get('cluster_type', 'multi_node')
+        # Generate cluster configuration
+        cluster_config = {
+            'cluster_role': node.get('cluster_role', 'compute-storage'),
+            'cluster_name': node.get('cluster_name', 'nutanix-cluster')
         }
         
-        # Add workload_vnics data if it exists
-        if node.get('workload_vnics'):
-            response['server_info']['workload_vnics'] = node['workload_vnics']
+        response = {
+            'node_config': {
+                'node_id': node['node_name'],
+                'mgmt_ip': str(node['management_ip']),
+                'ahv_ip': node['nutanix_config']['ahv_ip'],
+                'cvm_ip': node['nutanix_config']['cvm_ip']
+            },
+            'storage_config': storage_config,
+            'cluster_config': cluster_config,
+            'server_profile': node['server_profile']
+        }
         
         return response
     
@@ -386,3 +358,18 @@ shell
                     })
         
         return network_config
+    
+    def generate_documented_storage_config(self, node):
+        """Generate storage configuration in the documented format"""
+        # Get storage configuration from server profiles
+        server_profiles = ServerProfileConfig()
+        storage_config = server_profiles.get_storage_config(node['server_profile'])
+        
+        # Extract just the drive names without the /dev/ prefix
+        data_drives = [drive.replace('/dev/', '') for drive in storage_config['data_drives']]
+        boot_drives = [drive.replace('/dev/', '') for drive in [storage_config['boot_device']]]
+        
+        return {
+            'data_drives': data_drives,
+            'boot_drives': boot_drives
+        }

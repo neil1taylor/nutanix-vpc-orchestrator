@@ -17,7 +17,7 @@ git clone --branch "$GITHUB_BRANCH" "$GITHUB_REPO" "$PROJECT_DIR"
 cd "$PROJECT_DIR"
 chmod +x setup.sh
 bash setup.sh
-bash scripts/reset-database.sh --clear-data --yes
+bash scripts/reset-database.sh --clear-data --yes # Will reset the database
 
 curl -X POST http://localhost:8080/api/config/nodes \
   -H "Content-Type: application/json" \
@@ -280,5 +280,36 @@ boot
 2025-08-04 15:36:02,685 - boot_service - WARNING - 10.240.0.10 - Server None not found in configuration database
 ```
 
+`python3 scripts/list_nodes.py --details 1`
 
-http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?node_id=1
+```bash
+Node Details for ID 1:
+========================================
+id: 1
+node_name: nutanix-poc-bm-node-01
+node_position: None
+server_profile: cx3d-metal-48x128
+cluster_role: compute-storage
+  cluster_type: multi_node
+deployment_status: deploying
+bare_metal_id: 0717-bb4ceb63-5b5f-475d-88e3-2dc3007245c1
+management_vnic_id: 0717-a09c3245-72d2-4d1d-983d-01e007c78c6f
+management_ip: 10.240.0.10
+workload_vnic_id: 0717-92f915e8-cb24-4a4f-86e7-49850df3c3ad
+workload_ip: 10.240.1.10
+nutanix_config:
+  ahv_ip: 10.240.0.51
+  cvm_ip: 10.240.0.101
+  ahv_dns: nutanix-poc-bm-node-01-ahv.nutanix-ce-poc.cloud
+  cvm_dns: nutanix-poc-bm-node-01-cvm.nutanix-ce-poc.cloud
+  cluster_ip: 10.240.0.200
+  cluster_dns: cluster01.nutanix-ce-poc.cloud
+  cluster_type: multi_node
+  storage_config: {}
+progress_percentage: 0
+current_phase: None
+cluster_name: None
+created_at: 2025-08-04 15:12:04.420621
+updated_at: 2025-08-04 15:12:07.145722
+workload_vnics: {'workload_vni_1': {'ip': '10.240.1.10', 'vnic_id': '0717-92f915e8-cb24-4a4f-86e7-49850df3c3ad', 'dns_name': 'nutanix-poc-bm-node-01-workload-1.nutanix-ce-poc.cloud', 'subnet_id': ''}}
+```

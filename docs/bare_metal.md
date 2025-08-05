@@ -1,6 +1,6 @@
 # IBM Cloud VPC Bare Metal Servers
 
-The following are the bare metal servers available in the IBM Catalog:
+The following are the VPC bare metal servers available in the IBM Catalog:
 
 | Profile | Cores | RAM | Networking | Disks
 |---|---|---|---|---|

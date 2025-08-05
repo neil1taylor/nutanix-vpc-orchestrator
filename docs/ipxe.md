@@ -28,7 +28,7 @@ IBM Cloud VPC Bare Metal         PXE/Config Server
 │  1. Boot with user_data │    │                          │
 │     iPXE URL            │    │                          │
 │                         │    │                          │
-│  2. Fetch iPXE script   │───▶│  /boot/ipxe/<server_id>  │
+│  2. Fetch iPXE script   │───▶│  /boot/config            │
 │                         │    │                          │
 │  3. Download vmlinuz    │───▶│  vmlinuz-foundation      │
 │     -foundation         │    │                          │
@@ -98,7 +98,7 @@ IBM Cloud VPC expects the `user_data` field to contain either:
 
 **Initial iPXE** is passed to the server via the IBM Cloud automation, the URL is sent to to IBM Cloud in the userdata files in the bare metal provisioning by the PXE/Config server.
 
-`http://your-pxe-server.com:8080/boot/ipxe?mgmt_ip=10.240.0.10`
+`http://your-pxe-server.com:8080/boot/config?mgmt_ip=10.240.0.10`
 
 **What it does**:
 - Configures network interface (DHCP)
@@ -129,7 +129,7 @@ set ahv_ip 10.240.0.51
 set cvm_ip 10.240.0.101
 kernel ${base-url}/vmlinuz-foundation console=tty0 console=ttyS0,115200
 initrd ${base-url}/initrd-foundation.img
-imgargs vmlinuz-foundation node_id=${node_id} mgmt_ip=${mgmt_ip} ahv_ip=${ahv_ip} cvm_ip=${cvm_ip} config_server=http://your-pxe-server.com:8080//boot/server/${mgmt_ip}
+imgargs vmlinuz-foundation node_id=${node_id} mgmt_ip=${mgmt_ip} ahv_ip=${ahv_ip} cvm_ip=${cvm_ip} config_server=http://your-pxe-server.com:8080/boot/server/${mgmt_ip}
 boot || goto error
 
 :error

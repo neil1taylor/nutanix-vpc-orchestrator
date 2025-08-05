@@ -16,7 +16,7 @@ The server provides five main service categories:
 These endpoints handle the iPXE boot process and serve boot-related files.
 
 ### 1.1 Boot Configuration
-**Endpoint:** `GET /boot/ipxe`
+**Endpoint:** `GET /boot/config`
 **Purpose:** Handle iPXE boot configuration requests from provisioned servers
 **Usage:** Called automatically by iPXE during server boot
 
@@ -27,7 +27,7 @@ These endpoints handle the iPXE boot process and serve boot-related files.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/boot/ipxe?mgmt_ip=10.240.0.10"
+curl "http://localhost:8080/boot/config?mgmt_ip=10.240.0.10"
 ```
 
 ### 1.2 Boot Images
