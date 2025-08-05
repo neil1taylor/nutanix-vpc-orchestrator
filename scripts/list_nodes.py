@@ -55,6 +55,12 @@ def get_node_details(node_id):
                 print(f"{key}:")
                 for sub_key, sub_value in value.items():
                     print(f"  {sub_key}: {sub_value}")
+            elif key == 'cluster_role':
+                print(f"{key}: {value}")
+                # Also check cluster_type in nutanix_config
+                if 'nutanix_config' in node and isinstance(node['nutanix_config'], dict):
+                    cluster_type = node['nutanix_config'].get('cluster_type', 'Not set')
+                    print(f"  cluster_type: {cluster_type}")
             else:
                 print(f"{key}: {value}")
         

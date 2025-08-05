@@ -1,12 +1,89 @@
-# Understanding PXE Boot Components for Nutanix CE
-
-This document explains how the various components work together to enable automated network booting and installation of Nutanix CE on IBM Cloud VPC bare metal servers.
+# iPXE boot process
 
 ## Overview of the Boot Process
 
-The automated boot process follows this sequence:
+The automated boot and Nutanix install process follows this sequence:
 
-1. **BIOS/UEFI** → **iPXE** → **Kernel (vmlinuz)** → **Initial Ramdisk (initrd)** → **Foundation Service** → **Nutanix CE Installation**
+1. Server boots: initial iPXE gets second iPXE: node_id, mgmt_ip, ahv_ip, cvm_ip, config_server.
+2. Foundation starts: reads parameters from kernel command line.
+3. Foundation calls the PXE/Config Server API: uses GET {pxe_config_server}:8080/boot/server/{mgmt_ip} to get the storage configuration.
+4. PXE/Config Server API: returns the storage config based on server profile.
+5. Foundation: configures node with combined parameters + storage config.
+
+The bare metal server is now considered to be `ready nutanix node` and can be selected for cluster creation:
+
+- For a single node cluster, the PXE server uses SSH to connect to the CVM to configure the cluster.
+- For a standard cluster, a minimum of three `ready nutanix nodes` are required. The PXE server uses the Prism API on any of the CVMs (this deployment uses the first CVM) to configure a standard cluster
+    - PXE Server → https://10.240.0.101:9440 (CVM IP)
+        - Creates cluster using all CVM IPs: 10.240.0.101, 10.240.0.102, 10.240.0.103
+
+## Boot sequence
+
+The diagram below shows the detailed boot sequence:
+
+```
+IBM Cloud VPC Bare Metal         PXE/Config Server
+┌─────────────────────────┐    ┌──────────────────────────┐
+│                         │    │                          │
+│  1. Boot with user_data │    │                          │
+│     iPXE URL            │    │                          │
+│                         │    │                          │
+│  2. Fetch iPXE script   │───▶│  /boot/ipxe/<server_id>  │
+│                         │    │                          │
+│  3. Download vmlinuz    │───▶│  vmlinuz-foundation      │
+│     -foundation         │    │                          │
+│                         │    │                          │
+│  4. Download initrd     │───▶│  initrd-foundation.img   │
+│     -foundation.img     │    │                          │
+│                         │    │                          │
+│  5. Boot Foundation     │    │                          │
+│                         │    │                          │
+│  6. Download config     │───▶│  /boot/server/<mgmt_ip>  │
+│     JSON                │    │                          │
+│                         │    │                          │
+│  7. Install Nutanix CE  │    │                          │
+│                         │    │                          │
+│  8. Reboot to Nutanix   │    │                          │
+└─────────────────────────┘    └──────────────────────────┘
+```
+
+**Step 1: Boot with user_data iPXE URL**
+- IBM Cloud handles PXE boot via user_data
+
+**Step 2: Fetch iPXE script**
+Bare Metal Server (10.240.0.10) → PXE Server
+- Downloads iPXE script from PXE server
+- Includes:
+    - node_id: nutanix-poc-bm-node-01 (hostname)
+    - mgmt_ip: 10.240.0.10 (existing IBM Cloud interface)
+    - ahv_ip: 10.240.0.51 (Foundation will configure)
+    - cvm_ip: 10.240.0.101 (Foundation will configure)
+    - config_server: pxe/config server
+
+**Step 3: vmlinuz-foundation**
+Bare Metal Server (10.240.0.10) → PXE Server
+- Downloads vmlinuz-foundation from PXE server
+
+**Step 4: initrd-foundation.img**
+Bare Metal Server (10.240.0.10) → PXE Server
+- Downloads initrd-foundation.img from PXE server
+
+**Step 5: Boot Foundation**
+- Boots Foundation with mgmt_ip=10.240.0.10
+
+**Step 6: Download config JSON**
+Foundation → GET /boot/server/10.240.0.10 → PXE Server
+- Returns JSON config with storage configuration:
+
+**Step 7: Install Nutanix CE**
+Foundation configures additional network interfaces:
+- Keeps management interface: 10.240.0.10 (IBM Cloud managed)
+- Configures AHV hypervisor: 10.240.0.51 (on same/additional interface)
+- Configures Controller VM: 10.240.0.101 (virtual interface for CVM)
+- Configures the storage
+
+**Step 8: Reboot to Nutanix**
+Node reboots and when available is considered to be in a `ready` state. Ready for cluster configuration.
 
 ## Component Breakdown
 
@@ -19,51 +96,67 @@ IBM Cloud VPC expects the `user_data` field to contain either:
 - **A single URL** pointing to an iPXE script (recommended)
 - **The actual iPXE script content** as text
 
+**Initial iPXE** is passed to the server via the IBM Cloud automation, the URL is sent to to IBM Cloud in the userdata files in the bare metal provisioning by the PXE/Config server.
+
+`http://your-pxe-server.com:8080/boot/ipxe?mgmt_ip=10.240.0.10`
+
 **What it does**:
 - Configures network interface (DHCP)
-- Downloads the Foundation kernel and initial ramdisk from your PXE server
-- Passes boot parameters to the Foundation kernel
-- Initiates the Foundation boot process
+- Runs the initial iPXE script (the single URL), which tells the server to request the PXE/Config server
+- PXE/Config server sends the second iPXE script
 
-**IBM Cloud VPC Implementation**:
+**Second iPXE** the bare metal server requests the second iPXE script which is shown below:
 
-**Option 1: URL Method (Recommended)**
-```python
-# When creating bare metal server via IBM Cloud VPC SDK
-user_data = "http://<PXE_CONFIG_SERVER_IP>/boot/ipxe/server-001"
-```
-
-**Option 2: Inline Script Method**
-```python
-user_data = """#!ipxe
+```bash
+#!ipxe
+echo ===============================================
+echo Nutanix CE Cluster Creation
+echo ===============================================
+echo Node ID: nutanix-poc-bm-node-01
+echo Management IP: 10.240.0.10
+echo AHV IP: 10.240.0.51
+echo CVM IP: 10.240.0.101
+echo ===============================================
 echo Starting Nutanix Foundation deployment...
+
 :retry_dhcp
 dhcp || goto retry_dhcp
 sleep 2
-set base-url http://<PXE_CONFIG_SERVER_IP>/pxe
-kernel ${base-url}/images/vmlinuz-foundation console=tty0 console=ttyS0,115200
-initrd ${base-url}/images/initrd-foundation.img
-imgargs vmlinuz-foundation node_id=${ip} operation=cluster_creation mgmt_ip=${ip}
+set base-url http://your-pxe-server.com:8080/boot/images
+set node_id nutanix-poc-bm-node-01
+set mgmt_ip 10.240.0.10
+set ahv_ip 10.240.0.51
+set cvm_ip 10.240.0.101
+kernel ${base-url}/vmlinuz-foundation console=tty0 console=ttyS0,115200
+initrd ${base-url}/initrd-foundation.img
+imgargs vmlinuz-foundation node_id=${node_id} mgmt_ip=${mgmt_ip} ahv_ip=${ahv_ip} cvm_ip=${cvm_ip} config_server=http://your-pxe-server.com:8080//boot/server/${mgmt_ip}
 boot || goto error
+
 :error
-echo Boot failed, retrying...
-sleep 10
-goto retry_dhcp
-"""
+echo Boot failed - dropping to shell
+shell
 ```
+
+**What it does**:
+- Runs the second iPXE script
+- Downloads the Foundation kernel and initial ramdisk from the PXE/Config server
+- Passes boot parameters to the Foundation kernel
+- Initiates the Foundation boot process
+
 
 **Key iPXE Script Functions**:
 ```ipxe
-dhcp                                                        # Get IP address from DHCP server
-kernel http://<PXE_CONFIG_SERVER_IP>/vmlinuz-foundation     # Download Foundation kernel
-initrd http://<PXE_CONFIG_SERVER_IP>/initrd-foundation.img  # Download Foundation initrd
-boot                                                        # Start the Foundation kernel
+dhcp                                            # Get IP address from DHCP server
+kernel http://pxe-server/vmlinuz-foundation     # Download Foundation kernel
+initrd http://pxe-server/initrd-foundation.img  # Download Foundation initrd
+boot                                            # Start the Foundation kernel
 ```
 
 **Foundation Boot Parameters**:
 - `node_id`: Unique identifier for the node (server name or IP)
-- `operation`: Type of operation (cluster_creation, node_addition)
-- `mgmt_ip`: Management IP address for configuration retrieval
+- `mgmt_ip`: Primary interface IP address (IBM Cloud assigned)
+- `ahv_ip`: Hypervisor IP address to be configured
+- `cvm_ip`: Controller VM IP address to be configured
 - `console`: Console output settings for remote management
 
 ### 2. vmlinuz-foundation (Foundation Linux Kernel)
@@ -116,7 +209,7 @@ Inside initrd-foundation.img, these processes happen:
 
 ### 4. Foundation Service Configuration
 
-**Purpose**: The core service that performs automated Nutanix CE installation and cluster configuration.
+**Purpose**: The core service that performs automated Nutanix CE installation configuration.
 
 **Key Responsibilities**:
 
@@ -131,85 +224,24 @@ Inside initrd-foundation.img, these processes happen:
 - Configures metadata distribution
 - Sets up Controller VM (CVM) storage
 
-#### Cluster Operations
-- Creates new clusters (first node)
-- Joins existing clusters (additional nodes)
-- Validates cluster topology
-- Configures inter-node communication
-
-## How They Work Together
-
-### Step-by-Step Process
-
-1. **Bare Metal Server Provisioning**
-   - IBM Cloud VPC bare metal server created with `user_data` containing iPXE script URL or content
-   - Server configured for network boot in BIOS/UEFI
-
-2. **Initial Boot Process**
-   - Server boots and IBM Cloud's PXE environment reads `user_data`
-   - If URL: IBM Cloud fetches iPXE script from the specified URL
-   - If inline: IBM Cloud uses the provided iPXE script content directly
-
-3. **iPXE Execution**
-   ```
-   Server → DHCP Request → IBM Cloud DHCP
-   Server ← IP Address ← IBM Cloud DHCP
-   Server → Fetch iPXE Script ← Your PXE Server (if URL method)
-   Server → Download vmlinuz-foundation ← Your PXE Server
-   Server → Download initrd-foundation.img ← Your PXE Server
-   ```
-
-3. **Foundation Kernel Boot**
-   - vmlinuz-foundation loads and initializes hardware
-   - initrd-foundation.img mounts as temporary root filesystem
-   - Kernel passes control to Foundation service
-
-4. **Configuration Retrieval**
-   - Foundation service initializes network
-   - Downloads configuration from: `GET /boot/server/<management_ip>`
-   - Parses JSON configuration for node settings
-
-5. **Automated Installation**
-   - Partitions storage drives according to configuration
-   - Installs Nutanix software stack (AOS, AHV, CVM)
-   - Configures network, storage, and cluster settings
-   - Joins or creates Nutanix cluster
-
-6. **System Initialization**
-   - Foundation service completes deployment
-   - System reboots into Nutanix CE environment
-   - Cluster services start and validate configuration
-
-## Network Flow Diagram
-
-```
-IBM Cloud VPC Bare Metal     Your PXE/Config Server
-┌─────────────────────────┐    ┌──────────────────┐
-│                         │    │                  │
-│  1. Boot with user_data │    │                  │
-│     iPXE URL/script     │    │                  │
-│                         │    │                  │
-│  2. Fetch iPXE script   │───▶│  /boot/ipxe/     │
-│     (if URL method)     │    │  <server_id>     │
-│                         │    │                  │
-│  3. Download vmlinuz    │───▶│  vmlinuz-        │
-│     -foundation         │    │  foundation      │
-│                         │    │                  │
-│  4. Download initrd     │───▶│  initrd-         │
-│     -foundation.img     │    │  foundation.img  │
-│                         │    │                  │
-│  5. Boot Foundation     │    │                  │
-│                         │    │                  │
-│  6. Download config     │───▶│  /boot/server/   │
-│     JSON                │    │  <mgmt_ip>       │
-│                         │    │                  │
-│  7. Install Nutanix CE  │    │                  │
-│                         │    │                  │
-│  8. Configure cluster   │    │                  │
-│                         │    │                  │
-│  9. Reboot to Nutanix   │    │                  │
-└─────────────────────────┘    └──────────────────┘
-```
+The storage configuration is based on the IBM Cloud server profile. It is request using `GET /boot/server/<mgmt_ip>` and as an example, the API returns the following for the profile `cx3d-metal-48x128`. The information is retrieved form `server_profiles.py`:
+{
+    'node_config': {
+        'node_id': server['hostname'],
+        'mgmt_ip': server['mgmt_ip'],
+        'ahv_ip': server['ahv_ip'],
+        'cvm_ip': server['cvm_ip']
+    },
+    'storage_config': {
+        'data_drives': ['nvme0n1', 'nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1'],
+        'boot_drives': ['sda', 'sdb'],
+    },
+    'cluster_config': {
+        'cluster_role': server.get('cluster_role', 'compute-storage'),
+        'cluster_name': server.get('cluster_name', 'nutanix-cluster')
+    },
+    'server_profile': 'cx3d-metal-48x128'
+}
 
 ## File Dependencies
 
@@ -218,11 +250,9 @@ IBM Cloud VPC Bare Metal     Your PXE/Config Server
 /var/www/pxe/
 ├── boot/
 │   └── ipxe/
-│       ├── server-001          # iPXE script for server-001
-│       ├── server-002          # iPXE script for server-002
-│       └── server-N            # iPXE script for server-N
+│       ├── (dynamic configuration via API endpoint)
 ├── configs/
-│   └── (dynamic configuration via API endpoints)
+│   └── (dynamic configuration via API endpoint)
 ├── images/
 │   ├── initrd-foundation.img
 │   ├── vmlinuz-foundation
@@ -237,82 +267,21 @@ IBM Cloud VPC Bare Metal     Your PXE/Config Server
 ```
 IBM Cloud VPC user_data options:
 ├── URL Method (Recommended):
-│   └── "http://pxe-server.com/boot/ipxe/<server_id>"
-│       └── Returns server-specific iPXE script
-└── Inline Method:
-    └── Raw iPXE script content as string
+    └── "http://pxe-server.com/boot/ipxe/<server_id>"
+        └── Returns server-specific iPXE script
 
 iPXE Script Parameters:
 ├── node_id=<server_identifier>
-├── operation=cluster_creation|node_addition
-├── mgmt_ip=<management_ip_address>
+├── mgmt_ip=<primary_interface_ip>
+├── ahv_ip=<hypervisor_ip>
+├── cvm_ip=<controller_vm_ip>
 └── console=tty0 console=ttyS0,115200
 
-Foundation Configuration Endpoint:
-└── GET /boot/server/<management_ip>
-    └── Returns JSON with cluster, node, storage, and network config
-```
-
-## Configuration Flow
-
-### 1. **Initial Configuration Storage**
-In `node_provisioner.py`, these parameters are stored in the database during provisioning:
-
-```python
-'nutanix_config': {
-    'ahv_ip': ip_allocation['ahv']['ip_address'],
-    'cvm_ip': ip_allocation['cvm']['ip_address'], 
-    'cluster_ip': ip_allocation.get('cluster', {}).get('ip_address'),
-    'storage_config': node_data['node_config'].get('storage_config', {}),
-    'cluster_role': node_data['node_config'].get('cluster_role', 'compute-storage')
-}
-```
-
-### 2. **Boot Process Configuration**
-In `boot_service.py`, these configs are used to generate the Foundation configuration:
-
-```python
-def generate_foundation_config(self, node, is_first_node):
-    """Generate Foundation configuration from node data"""
-    nutanix_config = node['nutanix_config']
-    
-    foundation_config = {
-        'cluster_config': {
-            'cluster_name': cluster_name,
-            'cluster_external_ip': str(cluster_ip),
-            'redundancy_factor': 1 if is_first_node else 2
-        },
-        'node_config': {
-            'hypervisor': 'ahv',
-            'hypervisor_ip': nutanix_config['ahv_ip'],
-            'cvm_ip': nutanix_config['cvm_ip'],
-            'role': nutanix_config.get('cluster_role', 'compute-storage')
-        }
-    }
-```
-
-### 3. **Storage Configuration Usage**
-In `generate_storage_config()`, your storage drive configuration is applied:
-
-```python
-def generate_storage_config(self, node):
-    storage_config = {
-        'data_devices': [
-            '/dev/nvme2n1',
-            '/dev/nvme3n1', 
-            '/dev/nvme4n1'
-        ]
-    }
-    
-    # Adjust based on node's storage config if specified
-    if node['nutanix_config'].get('storage_config'):
-        user_storage = node['nutanix_config']['storage_config']
-        if 'data_drives' in user_storage:
-            storage_config['data_devices'] = [
-                f"/dev/{drive}" for drive in user_storage['data_drives']
-            ]
-    
-    return storage_config
+Foundation Configuration Methods:
+├── Storage config via API call: GET /boot/server/<mgmt_ip>
+    ├── data_devices (based on server profile)
+    ├── boot_devices (to avoid)
+    └── cluster_role configuration
 ```
 
 ## Foundation Service Architecture
@@ -323,15 +292,8 @@ Foundation is a specialized Linux distribution that runs entirely in RAM and is 
 - **Network Configuration**: Setting up management, AHV, and CVM IP addresses
 - **Storage Setup**: Partitioning and configuring specified storage drives
 - **Nutanix Installation**: Installing AOS, AHV hypervisor, and CVM components
-- **Cluster Operations**: Creating new clusters or joining existing ones
-
-### **Foundation vs Traditional Kickstart**
-Unlike traditional kickstart installations, Foundation:
-- Doesn't install a general-purpose OS
-- Installs a specialized Nutanix software stack
-- Configures cluster-specific settings
-- Handles distributed storage configuration
-- Manages hypervisor and virtualization setup
+- **Node Preparation**: Bringing the node to a "cluster-ready" state
+- **Cluster Participation**: Participating in cluster formation when orchestrated (not used in this deployment)
 
 ### **Configuration Process**
 
@@ -341,7 +303,7 @@ Unlike traditional kickstart installations, Foundation:
 4. **Hardware Validation**: Foundation validates configuration against discovered hardware
 5. **Storage Configuration**: Foundation partitions and formats specified drives
 6. **Software Installation**: Foundation installs Nutanix CE components
-7. **Cluster Configuration**: Foundation creates or joins cluster
+7. **Cluster Configuration**: Foundation creates or joins cluster (not used in this deployment)
 8. **Service Validation**: Foundation validates all services are running correctly
 
 ### **Node Role Configuration**
@@ -364,145 +326,6 @@ Foundation configures nodes based on the `cluster_role` setting:
   - Minimal storage (typically just boot drives)
   - No Controller VM running
   - Used to expand compute capacity
-
-### **Implementation in PXE Boot Process**
-
-1. **Boot Images**: Foundation images are extracted during setup:
-   ```bash
-   # In setup.sh
-   cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-foundation
-   cp /mnt/boot/initrd /var/www/pxe/images/initrd-foundation.img
-   ```
-
-2. **iPXE Script Generation**: In `boot_service.py`:
-   ```python
-   def generate_ipxe_script_url(self, server_id):
-       """Return URL for server-specific iPXE script (for IBM Cloud user_data)"""
-       return f"http://{self.pxe_server_ip}/boot/ipxe/{server_id}"
-   
-   def generate_server_ipxe_script(self, server_id, mgmt_ip, operation='cluster_creation'):
-       """Generate iPXE script for specific server"""
-       return f"""#!ipxe
-   echo Starting Nutanix Foundation for server {server_id}...
-   
-   :retry_dhcp
-   dhcp || goto retry_dhcp
-   sleep 2
-   
-   set base-url http://{self.pxe_server_ip}/pxe
-   
-   kernel ${{base-url}}/images/vmlinuz-foundation console=tty0 console=ttyS0,115200
-   initrd ${{base-url}}/images/initrd-foundation.img
-   
-   imgargs vmlinuz-foundation node_id={server_id} operation={operation} mgmt_ip={mgmt_ip}
-   
-   boot || goto error
-   
-   :error
-   echo Boot failed, retrying...
-   sleep 10
-   goto retry_dhcp
-   """
-   
-   def create_ibm_cloud_server(self, server_config):
-       """Create IBM Cloud VPC bare metal server with iPXE user_data"""
-       
-       # Generate iPXE script URL for user_data
-       ipxe_url = self.generate_ipxe_script_url(server_config['server_id'])
-       
-       server_response = vpc_client.create_bare_metal_server(
-           bare_metal_server_prototype={
-               'name': server_config['server_name'],
-               'profile': {'name': 'bx2-metal-96x384'},
-               'zone': {'name': server_config['zone_name']},
-               'vpc': {'id': server_config['vpc_id']},
-               'primary_network_interface': {
-                   'name': 'eth0',
-                   'subnet': {'id': server_config['subnet_id']}
-               },
-               'user_data': ipxe_url  # URL method - IBM Cloud fetches iPXE script
-           }
-       )
-       
-       return server_response
-   ```
-
-3. **Configuration Delivery**: Foundation receives configuration via REST API:
-   ```python
-   def get_server_config(self, server_ip):
-       return {
-           'server_info': server_info,
-           'cluster_config': foundation_config['cluster_config'],
-           'node_config': foundation_config['node_config'], 
-           'storage_config': storage_config,
-           'network_config': network_config
-       }
-   ```
-
-## Security Considerations
-
-### Network Security
-- **HTTPS Configuration**: Use HTTPS for sensitive configuration endpoints
-- **Network Isolation**: Ensure PXE server is on trusted network segment
-- **Firewall Rules**: Restrict access to PXE server ports (80/443, 69 for TFTP if used)
-- **API Authentication**: Implement authentication for configuration endpoints
-
-### Access Control
-- **File Permissions**: Proper permissions on PXE server files (644 for files, 755 for directories)
-- **Network ACLs**: Restrict which systems can access PXE resources
-- **Audit Logging**: Log all boot attempts and configuration downloads
-- **IP Validation**: Validate requesting IP addresses against known servers
-
-### Configuration Security
-- **Encrypted Passwords**: Use secure password hashing for any stored credentials
-- **Certificate Validation**: Validate downloaded files with checksums where possible
-- **Configuration Validation**: Validate configuration parameters before applying
-- **Secure Defaults**: Use secure default configurations
-
-## Troubleshooting Common Issues
-
-### Boot Failures
-1. **Network Issues**: 
-   - Check DHCP server configuration and IP allocation
-   - Verify routing between servers and PXE server
-   - Check firewall rules for HTTP/HTTPS traffic
-
-2. **Missing Files**: 
-   - Verify vmlinuz-foundation and initrd-foundation.img exist
-   - Check file permissions (should be readable by web server)
-   - Validate file integrity with checksums
-
-3. **iPXE Script Issues**:
-   - Check iPXE script syntax
-   - Verify base-url variable is correctly set
-   - Test iPXE script manually if possible
-
-### Foundation Failures
-1. **Configuration Issues**: 
-   - Validate JSON configuration syntax
-   - Check that all required fields are present
-   - Verify IP addresses don't conflict
-
-2. **Hardware Issues**: 
-   - Confirm specified storage drives exist (`/dev/nvme2n1`, etc.)
-   - Verify network interfaces are available
-   - Check hardware compatibility with Nutanix CE
-
-3. **Network Timeouts**: 
-   - Increase timeout values for slow networks
-   - Check network connectivity between nodes
-   - Verify DNS resolution if using hostnames
-
-### Storage Configuration Issues
-1. **Drive Detection**: 
-   - Verify drive naming convention matches system
-   - Check that drives are not already in use
-   - Validate drive sizes meet minimum requirements
-
-2. **Partition Failures**:
-   - Ensure drives are not mounted or in use
-   - Check for existing partition tables
-   - Verify sufficient free space
 
 ## Architecture Summary
 

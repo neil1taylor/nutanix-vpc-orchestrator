@@ -16,37 +16,21 @@ The server provides five main service categories:
 These endpoints handle the iPXE boot process and serve boot-related files.
 
 ### 1.1 Boot Configuration
-**Endpoint:** `GET /boot/config`
+**Endpoint:** `GET /boot/ipxe`
 **Purpose:** Handle iPXE boot configuration requests from provisioned servers
 **Usage:** Called automatically by iPXE during server boot
 
 **Parameters:**
 - `mgmt_ip` - Management IP address of the booting server
-- `mgmt_mac` - Management MAC address
-- `workload_ip` - Workload IP address (optional)
-- `workload_mac` - Workload MAC address (optional)
-- `serial` - Server serial number (optional)
 
 **Returns:** iPXE boot script in plain text format
 
 **Example:**
 ```bash
-curl "http://localhost:8080/boot/config?mgmt_ip=10.240.0.10&mgmt_mac=00:11:22:33:44:55"
+curl "http://localhost:8080/boot/ipxe?mgmt_ip=10.240.0.10"
 ```
 
-### 1.2 Server Configuration
-**Endpoint:** `GET /boot/server/<server_ip>`
-**Purpose:** Get detailed server configuration for Foundation
-**Usage:** Called by booting servers to get Foundation configuration
-
-**Returns:** JSON configuration including cluster, node, storage, and network settings
-
-**Example:**
-```bash
-curl "http://localhost:8080/boot/server/10.240.0.10"
-```
-
-### 1.3 Boot Images
+### 1.2 Boot Images
 **Endpoint:** `GET /boot/images/<filename>`
 **Purpose:** Serve boot images (kernel, initrd, ISO files)
 **Allowed Files:**
@@ -59,7 +43,7 @@ curl "http://localhost:8080/boot/server/10.240.0.10"
 curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images/vmlinuz-foundation"
 ```
 
-### 1.4 Boot Scripts
+### 1.3 Boot Scripts
 **Endpoint:** `GET /boot/scripts/<script_name>`
 **Purpose:** Serve boot scripts and configuration files
 **Allowed Scripts:**

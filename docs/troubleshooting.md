@@ -223,3 +223,62 @@ ntp time.adn.networklayer.com
 initrd --name initrd http://pxe-server/initrd.img
 kernel http://pxe-server/vmlinuz console=tty0 console=ttyS0,115200
 boot
+
+
+```bash
+2025-08-04 15:11:52,238 - app - INFO - 127.0.0.1 - API Request received: POST http://localhost:8080/api/config/nodes
+2025-08-04 15:11:52,239 - app - INFO - 127.0.0.1 - Request headers: {'Host': 'localhost:8080', 'User-Agent': 'curl/7.81.0', 'Accept': '*/*', 'Content-Type': 'application/json', 'Content-Length': '265'}
+2025-08-04 15:11:52,239 - app - INFO - 127.0.0.1 - Request data: {'node_config': {'node_name': 'nutanix-poc-bm-node-01', 'server_profile': 'cx3d-metal-48x128', 'cluster_role': 'compute-storage'}, 'network_config': {'workload_subnets': ['0717-c0873ef3-c17d-4b51-a1db-b03c2309c65c']}}
+2025-08-04 15:11:52,239 - app - INFO - 127.0.0.1 - Processed node configuration: {'node_name': 'nutanix-poc-bm-node-01', 'server_profile': 'cx3d-metal-48x128', 'cluster_role': 'compute-storage', 'network_config': {'workload_subnets': ['0717-c0873ef3-c17d-4b51-a1db-b03c2309c65c']}}
+2025-08-04 15:11:52,239 - node_provisioner - INFO - 127.0.0.1 - Starting provisioning for node nutanix-poc-bm-node-01
+2025-08-04 15:11:52,250 - node_provisioner - INFO - 127.0.0.1 - Checking for existing node with name nutanix-poc-bm-node-01: None
+2025-08-04 15:11:52,250 - node_provisioner - INFO - 127.0.0.1 - Reserving IPs for node nutanix-poc-bm-node-01
+2025-08-04 15:11:55,523 - ibm_cloud_client - INFO - 127.0.0.1 - Reserved IP 10.240.0.10 in subnet 0717-10e2ee7f-fd10-41b0-8324-730fbe78913a
+2025-08-04 15:11:56,534 - ibm_cloud_client - INFO - 127.0.0.1 - Reserved IP 10.240.0.51 in subnet 0717-10e2ee7f-fd10-41b0-8324-730fbe78913a
+2025-08-04 15:11:56,761 - ibm_cloud_client - INFO - 127.0.0.1 - Reserved IP 10.240.0.101 in subnet 0717-10e2ee7f-fd10-41b0-8324-730fbe78913a
+2025-08-04 15:11:56,900 - ibm_cloud_client - INFO - 127.0.0.1 - Reserved IP 10.240.1.10 in subnet 0717-c0873ef3-c17d-4b51-a1db-b03c2309c65c
+2025-08-04 15:11:57,792 - ibm_cloud_client - INFO - 127.0.0.1 - Reserved IP 10.240.0.200 in subnet 0717-10e2ee7f-fd10-41b0-8324-730fbe78913a
+2025-08-04 15:11:57,805 - database - INFO - 127.0.0.1 - IP reservations stored for nutanix-poc-bm-node-01
+2025-08-04 15:11:57,805 - node_provisioner - INFO - 127.0.0.1 - IP reservation completed for nutanix-poc-bm-node-01
+2025-08-04 15:11:57,806 - node_provisioner - INFO - 127.0.0.1 - Registering DNS records for nutanix-poc-bm-node-01
+2025-08-04 15:11:57,806 - ibm_cloud_client - INFO - 127.0.0.1 - Attempting to create DNS record: nutanix-poc-bm-node-01-mgmt (A) -> 10.240.0.10
+2025-08-04 15:11:57,806 - ibm_cloud_client - INFO - 127.0.0.1 - API call parameters: instance_id=64c20679-d89a-45c0-94dc-71a0983c9218, dnszone_id=12e45047-a91c-4dd9-8de4-9d6297e63fc4, name=nutanix-poc-bm-node-01-mgmt, type=A, rdata={'ip': 10.240.0.10}, ttl=300
+2025-08-04 15:11:59,990 - ibm_cloud_client - INFO - 127.0.0.1 - Created DNS record nutanix-poc-bm-node-01-mgmt -> 10.240.0.10
+2025-08-04 15:11:59,990 - ibm_cloud_client - INFO - 127.0.0.1 - Attempting to create DNS record: nutanix-poc-bm-node-01-ahv (A) -> 10.240.0.51
+2025-08-04 15:11:59,990 - ibm_cloud_client - INFO - 127.0.0.1 - API call parameters: instance_id=64c20679-d89a-45c0-94dc-71a0983c9218, dnszone_id=12e45047-a91c-4dd9-8de4-9d6297e63fc4, name=nutanix-poc-bm-node-01-ahv, type=A, rdata={'ip': 10.240.0.51}, ttl=300
+2025-08-04 15:12:00,220 - ibm_cloud_client - INFO - 127.0.0.1 - Created DNS record nutanix-poc-bm-node-01-ahv -> 10.240.0.51
+2025-08-04 15:12:00,220 - ibm_cloud_client - INFO - 127.0.0.1 - Attempting to create DNS record: nutanix-poc-bm-node-01-cvm (A) -> 10.240.0.101
+2025-08-04 15:12:00,220 - ibm_cloud_client - INFO - 127.0.0.1 - API call parameters: instance_id=64c20679-d89a-45c0-94dc-71a0983c9218, dnszone_id=12e45047-a91c-4dd9-8de4-9d6297e63fc4, name=nutanix-poc-bm-node-01-cvm, type=A, rdata={'ip': 10.240.0.101}, ttl=300
+2025-08-04 15:12:00,432 - ibm_cloud_client - INFO - 127.0.0.1 - Created DNS record nutanix-poc-bm-node-01-cvm -> 10.240.0.101
+2025-08-04 15:12:00,432 - ibm_cloud_client - INFO - 127.0.0.1 - Attempting to create DNS record: nutanix-poc-bm-node-01-workload (A) -> 10.240.1.10
+2025-08-04 15:12:00,432 - ibm_cloud_client - INFO - 127.0.0.1 - API call parameters: instance_id=64c20679-d89a-45c0-94dc-71a0983c9218, dnszone_id=12e45047-a91c-4dd9-8de4-9d6297e63fc4, name=nutanix-poc-bm-node-01-workload, type=A, rdata={'ip': 10.240.1.10}, ttl=300
+2025-08-04 15:12:00,648 - ibm_cloud_client - INFO - 127.0.0.1 - Created DNS record nutanix-poc-bm-node-01-workload -> 10.240.1.10
+2025-08-04 15:12:00,649 - ibm_cloud_client - INFO - 127.0.0.1 - Attempting to create DNS record: cluster01 (A) -> 10.240.0.200
+2025-08-04 15:12:00,649 - ibm_cloud_client - INFO - 127.0.0.1 - API call parameters: instance_id=64c20679-d89a-45c0-94dc-71a0983c9218, dnszone_id=12e45047-a91c-4dd9-8de4-9d6297e63fc4, name=cluster01, type=A, rdata={'ip': 10.240.0.200}, ttl=300
+2025-08-04 15:12:00,850 - ibm_cloud_client - INFO - 127.0.0.1 - Created DNS record cluster01 -> 10.240.0.200
+2025-08-04 15:12:00,862 - database - INFO - 127.0.0.1 - DNS records stored for nutanix-poc-bm-node-01
+2025-08-04 15:12:00,862 - node_provisioner - INFO - 127.0.0.1 - DNS registration completed for nutanix-poc-bm-node-01
+2025-08-04 15:12:00,862 - node_provisioner - INFO - 127.0.0.1 - Creating VNIs for nutanix-poc-bm-node-01
+2025-08-04 15:12:00,863 - ibm_cloud_client - INFO - 127.0.0.1 - Checking if create_virtual_network_interface method exists: True
+2025-08-04 15:12:02,648 - ibm_cloud_client - INFO - 127.0.0.1 - Created virtual network interface nutanix-poc-bm-node-01-mgmt-vni
+2025-08-04 15:12:02,649 - ibm_cloud_client - INFO - 127.0.0.1 - Checking if create_virtual_network_interface method exists: True
+2025-08-04 15:12:04,397 - ibm_cloud_client - INFO - 127.0.0.1 - Created virtual network interface nutanix-poc-bm-node-01-workload-vni-1
+2025-08-04 15:12:04,410 - database - INFO - 127.0.0.1 - vNIC info stored for nutanix-poc-bm-node-01
+2025-08-04 15:12:04,410 - node_provisioner - INFO - 127.0.0.1 - VNI creation completed for nutanix-poc-bm-node-01
+2025-08-04 15:12:04,410 - node_provisioner - INFO - 127.0.0.1 - Updating database for nutanix-poc-bm-node-01
+2025-08-04 15:12:04,422 - database - INFO - 127.0.0.1 - Node nutanix-poc-bm-node-01 inserted with ID 1
+2025-08-04 15:12:04,434 - node_provisioner - INFO - 127.0.0.1 - Database update completed for node ID 1
+2025-08-04 15:12:04,434 - node_provisioner - INFO - 127.0.0.1 - Deploying bare metal server for node ID 1
+2025-08-04 15:12:04,657 - ibm_cloud_client - INFO - 127.0.0.1 - User data being sent: http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?node_id=1
+2025-08-04 15:12:04,658 - ibm_cloud_client - INFO - 127.0.0.1 - Bare metal server prototype: {'initialization': {'image': {'id': 'r006-bfef819d-11af-4252-9bd3-bae1d9dd8e1d'}, 'keys': [{'id': 'r006-20dafd86-68eb-4f94-a9a5-0d860a88ee43'}], 'user_data': 'http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?node_id=1'}, 'name': 'nutanix-poc-bm-node-01', 'profile': {'name': 'cx3d-metal-48x128'}, 'vpc': {'id': 'r006-3e58f38f-629a-492b-85f8-9e6bf9ec2747'}, 'zone': {'name': 'us-south-1'}, 'primary_network_attachment': {'name': 'nutanix-poc-bm-node-01-primary-attachment', 'virtual_network_interface': {'id': '0717-a09c3245-72d2-4d1d-983d-01e007c78c6f'}}}
+2025-08-04 15:12:07,135 - ibm_cloud_client - INFO - 127.0.0.1 - Created bare metal server nutanix-poc-bm-node-01
+2025-08-04 15:12:07,147 - database - INFO - 127.0.0.1 - Node 1 deployment info updated
+2025-08-04 15:12:07,159 - node_provisioner - INFO - 127.0.0.1 - Bare metal deployment initiated for node 1
+2025-08-04 15:12:07,171 - node_provisioner - INFO - 127.0.0.1 - Monitoring started for node 1
+2025-08-04 15:12:07,171 - app - INFO - 127.0.0.1 - API Response (202): {'message': 'Node provisioning initiated successfully', 'node_id': 1, 'deployment_id': '0717-bb4ceb63-5b5f-475d-88e3-2dc3007245c1', 'estimated_completion': '2025-08-04T16:19:07.171841', 'monitoring_endpoint': '/api/status/nodes/1'}
+2025-08-04 15:36:02,675 - boot_service - INFO - 10.240.0.10 - iPXE boot request from None (MAC: None)
+2025-08-04 15:36:02,685 - boot_service - WARNING - 10.240.0.10 - Server None not found in configuration database
+```
+
+
+http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?node_id=1
