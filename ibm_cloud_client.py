@@ -285,6 +285,67 @@ class IBMCloudClient:
             logger.error(f"Failed to get subnet info {subnet_id}: {str(e)}")
             raise
     
+    def get_vpc(self, vpc_id):
+        """Get VPC information using VPC SDK"""
+        try:
+            result = self.vpc_service.get_vpc(id=vpc_id).get_result()
+            return result
+        except Exception as e:
+            logger.error(f"Failed to get VPC info {vpc_id}: {str(e)}")
+            raise
+    
+    def get_subnet_gateway(self, subnet_id):
+        """Get subnet gateway address using VPC SDK"""
+        try:
+            subnet_info = self.get_subnet_info(subnet_id)
+            # The gateway is typically the first IP in the subnet
+            # In IBM Cloud VPC, this is usually available in the subnet info
+            gateway = subnet_info.get('gateway', None)
+            if gateway:
+                return gateway
+            
+            # If not directly available, calculate from CIDR
+            cidr = subnet_info.get('ipv4_cidr_block')
+            if cidr:
+                # First IP in the subnet is typically the gateway
+                import ipaddress
+                network = ipaddress.IPv4Network(cidr, strict=False)
+                gateway = str(network.network_address + 1)
+                return gateway
+            
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get gateway for subnet {subnet_id}: {str(e)}")
+            return None
+    
+    def get_subnet_netmask(self, subnet_id):
+        """Get subnet netmask from CIDR block using VPC SDK"""
+        try:
+            subnet_info = self.get_subnet_info(subnet_id)
+            cidr = subnet_info.get('ipv4_cidr_block')
+            if cidr:
+                import ipaddress
+                network = ipaddress.IPv4Network(cidr, strict=False)
+                return str(network.netmask)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get netmask for subnet {subnet_id}: {str(e)}")
+            return None
+    
+    def get_vpc_dns_servers(self, vpc_id):
+        """Get DNS servers for VPC using VPC SDK"""
+        try:
+            vpc_info = self.get_vpc(vpc_id)
+            # DNS servers are typically in the VPC's default network ACL or DHCP options
+            # For IBM Cloud VPC, DNS servers are usually 161.26.0.10 and 161.26.0.11
+            # but let's try to extract them from the VPC info if available
+            dns_servers = vpc_info.get('dns_servers', ['161.26.0.10', '161.26.0.11'])
+            return dns_servers
+        except Exception as e:
+            logger.error(f"Failed to get DNS servers for VPC {vpc_id}: {str(e)}")
+            # Return default IBM Cloud DNS servers
+            return ['161.26.0.10', '161.26.0.11']
+    
     def get_custom_image(self, image_identifier):
         """Get custom image by name or ID using VPC SDK"""
         try:

@@ -491,8 +491,8 @@ class NodeProvisioner:
         if not node:
             raise Exception(f"Node with ID {node_id} not found")
         
-        # Create URL for iPXE boot script with both node_id and mgmt_ip
-        user_data = f"http://{self.config.PXE_SERVER_DNS}:8080/boot/config?node_id={node_id}&mgmt_ip={node['management_ip']}"
+        # Create URL for iPXE boot script with node_id only
+        user_data = f"http://{self.config.PXE_SERVER_DNS}:8080/boot/config?node_id={node_id}"
         
         return user_data
     
