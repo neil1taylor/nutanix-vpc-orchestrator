@@ -136,12 +136,50 @@ class StatusMonitor:
             # Log specific state transitions with more visibility
             if server_status == 'starting':
                 logger.info(f"⚡ SERVER STARTING: {node['node_name']} is booting up")
+                # Log to deployment history table
+                self.db.log_deployment_event(
+                    node['id'],
+                    'ibm_cloud_status',
+                    'starting',
+                    f"Server is starting up"
+                )
             elif server_status == 'running':
                 logger.info(f"✅ SERVER RUNNING: {node['node_name']} is now active and running")
+                # Log to deployment history table
+                self.db.log_deployment_event(
+                    node['id'],
+                    'ibm_cloud_status',
+                    'success',
+                    f"Server is now running"
+                )
             elif server_status == 'stopped':
                 logger.info(f"⏹️ SERVER STOPPED: {node['node_name']} is currently stopped")
+                # Log to deployment history table
+                self.db.log_deployment_event(
+                    node['id'],
+                    'ibm_cloud_status',
+                    'stopped',
+                    f"Server is stopped"
+                )
             elif server_status == 'failed':
                 logger.error(f"❌ SERVER FAILED: {node['node_name']} deployment has failed")
+                # Log to deployment history table
+                self.db.log_deployment_event(
+                    node['id'],
+                    'ibm_cloud_status',
+                    'failed',
+                    f"Server deployment has failed"
+                )
+            else:
+                # Log any other status changes
+                logger.info(f"ℹ️ SERVER STATUS: {node['node_name']} status is {server_status}")
+                # Log to deployment history table
+                self.db.log_deployment_event(
+                    node['id'],
+                    'ibm_cloud_status',
+                    'in_progress',
+                    f"Server status changed to {server_status}"
+                )
         
         return {'message': 'Status updated successfully'}
 

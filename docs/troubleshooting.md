@@ -6,6 +6,8 @@
 
 1. SSH to the pxe server
 
+`ssh -i ~/.ssh/nutanix-ce-poc root@150.240.65.231`
+
 ```bash
 rm -rf /var/log/nutanix-pxe
 cd /
@@ -35,7 +37,7 @@ curl -X POST http://localhost:8080/api/config/nodes \
 cat /var/log/nutanix-pxe/pxe-server.log
 ```
 
-2. Monitor the install in the console
+1. Monitor the install in the console
 
 ## iPXE URL for bare metal server reboot
 
