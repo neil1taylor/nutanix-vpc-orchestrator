@@ -97,7 +97,7 @@ IBM Cloud VPC expects the `user_data` field to contain either:
 - **The actual iPXE script content** as text
 
 **Initial iPXE** is passed to the server via the IBM Cloud automation, the URL is sent to to IBM Cloud in the userdata files in the bare metal provisioning by the PXE/Config server.
-`http://<pxe_server_dns>:8080/boot/config?node_id=<node_id>&mgmt_ip=<management_ip>`
+`http://<pxe_server_dns>:8080/boot/config?mgmt_ip=<management_ip>`
 
 
 **What it does**:
@@ -110,26 +110,28 @@ IBM Cloud VPC expects the `user_data` field to contain either:
 ```bash
 #!ipxe
 echo ===============================================
-echo Nutanix CE Cluster Creation
+echo Nutanix CE Node Creation
 echo ===============================================
-echo Node ID: {node_name}
-echo Management IP: {management_ip}
-echo AHV IP: {ahv_ip}
-echo CVM IP: {cvm_ip}
+echo Node ID: {node['node_name']}
+echo Management IP: {node['management_ip']}
+echo AHV IP: {node['nutanix_config']['ahv_ip']}
+echo CVM IP: {node['nutanix_config']['cvm_ip']}
 echo ===============================================
 echo Starting Nutanix Foundation deployment...
 
 :retry_dhcp
 dhcp || goto retry_dhcp
 sleep 2
-set base-url http://{pxe_server_dns}:8080/boot/images
-set node_id {node_name}
-set mgmt_ip {management_ip}
-set ahv_ip {ahv_ip}
-set cvm_ip {cvm_ip}
-kernel ${base-url}/vmlinuz-foundation console=tty0 console=ttyS0,115200
-initrd ${base-url}/initrd-foundation.img
-imgargs vmlinuz-foundation node_id=${node_id} mgmt_ip=${mgmt_ip} ahv_ip=${ahv_ip} cvm_ip=${cvm_ip} config_server=http://{pxe_server_dns}:8080/boot/server/${mgmt_ip}
+ntp time.adn.networklayer.com
+set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
+set node_id {node['node_name']}
+set mgmt_ip {node['management_ip']}
+set ahv_ip {node['nutanix_config']['ahv_ip']}
+set cvm_ip {node['nutanix_config']['cvm_ip']}
+
+kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
+initrd ${{base-url}}/initrd-foundation.img
+
 boot || goto error
 
 :error
@@ -352,3 +354,27 @@ Foundation configures nodes based on the `cluster_role` setting:
 6. **Validation**: Foundation validates deployment and reports status
 
 This automated process provides complete control over Nutanix CE deployment while eliminating manual intervention requirements for IBM Cloud bare metal server installations.
+
+## Testing
+
+`http://<pxe_server_dns>:8080/boot/config?mgmt_ip=<management_ip>&type=iso`
+
+then the iPXE returned is
+
+```bash
+#!ipxe
+echo ===============================================
+echo Nutanix CE Node Creation
+echo ===============================================
+echo Node ID: {node_name}
+echo Management IP: {management_ip}
+echo ===============================================
+echo Starting Nutanix Foundation deployment...
+
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+ntp time.adn.networklayer.com
+set base-url http://{pxe_server_dns}:8080/boot/images
+sanboot ${base-url}/nutanix-ce-installer.iso
+```

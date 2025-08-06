@@ -24,9 +24,16 @@ class BootService:
         workload_mac = request_args.get('workload_mac')
         server_serial = request_args.get('serial')
         node_id = request_args.get('node_id')
+        boot_type = request_args.get('type')
         
         mac_info = f" (MAC: {mgmt_mac})" if mgmt_mac else ""
-        logger.info(f"iPXE boot request from {mgmt_ip}{mac_info}")
+        type_info = f" (Type: {boot_type})" if boot_type else ""
+        logger.info(f"iPXE boot request from {mgmt_ip}{mac_info}{type_info}")
+        
+        # Check if this is an ISO boot request
+        if boot_type == 'iso':
+            logger.info(f"🔄 ISO BOOT: Generating ISO boot script for {mgmt_ip}")
+            return self.generate_iso_boot_script(mgmt_ip)
         
         # Start monitoring for this IP address immediately, even before database lookup
         if mgmt_ip:
@@ -116,7 +123,7 @@ class BootService:
         """Generate a generic iPXE boot script for node provisioning"""
         template = f"""#!ipxe
 echo ===============================================
-echo Nutanix CE Node Provisioning
+echo Nutanix CE Node Creation
 echo ===============================================
 echo Node ID: {node['node_name']}
 echo Management IP: {node['management_ip']}
@@ -128,14 +135,16 @@ echo Starting Nutanix Foundation deployment...
 :retry_dhcp
 dhcp || goto retry_dhcp
 sleep 2
+ntp time.adn.networklayer.com
 set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
 set node_id {node['node_name']}
 set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
-kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200
+
+kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
 initrd ${{base-url}}/initrd-foundation.img
-imgargs vmlinuz-foundation node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
+
 boot || goto error
 
 :error
@@ -160,6 +169,63 @@ echo ===============================================
 echo Dropping to iPXE shell for debugging...
 shell
 """
+        return template
+        
+    def generate_iso_boot_script(self, management_ip):
+        """Generate iPXE boot script for ISO booting"""
+        # Try to get node information if available
+        node = self.db.get_node_by_management_ip(management_ip)
+        node_name = node['node_name'] if node else f"Unknown-{management_ip}"
+        
+        # Log ISO boot request
+        logger.info(f"🔄 ISO BOOT: Generating ISO boot script for {node_name} ({management_ip})")
+        
+        # If we have a node, log the deployment event
+        if node:
+            self.db.log_deployment_event(
+                node['id'],
+                'iso_boot',
+                'in_progress',
+                f"ISO boot initiated for {node_name} ({management_ip})"
+            )
+            
+            # Start server status monitoring if not already running
+            try:
+                from node_provisioner import NodeProvisioner
+                node_provisioner = NodeProvisioner()
+                logger.info(f"🚀 ISO BOOT TRIGGER: Starting server status monitoring for node {node['id']} from ISO boot request")
+                node_provisioner.start_deployment_monitoring(node['id'])
+            except Exception as e:
+                logger.error(f"❌ ISO MONITORING ERROR: Failed to start monitoring from ISO boot request: {str(e)}")
+                # Log full traceback for debugging
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+        
+        # Generate the ISO boot script
+        template = f"""#!ipxe
+echo ===============================================
+echo Nutanix CE Node Creation
+echo ===============================================
+echo Node ID: {node_name}
+echo Management IP: {management_ip}
+echo ===============================================
+echo Starting Nutanix Foundation deployment...
+
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+ntp time.adn.networklayer.com
+set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
+sanboot ${{base-url}}/nutanix-ce-installer.iso
+"""
+        
+        # Log the boot script content with a clear separator for better readability
+        logger.info(f"Generated ISO boot script for {management_ip}:")
+        logger.info("--- BEGIN ISO BOOT SCRIPT ---")
+        for line in template.splitlines():
+            logger.info(f"ISO BOOT: {line}")
+        logger.info("--- END ISO BOOT SCRIPT ---")
+        
         return template
     
     def get_server_config(self, server_ip):

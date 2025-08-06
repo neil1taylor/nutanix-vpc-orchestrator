@@ -2,81 +2,70 @@
 
 {% block title %}Create Cluster{% endblock %}
 
-{% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h1>Create New Cluster</h1>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-                    <li class="breadcrumb-item"><a href="{{ url_for('clusters') }}">Clusters</a></li>
-                    <li class="breadcrumb-item active" aria-current="page">Create Cluster</li>
-                </ol>
-            </nav>
-        </div>
-    </div>
+{% block breadcrumb %}> <a href="{{ url_for('clusters') }}">Clusters</a> > Create Cluster{% endblock %}
 
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Cluster Configuration</h5>
-                </div>
-                <div class="card-body">
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Create New Cluster</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Cluster Configuration</h2>
+    </div>
+    <div class="card-content">
                     <form id="cluster-form" method="POST">
-                        <div class="mb-3">
-                            <label for="cluster_name" class="form-label">Cluster Name</label>
+                        <div class="form-group">
+                            <label for="cluster_name">Cluster Name</label>
                             <input type="text" class="form-control" id="cluster_name" name="cluster_name" required>
-                            <div class="form-text">Enter a unique name for your cluster</div>
+                            <div class="form-help">Enter a unique name for your cluster</div>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="cluster_type" class="form-label">Cluster Type</label>
-                            <select class="form-select" id="cluster_type" name="cluster_type" required>
+                        <div class="form-group">
+                            <label for="cluster_type">Cluster Type</label>
+                            <select class="form-control" id="cluster_type" name="cluster_type" required>
                                 <option value="single_node">Single Node Cluster</option>
                                 <option value="multi_node">Multi-Node Cluster</option>
                             </select>
-                            <div class="form-text">Select the type of cluster to create</div>
+                            <div class="form-help">Select the type of cluster to create</div>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label">Available Nodes</label>
-                            <div id="available-nodes-container">
+                        <div class="form-group">
+                            <label>Available Nodes</label>
+                            <div class="node-selection">
                                 {% if available_nodes %}
                                     {% for node in available_nodes %}
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input node-checkbox" type="checkbox" 
-                                               name="nodes" value="{{ node.node_name }}" 
+                                    <div class="node-option">
+                                        <input class="node-checkbox" type="checkbox"
+                                               name="nodes" value="{{ node.node_name }}"
                                                id="node_{{ node.id }}">
-                                        <label class="form-check-label" for="node_{{ node.id }}">
-                                            {{ node.node_name }} ({{ node.server_profile }}) - {{ node.deployment_status }}
+                                        <label for="node_{{ node.id }}">
+                                            {{ node.node_name }} ({{ node.server_profile }}) -
+                                            <span class="status-badge status-{{ 'success' if node.deployment_status == 'deployed' else 'warning' if node.deployment_status == 'provisioning' else 'secondary' }}">
+                                                {{ node.deployment_status }}
+                                            </span>
                                         </label>
                                     </div>
                                     {% endfor %}
                                 {% else %}
-                                    <p class="text-muted">No available nodes found. Please deploy nodes first.</p>
+                                    <div class="empty-message">No available nodes found. Please deploy nodes first.</div>
                                 {% endif %}
                             </div>
-                            <div class="form-text">Select nodes to include in the cluster</div>
+                            <div class="form-help">Select nodes to include in the cluster</div>
                         </div>
 
-                        <div class="mb-3" id="node-count-warning" style="display: none;">
-                            <div class="alert alert-warning" role="alert">
-                                <strong>Warning:</strong> Multi-node clusters require at least 3 nodes for production use.
-                            </div>
+                        <div class="warning-message" id="node-count-warning" style="display: none;">
+                            <div class="warning-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                            <div class="warning-text">Multi-node clusters require at least 3 nodes for production use.</div>
                         </div>
 
-                        <div class="d-flex justify-content-between">
+                        <div class="form-actions">
                             <a href="{{ url_for('clusters') }}" class="btn btn-secondary">Cancel</a>
                             <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Create Cluster</button>
                         </div>
                     </form>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {

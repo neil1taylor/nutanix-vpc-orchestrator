@@ -577,7 +577,14 @@ class NodeProvisioner:
             # Log initial status with high visibility
             logger.info(f"⚙️ INITIAL STATUS: Server {node['node_name']} IBM Cloud status is {current_status.upper()}")
             
-            # Update status in status monitor
+            # If server is already running, update status but don't start continuous monitoring
+            if current_status == 'running':
+                logger.info(f"✅ SERVER ALREADY RUNNING: {node['node_name']} is already in RUNNING state")
+                # Update status in status monitor and return early to prevent continuous monitoring
+                self.status_monitor.update_server_status(node['node_name'], current_status)
+                return
+            
+            # Update status in status monitor for non-running servers
             try:
                 from status_monitor import StatusMonitor
                 status_monitor = StatusMonitor()
@@ -700,6 +707,31 @@ class NodeProvisioner:
                     
                     # Log every poll for debugging
                     logger.info(f"🔍 POLL #{poll_count}: Server {node['node_name']} status is {current_status}")
+                    
+                    # If server is already running on first poll, stop monitoring
+                    if poll_count == 1 and current_status == 'running':
+                        logger.info(f"✅ SERVER ALREADY RUNNING: {node['node_name']} is already in RUNNING state, no need to monitor")
+                        
+                        # Update status in status monitor if needed
+                        if status_monitor and last_status != 'running':
+                            try:
+                                logger.info(f"📝 UPDATING FINAL STATUS: Sending final status update for {node['node_name']}")
+                                
+                                status_monitor.update_deployment_phase({
+                                    'server_ip': str(node['management_ip']),
+                                    'phase': 'ibm_cloud_status',
+                                    'status': 'success',
+                                    'message': f"Server is already running",
+                                    'server_status': 'running'
+                                })
+                                logger.info(f"✅ FINAL STATUS UPDATED: Status update sent for {node['node_name']}")
+                            except Exception as update_error:
+                                logger.error(f"❌ FINAL STATUS UPDATE ERROR: Failed to update status: {str(update_error)}")
+                                import traceback
+                                logger.error(f"Full traceback: {traceback.format_exc()}")
+                        
+                        logger.info(f"🏁 MONITORING ENDED: No need to monitor {node['node_name']} as it's already running")
+                        return
                     
                     # If status changed, log it with high visibility
                     if current_status != last_status:
