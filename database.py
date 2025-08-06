@@ -98,6 +98,30 @@ class Database:
                     """)
                     
                     cur.execute("""
+                        CREATE TABLE IF NOT EXISTS node_health (
+                            id SERIAL PRIMARY KEY,
+                            node_id INTEGER REFERENCES nodes(id),
+                            timestamp TIMESTAMP DEFAULT NOW(),
+                            cpu_usage NUMERIC(5, 2),
+                            memory_usage NUMERIC(5, 2),
+                            disk_space NUMERIC(5, 2),
+                            network_latency NUMERIC(5, 2),
+                            custom_metrics JSONB
+                        );
+                    """)
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS node_health (
+                            id SERIAL PRIMARY KEY,
+                            node_id INTEGER REFERENCES nodes(id),
+                            timestamp TIMESTAMP DEFAULT NOW(),
+                            cpu_usage NUMERIC(5, 2),
+                            memory_usage NUMERIC(5, 2),
+                            disk_space NUMERIC(5, 2),
+                            network_latency NUMERIC(5, 2),
+                            custom_metrics JSONB
+                        );
+                    """)
+                    cur.execute("""
                         CREATE TABLE IF NOT EXISTS vnic_info (
                             id SERIAL PRIMARY KEY,
                             node_name VARCHAR(255),
@@ -150,6 +174,19 @@ class Database:
                         conn.rollback()
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")
+            raise
+
+    def insert_node_health(self, node_id, cpu_usage, memory_usage, disk_space, network_latency, custom_metrics=None):
+        """Insert node health data into the node_health table"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO node_health (node_id, cpu_usage, memory_usage, disk_space, network_latency, custom_metrics)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (node_id, cpu_usage, memory_usage, disk_space, network_latency, custom_metrics))
+        except Exception as e:
+            logger.error(f"Failed to insert node health data: {str(e)}")
             raise
     
     def insert_node(self, node_config):

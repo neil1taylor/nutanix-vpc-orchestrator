@@ -152,20 +152,7 @@ class NodeProvisioner:
                 f"{node_config['node_name']}-workload"
             )
             
-            # Reserve cluster IP if this is the first node
-            if self.db.is_first_node():
-                cluster_ip = self.get_next_available_ip(
-                    mgmt_subnet['ipv4_cidr_block'], 
-                    'cluster', 
-                    mgmt_reserved_ips + [mgmt_ip, ahv_ip, cvm_ip]
-                )
-                ip_allocation['cluster'] = self.ibm_cloud.create_subnet_reserved_ip(
-                    self.config.MANAGEMENT_SUBNET_ID,
-                    cluster_ip,
-                    f"cluster01"
-                )
-            else:
-                ip_allocation['cluster'] = None
+            ip_allocation['cluster'] = None
             
             # Store reservations for cleanup if needed
             self.db.store_ip_reservations(node_config['node_name'], ip_allocation)
@@ -242,14 +229,7 @@ class NodeProvisioner:
             )
             dns_records.append(workload_record)
             
-            # Cluster DNS (if first node)
-            if ip_allocation.get('cluster'):
-                cluster_record = self.ibm_cloud.create_dns_record(
-                    'A',
-                    "cluster01",
-                    ip_allocation['cluster']['ip_address']
-                )
-                dns_records.append(cluster_record)
+            # No cluster DNS record creation
             
             # Store DNS records for cleanup
             self.db.store_dns_records(node_config['node_name'], dns_records)
@@ -400,7 +380,6 @@ class NodeProvisioner:
         node_config = {
             'node_name': node_data['node_config']['node_name'],
             'server_profile': node_data['node_config']['server_profile'],
-            'cluster_role': node_data['node_config']['cluster_role'],
             'deployment_status': 'provisioning',
             'management_vnic': {
                 'vnic_id': vnis['management_vni']['id'],
@@ -418,10 +397,7 @@ class NodeProvisioner:
                 'ahv_dns': f"{node_data['node_config']['node_name']}-ahv.{self.config.DNS_ZONE_NAME}",
                 'cvm_ip': ip_allocation['cvm']['ip_address'],
                 'cvm_dns': f"{node_data['node_config']['node_name']}-cvm.{self.config.DNS_ZONE_NAME}",
-                'cluster_ip': ip_allocation.get('cluster', {}).get('ip_address'),
-                'cluster_dns': f'cluster01.{self.config.DNS_ZONE_NAME}' if ip_allocation.get('cluster') else None,
-                'storage_config': node_data['node_config'].get('storage_config', {}),
-                'cluster_type': node_data['node_config'].get('cluster_config', {}).get('cluster_type', 'multi_node')
+                'storage_config': node_data['node_config'].get('storage_config', {})
             }
         }
         

@@ -432,6 +432,40 @@ def api_get_deployment_summary():
         logger.error(f"Deployment summary error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# New endpoint for overall deployment status
+@app.route('/api/status', methods=['GET'])
+def api_get_overall_status():
+    """Get overall deployment status"""
+    try:
+        status_monitor = StatusMonitor()
+        summary = status_monitor.get_overall_deployment_summary()
+        if summary:
+            return jsonify(summary)
+        else:
+            return jsonify({'error': 'Status summary not available'}), 404
+    except Exception as e:
+        logger.error(f"Overall status error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# New endpoint for deployment history
+@app.route('/api/status/history', methods=['GET'])
+def api_get_deployment_history():
+    """Get deployment history"""
+    try:
+        server_ip = request.args.get('server_ip')
+        if not server_ip:
+            return jsonify({'error': 'server_ip parameter is required'}), 400
+        
+        status_monitor = StatusMonitor()
+        history = status_monitor.get_deployment_history(server_ip)
+        if history:
+            return jsonify(history)
+        else:
+            return jsonify({'error': 'History not available for server IP'}), 404
+    except Exception as e:
+        logger.error(f"Deployment history error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 # ============================================================================
 # DNS REGISTRATION ENDPOINTS
 # ============================================================================
