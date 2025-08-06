@@ -28,6 +28,27 @@ class BootService:
         mac_info = f" (MAC: {mgmt_mac})" if mgmt_mac else ""
         logger.info(f"iPXE boot request from {mgmt_ip}{mac_info}")
         
+        # Start monitoring for this IP address immediately, even before database lookup
+        if mgmt_ip:
+            try:
+                # Try to find the node by IP first
+                node_by_ip = self.db.get_node_by_management_ip(mgmt_ip)
+                if node_by_ip:
+                    # Start server status monitoring if not already running
+                    try:
+                        from node_provisioner import NodeProvisioner
+                        node_provisioner = NodeProvisioner()
+                        logger.info(f"🚀 EARLY BOOT TRIGGER: Starting server status monitoring for IP {mgmt_ip} from iPXE boot request")
+                        node_provisioner.start_deployment_monitoring(node_by_ip['id'])
+                    except Exception as e:
+                        logger.error(f"❌ EARLY MONITORING ERROR: Failed to start monitoring from iPXE boot request: {str(e)}")
+                        # Log full traceback for debugging
+                        import traceback
+                        logger.error(f"Full traceback: {traceback.format_exc()}")
+            except Exception as e:
+                logger.error(f"❌ IP LOOKUP ERROR: Failed to lookup node by IP {mgmt_ip}: {str(e)}")
+                # Continue with normal flow, don't return error here
+        
         # Look up server in database by node_id (primary) or management IP (fallback)
         if node_id:
             # Convert node_id to integer if it's a string
@@ -66,6 +87,18 @@ class BootService:
             'in_progress',
             f"iPXE boot initiated from node {node_id or node.get('management_ip', 'unknown')}"
         )
+        
+        # Start server status monitoring if not already running
+        try:
+            from node_provisioner import NodeProvisioner
+            node_provisioner = NodeProvisioner()
+            logger.info(f"🚀 BOOT TRIGGER: Starting server status monitoring for node {node['id']} from boot service")
+            node_provisioner.start_deployment_monitoring(node['id'])
+        except Exception as e:
+            logger.error(f"❌ MONITORING ERROR: Failed to start monitoring from boot service: {str(e)}")
+            # Log full traceback for debugging
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
         
         # Generate boot script for node provisioning
         boot_script = self.generate_boot_script(node)
@@ -144,6 +177,18 @@ shell
             'success',
             f'Configuration delivered to {server_ip}'
         )
+        
+        # Start server status monitoring if not already running
+        try:
+            from node_provisioner import NodeProvisioner
+            node_provisioner = NodeProvisioner()
+            logger.info(f"🚀 CONFIG TRIGGER: Starting server status monitoring for node {node['id']} from config request")
+            node_provisioner.start_deployment_monitoring(node['id'])
+        except Exception as e:
+            logger.error(f"❌ MONITORING ERROR: Failed to start monitoring from config request: {str(e)}")
+            # Log full traceback for debugging
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
         
         # Generate storage configuration in the documented format
         storage_config = self.generate_documented_storage_config(node)
