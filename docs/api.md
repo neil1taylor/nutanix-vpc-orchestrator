@@ -424,7 +424,7 @@ These endpoints handle resource cleanup for failed or completed deployments.
 
 3. **iPXE Boot Request** (Server calls automatically)
    ```bash
-   GET /boot/config?mgmt_ip=X.X.X.X&mgmt_mac=XX:XX:XX:XX:XX:XX
+   GET /boot/config?mgmt_ip=X.X.X.X
    # Server requests iPXE boot script
    ```
 

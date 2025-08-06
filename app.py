@@ -183,19 +183,61 @@ def api_handle_boot_config():
 def api_get_server_config(server_ip):
     """Get detailed server configuration for Foundation"""
     try:
+        # Get client IP for logging
+        client_ip = request.remote_addr
+        # Check for X-Forwarded-For header
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            client_ip = forwarded_for.split(',')[0].strip()
+            
+        logger.info(f"📋 CONFIG REQUEST: Client {client_ip} is requesting server configuration for {server_ip}")
+        
+        # Log request headers for debugging
+        logger.debug(f"Request headers: {dict(request.headers)}")
+        
         config = boot_service.get_server_config(server_ip)
         if config:
+            # Log successful config retrieval with some details
+            logger.info(f"✅ CONFIG SERVED: Configuration for {server_ip} sent to {client_ip}")
+            logger.info(f"📊 CONFIG DETAILS: Node ID: {config.get('node_config', {}).get('node_id', 'unknown')}")
+            
+            # Log storage configuration for debugging
+            storage_config = config.get('storage_config', {})
+            logger.info(f"💾 STORAGE CONFIG: Boot drives: {storage_config.get('boot_drives', [])} | Data drives: {storage_config.get('data_drives', [])}")
+            
             return jsonify(config)
         else:
+            logger.warning(f"❌ CONFIG NOT FOUND: No configuration found for server {server_ip}")
             return jsonify({'error': 'Server not found'}), 404
     except Exception as e:
-        logger.error(f"Server config error: {str(e)}")
+        logger.error(f"❌ CONFIG ERROR: Failed to serve configuration for {server_ip}: {str(e)}")
+        # Log full traceback for debugging
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/boot/images/<filename>', methods=['GET'])
 def api_serve_boot_image(filename):
     """Serve boot images (kernel, initrd, etc.)"""
     try:
+        # Get client IP for logging
+        client_ip = request.remote_addr
+        # Check for X-Forwarded-For header
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            client_ip = forwarded_for.split(',')[0].strip()
+            
+        # Log the request with high visibility
+        if filename == 'vmlinuz-foundation':
+            logger.info(f"🔄 KERNEL REQUEST: Client {client_ip} is downloading kernel file")
+        elif filename == 'initrd-foundation.img':
+            logger.info(f"🔄 INITRD REQUEST: Client {client_ip} is downloading initrd file")
+        else:
+            logger.info(f"🔄 BOOT IMAGE REQUEST: Client {client_ip} is downloading {filename}")
+            
+        # Log request headers for debugging
+        logger.debug(f"Request headers: {dict(request.headers)}")
+        
         # Security check - only allow approved files
         allowed_files = [
             'vmlinuz-foundation',
@@ -204,17 +246,40 @@ def api_serve_boot_image(filename):
         ]
         
         if filename not in allowed_files:
+            logger.warning(f"❌ SECURITY: Client {client_ip} attempted to access unauthorized file: {filename}")
             return jsonify({'error': 'File not allowed'}), 403
         
-        return send_from_directory(Config.BOOT_IMAGES_PATH, filename)
+        # Log successful file serving
+        logger.info(f"✅ SERVING: {filename} to client {client_ip}")
+        
+        # Serve the file
+        response = send_from_directory(Config.BOOT_IMAGES_PATH, filename)
+        
+        # Log file size for debugging
+        file_size = response.headers.get('Content-Length', 'unknown size')
+        logger.info(f"📦 SENT: {filename} ({file_size} bytes) to {client_ip}")
+        
+        return response
     except Exception as e:
-        logger.error(f"Image serve error: {str(e)}")
+        logger.error(f"❌ IMAGE ERROR: Failed to serve {filename}: {str(e)}")
+        # Log full traceback for debugging
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 404
 
 @app.route('/boot/scripts/<script_name>', methods=['GET'])
 def api_serve_boot_script(script_name):
     """Serve boot scripts and configuration files"""
     try:
+        # Get client IP for logging
+        client_ip = request.remote_addr
+        # Check for X-Forwarded-For header
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            client_ip = forwarded_for.split(',')[0].strip()
+            
+        logger.info(f"📜 SCRIPT REQUEST: Client {client_ip} is requesting boot script: {script_name}")
+        
         allowed_scripts = [
             'foundation-init.sh',
             'network-config.sh',
@@ -222,11 +287,25 @@ def api_serve_boot_script(script_name):
         ]
         
         if script_name not in allowed_scripts:
+            logger.warning(f"❌ SECURITY: Client {client_ip} attempted to access unauthorized script: {script_name}")
             return jsonify({'error': 'Script not allowed'}), 403
         
-        return send_from_directory(Config.BOOT_SCRIPTS_PATH, script_name)
+        # Log successful script serving
+        logger.info(f"✅ SERVING SCRIPT: {script_name} to client {client_ip}")
+        
+        # Serve the script
+        response = send_from_directory(Config.BOOT_SCRIPTS_PATH, script_name)
+        
+        # Log file size for debugging
+        file_size = response.headers.get('Content-Length', 'unknown size')
+        logger.info(f"📦 SENT SCRIPT: {script_name} ({file_size} bytes) to {client_ip}")
+        
+        return response
     except Exception as e:
-        logger.error(f"Script serve error: {str(e)}")
+        logger.error(f"❌ SCRIPT ERROR: Failed to serve script {script_name}: {str(e)}")
+        # Log full traceback for debugging
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 404
 
 # ============================================================================
