@@ -70,7 +70,13 @@ class BootService:
         # Generate boot script for node provisioning
         boot_script = self.generate_boot_script(node)
         
-        logger.info(f"Generated boot script for {node['node_name']}")
+        # Log the boot script content with a clear separator for better readability
+        logger.info(f"Generated boot script for {node['node_name']}:")
+        logger.info("--- BEGIN BOOT SCRIPT ---")
+        for line in boot_script.splitlines():
+            logger.info(f"BOOT: {line}")
+        logger.info("--- END BOOT SCRIPT ---")
+        
         return boot_script
     
     def generate_boot_script(self, node):

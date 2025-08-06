@@ -95,19 +95,35 @@ class StatusMonitor:
         )
         
         # Update server deployment status in main table
+        new_status = ''
         if data['phase'] in ['health_validation'] and data['status'] == 'success':
-            self.db.update_node_status(node['id'], 'deployed')
+            new_status = 'deployed'
+            self.db.update_node_status(node['id'], new_status)
+            logger.info(f"Server {node['node_name']} status changed to: RUNNING")
         elif data['status'] == 'failed':
-            self.db.update_node_status(node['id'], 'failed')
+            new_status = 'failed'
+            self.db.update_node_status(node['id'], new_status)
+            logger.info(f"Server {node['node_name']} status changed to: FAILED")
         else:
-            self.db.update_node_status(node['id'], f"{data['phase']}_{data['status']}")
+            new_status = f"{data['phase']}_{data['status']}"
+            self.db.update_node_status(node['id'], new_status)
+            
+            # Log specific state transitions
+            if data['phase'] == 'ipxe_boot' and data['status'] == 'in_progress':
+                logger.info(f"Server {node['node_name']} status changed to: STARTING")
+            elif data['phase'] == 'foundation_start' and data['status'] == 'in_progress':
+                logger.info(f"Server {node['node_name']} status changed to: INSTALLING")
 
+        # Log detailed status information
         if data['status'] == 'failed':
             logger.info(f"Deployment failed for {node['node_name']}: {data['message']}")
         elif data['phase'] == 'cluster_formation' and data['status'] == 'success':
             logger.info(f"Cluster formation successful for {node['node_name']}")
         elif data['phase'] == 'health_validation' and data['status'] == 'success':
             logger.info(f"Health validation successful for {node['node_name']}")
+            
+        # Log all status changes with details
+        logger.info(f"Server {node['node_name']} status update: phase={data['phase']}, status={data['status']}, new_state={new_status}")
 
         logger.info(f"Phase update for {node['node_name']}: {data['phase']} - {data['status']}")
         return {'message': 'Status updated successfully'}
@@ -151,96 +167,9 @@ class StatusMonitor:
         """Simulate getting network latency"""
         return 10.0  # Placeholder value
 
-def get_custom_metrics(self, node_id):
-    """Simulate getting custom metrics"""
-    return {"metric1": 100, "metric2": 200}  # Placeholder value
-
-
-def collect_and_store_health_metrics(self, node_id):
-    """Collect and store health metrics for a node"""
-    try:
-        # Simulate health metric collection
-        cpu_usage = self.get_cpu_usage(node_id)
-        memory_usage = self.get_memory_usage(node_id)
-        disk_space = self.get_disk_space(node_id)
-        network_latency = self.get_network_latency(node_id)
-        custom_metrics = self.get_custom_metrics(node_id)
-
-        # Store health metrics in the database
-        self.db.insert_node_health(
-            node_id,
-            cpu_usage,
-            memory_usage,
-            disk_space,
-            network_latency,
-            custom_metrics
-        )
-    except Exception as e:
-        logger.error(f"Failed to collect and store health metrics for node {node_id}: {str(e)}")
-        raise
-
-def get_cpu_usage(self, node_id):
-    """Simulate getting CPU usage"""
-    return 50.0  # Placeholder value
-
-def get_memory_usage(self, node_id):
-    """Simulate getting memory usage"""
-    return 75.0  # Placeholder value
-
-def get_disk_space(self, node_id):
-    """Simulate getting disk space"""
-    return 80.0  # Placeholder value
-
-def get_network_latency(self, node_id):
-    """Simulate getting network latency"""
-    return 10.0  # Placeholder value
-
-def get_custom_metrics(self, node_id):
-    """Simulate getting custom metrics"""
-    return {"metric1": 100, "metric2": 200}  # Placeholder value
-
-def collect_and_store_health_metrics(self, node_id):
-    """Collect and store health metrics for a node"""
-    try:
-        # Simulate health metric collection
-        cpu_usage = self.get_cpu_usage(node_id)
-        memory_usage = self.get_memory_usage(node_id)
-        disk_space = self.get_disk_space(node_id)
-        network_latency = self.get_network_latency(node_id)
-        custom_metrics = self.get_custom_metrics(node_id)
-
-        # Store health metrics in the database
-        self.db.insert_node_health(
-            node_id,
-            cpu_usage,
-            memory_usage,
-            disk_space,
-            network_latency,
-            custom_metrics
-        )
-    except Exception as e:
-        logger.error(f"Failed to collect and store health metrics for node {node_id}: {str(e)}")
-        raise
-
-def get_cpu_usage(self, node_id):
-    """Simulate getting CPU usage"""
-    return 50.0  # Placeholder value
-
-def get_memory_usage(self, node_id):
-    """Simulate getting memory usage"""
-    return 75.0  # Placeholder value
-
-def get_disk_space(self, node_id):
-    """Simulate getting disk space"""
-    return 80.0  # Placeholder value
-
-def get_network_latency(self, node_id):
-    """Simulate getting network latency"""
-    return 10.0  # Placeholder value
-
-def get_custom_metrics(self, node_id):
-    """Simulate getting custom metrics"""
-    return {"metric1": 100, "metric2": 200}  # Placeholder value
+    def get_custom_metrics(self, node_id):
+        """Simulate getting custom metrics"""
+        return {"metric1": 100, "metric2": 200}  # Placeholder value
     
 def get_deployment_history(self, server_ip):
     """Get complete deployment history for a server"""
@@ -389,143 +318,123 @@ def collect_and_store_health_metrics(self, node_id):
         logger.error(f"Failed to collect and store health metrics for node {node_id}: {str(e)}")
         raise
 
-def get_cpu_usage(self, node_id):
-    """Simulate getting CPU usage"""
-    return 50.0  # Placeholder value
+    def handle_cluster_formation_complete(self, node_id, completion_data):
+        """Handle cluster formation completion"""
+        node = self.db.get_node(node_id)
+        
+        # Check if this is the first node (cluster creation)
+        if self.db.is_first_node() or not self.db.get_cluster_info():
+            self.register_new_cluster(node_id, completion_data)
+        else:
+            self.handle_node_addition_complete(node_id, completion_data)
 
-def get_memory_usage(self, node_id):
-    """Simulate getting memory usage"""
-    return 75.0  # Placeholder value
-
-def get_disk_space(self, node_id):
-    """Simulate getting disk space"""
-    return 80.0  # Placeholder value
-
-def get_network_latency(self, node_id):
-    """Simulate getting network latency"""
-    return 10.0  # Placeholder value
-
-def get_custom_metrics(self, node_id):
-    """Simulate getting custom metrics"""
-    return {"metric1": 100, "metric2": 200}  # Placeholder value
-
-def handle_cluster_formation_complete(self, node_id, completion_data):
-    """Handle cluster formation completion"""
-    node = self.db.get_node(node_id)
-    
-    # Check if this is the first node (cluster creation)
-    if self.db.is_first_node() or not self.db.get_cluster_info():
-        self.register_new_cluster(node_id, completion_data)
-    else:
-        self.handle_node_addition_complete(node_id, completion_data)
-
-def register_new_cluster(self, node_id, completion_data):
-    """Register a new cluster in the database"""
-    node = self.db.get_node(node_id)
-    
-    cluster_config = {
-        'cluster_name': completion_data.get('cluster_name', 'cluster01'),
-        'cluster_ip': node['nutanix_config']['cluster_ip'],
-        'cluster_dns': node['nutanix_config']['cluster_dns'],
-        'created_by_node': node_id,
-        'node_count': 1,
-        'status': 'active'
-    }
-    
-    cluster_id = self.db.register_cluster(cluster_config)
-    
-    self.db.log_deployment_event(
-        node_id,
-        'cluster_registered',
-        'success',
-        f"New cluster {cluster_config['cluster_name']} registered with ID {cluster_id}"
-    )
-    
-    logger.info(f"New cluster {cluster_config['cluster_name']} registered for node {node['node_name']}")
-
-def handle_node_addition_complete(self, node_id, completion_data):
-    """Handle completion of node addition to existing cluster"""
-    node = self.db.get_node(node_id)
-    cluster_info = self.db.get_cluster_info()
-    
-    if cluster_info:
-        # Increment cluster node count
-        # Note: This would require adding the method to Database class
-        # self.db.increment_cluster_node_count(cluster_info['id'])
+    def register_new_cluster(self, node_id, completion_data):
+        """Register a new cluster in the database"""
+        node = self.db.get_node(node_id)
+        
+        cluster_config = {
+            'cluster_name': completion_data.get('cluster_name', 'cluster01'),
+            'cluster_ip': node['nutanix_config']['cluster_ip'],
+            'cluster_dns': node['nutanix_config']['cluster_dns'],
+            'created_by_node': node_id,
+            'node_count': 1,
+            'status': 'active'
+        }
+        
+        cluster_id = self.db.register_cluster(cluster_config)
         
         self.db.log_deployment_event(
             node_id,
-            'node_added_to_cluster',
+            'cluster_registered',
             'success',
-            f"Node {node['node_name']} added to cluster {cluster_info['cluster_name']}"
+            f"New cluster {cluster_config['cluster_name']} registered with ID {cluster_id}"
         )
         
-        logger.info(f"Node {node['node_name']} added to cluster {cluster_info['cluster_name']}")
+        logger.info(f"New cluster {cluster_config['cluster_name']} registered for node {node['node_name']}")
 
-def handle_deployment_complete(self, node_id, completion_data):
-    """Handle successful deployment completion"""
-    node = self.db.get_node(node_id)
-    
-    # Final status update
-    self.db.update_node_status(node_id, 'deployed')
-    
-    self.db.log_deployment_event(
-        node_id,
-        'deployment_complete',
-        'success',
-        f"Deployment completed successfully for {node['node_name']}"
-    )
-    
-    # Send completion notification (this could trigger external systems)
-    self.send_completion_notification(node_id)
-    
-    logger.info(f"Deployment completed successfully for {node['node_name']}")
-
-def send_completion_notification(self, node_id):
-    """Send deployment completion notification"""
-    node = self.db.get_node(node_id)
-    cluster_info = self.db.get_cluster_info()
-    
-    notification_data = {
-        'event': 'deployment_complete',
-        'node_id': node_id,
-        'node_name': node['node_name'],
-        'cluster_name': cluster_info['cluster_name'] if cluster_info else 'unknown',
-        'cluster_ip': cluster_info['cluster_ip'] if cluster_info else node['nutanix_config']['cluster_ip'],
-        'prism_url': f"https://{cluster_info['cluster_ip'] if cluster_info else node['nutanix_config']['cluster_ip']}:9440",
-        'completion_time': datetime.now().isoformat()
-    }
-    
-    logger.info(f"Deployment notification: {notification_data}")
-    # Here you could send to external monitoring systems, webhooks, etc.
-
-def get_overall_deployment_summary(self):
-    """Get summary of all deployments"""
-    try:
-        # Get all nodes
-        with self.db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT 
-                        deployment_status,
-                        COUNT(*) as count
-                    FROM nodes 
-                    GROUP BY deployment_status
-                """)
-                status_counts = dict(cur.fetchall())
-        
-        # Get cluster info
+    def handle_node_addition_complete(self, node_id, completion_data):
+        """Handle completion of node addition to existing cluster"""
+        node = self.db.get_node(node_id)
         cluster_info = self.db.get_cluster_info()
         
-        summary = {
-            'total_nodes': sum(status_counts.values()),
-            'status_breakdown': status_counts,
-            'cluster_info': cluster_info,
-            'last_updated': datetime.now().isoformat()
+        if cluster_info:
+            # Increment cluster node count
+            # Note: This would require adding the method to Database class
+            # self.db.increment_cluster_node_count(cluster_info['id'])
+            
+            self.db.log_deployment_event(
+                node_id,
+                'node_added_to_cluster',
+                'success',
+                f"Node {node['node_name']} added to cluster {cluster_info['cluster_name']}"
+            )
+            
+            logger.info(f"Node {node['node_name']} added to cluster {cluster_info['cluster_name']}")
+
+    def handle_deployment_complete(self, node_id, completion_data):
+        """Handle successful deployment completion"""
+        node = self.db.get_node(node_id)
+        
+        # Final status update
+        self.db.update_node_status(node_id, 'deployed')
+        
+        self.db.log_deployment_event(
+            node_id,
+            'deployment_complete',
+            'success',
+            f"Deployment completed successfully for {node['node_name']}"
+        )
+        
+        # Send completion notification (this could trigger external systems)
+        self.send_completion_notification(node_id)
+        
+        logger.info(f"Deployment completed successfully for {node['node_name']}")
+
+    def send_completion_notification(self, node_id):
+        """Send deployment completion notification"""
+        node = self.db.get_node(node_id)
+        cluster_info = self.db.get_cluster_info()
+        
+        notification_data = {
+            'event': 'deployment_complete',
+            'node_id': node_id,
+            'node_name': node['node_name'],
+            'cluster_name': cluster_info['cluster_name'] if cluster_info else 'unknown',
+            'cluster_ip': cluster_info['cluster_ip'] if cluster_info else node['nutanix_config']['cluster_ip'],
+            'prism_url': f"https://{cluster_info['cluster_ip'] if cluster_info else node['nutanix_config']['cluster_ip']}:9440",
+            'completion_time': datetime.now().isoformat()
         }
         
-        return summary
-        
-    except Exception as e:
-        logger.error(f"Failed to get deployment summary: {str(e)}")
-        return None
+        logger.info(f"Deployment notification: {notification_data}")
+        # Here you could send to external monitoring systems, webhooks, etc.
+
+    def get_overall_deployment_summary(self):
+        """Get summary of all deployments"""
+        try:
+            # Get all nodes
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT
+                            deployment_status,
+                            COUNT(*) as count
+                        FROM nodes
+                        GROUP BY deployment_status
+                    """)
+                    status_counts = dict(cur.fetchall())
+            
+            # Get cluster info
+            cluster_info = self.db.get_cluster_info()
+            
+            summary = {
+                'total_nodes': sum(status_counts.values()),
+                'status_breakdown': status_counts,
+                'cluster_info': cluster_info,
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Failed to get deployment summary: {str(e)}")
+            return None
