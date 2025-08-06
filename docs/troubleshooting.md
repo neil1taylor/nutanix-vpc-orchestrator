@@ -42,6 +42,7 @@ cat /var/log/nutanix-pxe/pxe-server.log
 ## iPXE URL for bare metal server reboot
 
 `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080//boot/config?mgmt_ip=10.240.0.10`
+`http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080//boot/config?mgmt_ip=${net0/ip}`
 
 ## Log files
 

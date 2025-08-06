@@ -585,7 +585,13 @@ class NodeProvisioner:
             if current_status == 'running':
                 logger.info(f"✅ SERVER ALREADY RUNNING: {node['node_name']} is already in RUNNING state")
                 # Update status in status monitor and return early to prevent continuous monitoring
-                self.status_monitor.update_server_status(node['node_name'], current_status)
+                self.status_monitor.update_deployment_phase({
+                    'server_ip': str(node['management_ip']),
+                    'phase': 'ibm_cloud_status',
+                    'status': 'success',
+                    'message': f"Server is already running",
+                    'server_status': current_status
+                })
                 return
             
             # Update status in status monitor for non-running servers

@@ -13,42 +13,56 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class IBMCloudClient:
+    # Singleton instance
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(IBMCloudClient, cls).__new__(cls)
+        return cls._instance
+    
     def __init__(self):
-        # Load configuration from Config class instead of direct os.getenv
-        self.config = Config
-        self.region = Config.IBM_CLOUD_REGION
-        self.vpc_id = Config.VPC_ID
-        self.dns_instance_guid = Config.DNS_INSTANCE_GUID
-        self.dns_zone_id = Config.DNS_ZONE_ID
-        
-        # Validate required configuration using Config class method
-        Config.validate_required_config()
-        
-        # Initialize VPC service with trusted profile authentication
-        try:
-            self.vpc_authenticator = VPCInstanceAuthenticator()
-            self.vpc_service = VpcV1(authenticator=self.vpc_authenticator)
-            self.vpc_service.set_service_url(f'https://{self.region}.iaas.cloud.ibm.com/v1')
+        # Only initialize once
+        if not IBMCloudClient._initialized:
+            # Load configuration from Config class instead of direct os.getenv
+            self.config = Config
+            self.region = Config.IBM_CLOUD_REGION
+            self.vpc_id = Config.VPC_ID
+            self.dns_instance_guid = Config.DNS_INSTANCE_GUID
+            self.dns_zone_id = Config.DNS_ZONE_ID
             
-            # Debug: Log available methods in VpcV1
-            # logger.info(f"Available methods in VpcV1: {[method for method in dir(self.vpc_service) if not method.startswith('_')]}")
-            # logger.info(f"VpcV1 version: {getattr(self.vpc_service, '__version__', 'Unknown')}")
-            # logger.info(f"VpcV1 service URL: {self.vpc_service.service_url}")
-        except Exception as e:
-            logger.error(f"Failed to initialize VPC service: {str(e)}")
-            logger.error(f"Exception type: {type(e).__name__}")
-            logger.error(f"Exception args: {e.args}")
-            # Log the full traceback
-            import traceback
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-            raise
-        
-        # Initialize DNS service with trusted profile authentication
-        self.dns_authenticator = VPCInstanceAuthenticator()
-        self.dns_service = DnsSvcsV1(authenticator=self.dns_authenticator)
-        self.dns_service.set_service_url('https://api.dns-svcs.cloud.ibm.com/v1')
-        
-        logger.info("IBM Cloud client initialized with Config class and trusted profile authentication")
+            # Validate required configuration using Config class method
+            Config.validate_required_config()
+            
+            # Initialize VPC service with trusted profile authentication
+            try:
+                self.vpc_authenticator = VPCInstanceAuthenticator()
+                self.vpc_service = VpcV1(authenticator=self.vpc_authenticator)
+                self.vpc_service.set_service_url(f'https://{self.region}.iaas.cloud.ibm.com/v1')
+                
+                # Debug: Log available methods in VpcV1
+                # logger.info(f"Available methods in VpcV1: {[method for method in dir(self.vpc_service) if not method.startswith('_')]}")
+                # logger.info(f"VpcV1 version: {getattr(self.vpc_service, '__version__', 'Unknown')}")
+                # logger.info(f"VpcV1 service URL: {self.vpc_service.service_url}")
+            except Exception as e:
+                logger.error(f"Failed to initialize VPC service: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                logger.error(f"Exception args: {e.args}")
+                # Log the full traceback
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                raise
+            
+            # Initialize DNS service with trusted profile authentication
+            self.dns_authenticator = VPCInstanceAuthenticator()
+            self.dns_service = DnsSvcsV1(authenticator=self.dns_authenticator)
+            self.dns_service.set_service_url('https://api.dns-svcs.cloud.ibm.com/v1')
+            
+            logger.info("IBM Cloud client initialized with Config class and trusted profile authentication")
+            IBMCloudClient._initialized = True
+        else:
+            logger.debug("Using existing IBM Cloud client instance")
     
     # VPC Methods using SDK
     def create_subnet_reserved_ip(self, subnet_id, address, name):

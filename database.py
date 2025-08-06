@@ -11,9 +11,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Database:
+    # Singleton instance
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(Database, cls).__new__(cls)
+        return cls._instance
+    
     def __init__(self):
-        self.connection_string = Config.DATABASE_URL
-        self.init_database()
+        # Only initialize once
+        if not Database._initialized:
+            self.connection_string = Config.DATABASE_URL
+            self.init_database()
+            Database._initialized = True
+            logger.info("Database singleton instance initialized")
+        else:
+            logger.debug("Using existing Database instance")
     
     def get_connection(self):
         """Get database connection"""
