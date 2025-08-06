@@ -142,9 +142,9 @@ set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
 
-kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
+# Boot Phoenix with network config from DHCP
+kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 init=/installer IP=${net0/ip} NETMASK=${net0/netmask} GATEWAY=${net0/gateway} DNS=${dns} MAC=${net0/mac} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/configs/${net0/mac}.json
 initrd ${{base-url}}/initrd-foundation.img
-
 boot || goto error
 
 :error

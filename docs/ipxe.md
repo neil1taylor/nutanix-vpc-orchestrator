@@ -378,3 +378,29 @@ ntp time.adn.networklayer.com
 set base-url http://{pxe_server_dns}:8080/boot/images
 sanboot ${base-url}/nutanix-ce-installer.iso
 ```
+
+
+The Phoenix ISO's ISOLINUX configuration shows some kernel parameters:
+
+`kernel /boot/kernel init=/installer intel_iommu=on kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 quiet consoleblank=0 net.ifnames=0 mpt3sas.prot_mask=1 FOUND_IP=XXX.XXX.XXX.XXX AZ_CONF_URL=http://XXX.XXX.XXX.XXX/SerialNumber/%%NODE_SERIAL%%.json`
+
+ Dell Nutanix: How to initialize a Nutanix Node using the Phoenix ISO on the 14th generation Nutanix | Dell US
+
+These Phoenix-specific parameters were mentioned:
+
+```bash
+FOUND_IP - IP address of the Foundation server
+AZ_CONF_URL - URL to fetch JSON configuration
+%%NODE_SERIAL%% - Variable replaced with actual node serial number
+init=/installer - Launches Phoenix installer
+```
+
+Standard Linux Kernel Parameters
+
+```bash
+intel_iommu=on - Enable Intel IOMMU
+kvm-intel.nested=1 - Enable nested virtualization
+quiet - Reduce boot messages
+consoleblank=0 - Disable console blanking
+net.ifnames=0 - Use traditional network interface names
+```

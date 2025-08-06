@@ -26,10 +26,14 @@ class NodeProvisioner:
         from cleanup_service import CleanupService
         self.cleanup_service = CleanupService()
         
+        # Initialize status monitor
+        from status_monitor import StatusMonitor
+        self.status_monitor = StatusMonitor()
+        
         # Validate required configuration
         self.config.validate_required_config()
         
-        logger.info("NodeProvisioner initialized with Config class and CleanupService")
+        logger.info("NodeProvisioner initialized with Config class, CleanupService, and StatusMonitor")
     
     def provision_node(self, node_request):
         """Main node provisioning orchestration"""
@@ -586,10 +590,8 @@ class NodeProvisioner:
             
             # Update status in status monitor for non-running servers
             try:
-                from status_monitor import StatusMonitor
-                status_monitor = StatusMonitor()
                 logger.info(f"📝 UPDATING STATUS: Sending status update for {node['node_name']}: {current_status}")
-                status_monitor.update_deployment_phase({
+                self.status_monitor.update_deployment_phase({
                     'server_ip': str(node['management_ip']),
                     'phase': 'ibm_cloud_status',
                     'status': 'in_progress',
@@ -680,18 +682,8 @@ class NodeProvisioner:
             logger.info(f"🔄 CONTINUOUS MONITORING: Starting for {node['node_name']} (ID: {server_id})")
             logger.info(f"📊 INITIAL STATUS: {node['node_name']} starting with status {last_status}")
             
-            # Initialize status monitor
-            try:
-                from status_monitor import StatusMonitor
-                status_monitor = StatusMonitor()
-                logger.info(f"✅ STATUS MONITOR: Successfully initialized StatusMonitor")
-            except Exception as sm_error:
-                logger.error(f"❌ STATUS MONITOR ERROR: Failed to initialize StatusMonitor: {str(sm_error)}")
-                import traceback
-                logger.error(f"Full traceback: {traceback.format_exc()}")
-                # Create a fallback status monitor
-                status_monitor = None
-                logger.warning(f"⚠️ FALLBACK: Will continue monitoring but status updates will not be sent")
+            # Log status monitor availability
+            logger.info(f"✅ STATUS MONITOR: Using initialized StatusMonitor")
             
             # Monitor for up to 30 minutes (1800 seconds)
             end_time = time.time() + 1800
@@ -713,11 +705,11 @@ class NodeProvisioner:
                         logger.info(f"✅ SERVER ALREADY RUNNING: {node['node_name']} is already in RUNNING state, no need to monitor")
                         
                         # Update status in status monitor if needed
-                        if status_monitor and last_status != 'running':
+                        if last_status != 'running':
                             try:
                                 logger.info(f"📝 UPDATING FINAL STATUS: Sending final status update for {node['node_name']}")
                                 
-                                status_monitor.update_deployment_phase({
+                                self.status_monitor.update_deployment_phase({
                                     'server_ip': str(node['management_ip']),
                                     'phase': 'ibm_cloud_status',
                                     'status': 'success',
@@ -753,35 +745,32 @@ class NodeProvisioner:
                         logger.info(f"{status_emoji} STATUS CHANGE: Server {node['node_name']} changed from {last_status.upper()} to {current_status.upper()}")
                         
                         # Update status in status monitor
-                        if status_monitor:
-                            try:
-                                logger.info(f"📝 UPDATING STATUS: Sending status update for {node['node_name']}: {current_status}")
-                                
-                                # Map IBM Cloud status to appropriate deployment status
-                                deployment_status = 'in_progress'
-                                if current_status == 'running':
-                                    deployment_status = 'success'
-                                elif current_status == 'failed':
-                                    deployment_status = 'failed'
-                                elif current_status == 'stopped':
-                                    deployment_status = 'stopped'
-                                elif current_status == 'starting':
-                                    deployment_status = 'starting'
-                                
-                                status_monitor.update_deployment_phase({
-                                    'server_ip': str(node['management_ip']),
-                                    'phase': 'ibm_cloud_status',
-                                    'status': deployment_status,
-                                    'message': f"Server status changed: {last_status} -> {current_status}",
-                                    'server_status': current_status
-                                })
-                                logger.info(f"✅ STATUS UPDATED: Status update sent for {node['node_name']}")
-                            except Exception as update_error:
-                                logger.error(f"❌ STATUS UPDATE ERROR: Failed to update status: {str(update_error)}")
-                                import traceback
-                                logger.error(f"Full traceback: {traceback.format_exc()}")
-                        else:
-                            logger.warning(f"⚠️ STATUS MONITOR UNAVAILABLE: Cannot update status for {node['node_name']}")
+                        try:
+                            logger.info(f"📝 UPDATING STATUS: Sending status update for {node['node_name']}: {current_status}")
+                            
+                            # Map IBM Cloud status to appropriate deployment status
+                            deployment_status = 'in_progress'
+                            if current_status == 'running':
+                                deployment_status = 'success'
+                            elif current_status == 'failed':
+                                deployment_status = 'failed'
+                            elif current_status == 'stopped':
+                                deployment_status = 'stopped'
+                            elif current_status == 'starting':
+                                deployment_status = 'starting'
+                            
+                            self.status_monitor.update_deployment_phase({
+                                'server_ip': str(node['management_ip']),
+                                'phase': 'ibm_cloud_status',
+                                'status': deployment_status,
+                                'message': f"Server status changed: {last_status} -> {current_status}",
+                                'server_status': current_status
+                            })
+                            logger.info(f"✅ STATUS UPDATED: Status update sent for {node['node_name']}")
+                        except Exception as update_error:
+                            logger.error(f"❌ STATUS UPDATE ERROR: Failed to update status: {str(update_error)}")
+                            import traceback
+                            logger.error(f"Full traceback: {traceback.format_exc()}")
                         
                         # Update last status
                         last_status = current_status
