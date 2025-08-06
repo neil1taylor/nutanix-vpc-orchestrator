@@ -6,6 +6,8 @@ import ipaddress
 import base64
 import json
 import logging
+import threading
+import time
 from datetime import datetime, timedelta
 from database import Database
 from ibm_cloud_client import IBMCloudClient
@@ -475,12 +477,111 @@ class NodeProvisioner:
     def start_deployment_monitoring(self, node_id):
         """Initialize deployment monitoring for the node"""
         self.db.log_deployment_event(
-            node_id, 
-            'monitoring_start', 
-            'success', 
+            node_id,
+            'monitoring_start',
+            'success',
             'Deployment monitoring initialized'
         )
         logger.info(f"Monitoring started for node {node_id}")
+        
+        # Start a background thread to monitor IBM Cloud server status
+        self.monitor_server_status(node_id)
+    
+    def monitor_server_status(self, node_id):
+        """Monitor IBM Cloud server status and log state transitions"""
+        try:
+            # Get node information
+            node = self.db.get_node(node_id)
+            if not node or not node.get('bare_metal_id'):
+                logger.warning(f"Cannot monitor server status for node {node_id}: Missing bare_metal_id")
+                return
+                
+            # Get current server status from IBM Cloud
+            server_info = self.ibm_cloud.get_bare_metal_server(node['bare_metal_id'])
+            current_status = server_info.get('status', 'unknown')
+            
+            # Log initial status
+            logger.info(f"Initial IBM Cloud server status for {node['node_name']}: {current_status.upper()}")
+            
+            # Update status in status monitor
+            from status_monitor import StatusMonitor
+            status_monitor = StatusMonitor()
+            status_monitor.update_deployment_phase({
+                'server_ip': str(node['management_ip']),
+                'phase': 'ibm_cloud_status',
+                'status': 'in_progress',
+                'message': f"Server status: {current_status}",
+                'server_status': current_status
+            })
+            
+            # Start a background thread to continuously monitor the server status
+            thread = threading.Thread(
+                target=self._continuous_status_monitoring,
+                args=(node_id, node['bare_metal_id'], current_status),
+                daemon=True
+            )
+            thread.start()
+            
+            logger.info(f"Started monitoring IBM Cloud server status for {node['node_name']}")
+        except Exception as e:
+            logger.error(f"Error starting server status monitoring for node {node_id}: {str(e)}")
+    
+    def _continuous_status_monitoring(self, node_id, server_id, last_status):
+        """Continuously monitor server status in a background thread"""
+        try:
+            # Get node information
+            node = self.db.get_node(node_id)
+            if not node:
+                logger.warning(f"Cannot continue monitoring: Node {node_id} not found")
+                return
+                
+            logger.info(f"Starting continuous status monitoring for {node['node_name']}")
+            
+            # Initialize status monitor
+            from status_monitor import StatusMonitor
+            status_monitor = StatusMonitor()
+            
+            # Monitor for up to 30 minutes (1800 seconds)
+            end_time = time.time() + 1800
+            
+            while time.time() < end_time:
+                try:
+                    # Get current server status
+                    server_info = self.ibm_cloud.get_bare_metal_server(server_id)
+                    current_status = server_info.get('status', 'unknown')
+                    
+                    # If status changed, log it
+                    if current_status != last_status:
+                        logger.info(f"Server {node['node_name']} status changed: {last_status} -> {current_status}")
+                        
+                        # Update status in status monitor
+                        status_monitor.update_deployment_phase({
+                            'server_ip': str(node['management_ip']),
+                            'phase': 'ibm_cloud_status',
+                            'status': 'in_progress',
+                            'message': f"Server status changed: {last_status} -> {current_status}",
+                            'server_status': current_status
+                        })
+                        
+                        # Update last status
+                        last_status = current_status
+                        
+                        # If server is running, we can stop monitoring
+                        if current_status == 'running':
+                            logger.info(f"Server {node['node_name']} is now running, stopping continuous monitoring")
+                            break
+                    
+                    # Sleep for 10 seconds before checking again
+                    time.sleep(10)
+                    
+                except Exception as poll_error:
+                    logger.error(f"Error polling server status: {str(poll_error)}")
+                    time.sleep(30)  # Longer sleep on error
+            
+            logger.info(f"Continuous status monitoring completed for {node['node_name']}")
+            
+        except Exception as e:
+            logger.error(f"Error in continuous status monitoring thread: {str(e)}")
     
     def calculate_completion_time(self):
         """Calculate estimated completion time"""

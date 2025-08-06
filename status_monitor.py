@@ -126,6 +126,23 @@ class StatusMonitor:
         logger.info(f"Server {node['node_name']} status update: phase={data['phase']}, status={data['status']}, new_state={new_status}")
 
         logger.info(f"Phase update for {node['node_name']}: {data['phase']} - {data['status']}")
+        
+        # Check if this is a bare metal server status update
+        if 'server_status' in data:
+            # Log IBM Cloud server lifecycle state transitions
+            server_status = data['server_status']
+            logger.info(f"Server {node['node_name']} IBM Cloud status changed to: {server_status.upper()}")
+            
+            # Log specific state transitions with more visibility
+            if server_status == 'starting':
+                logger.info(f"⚡ SERVER STARTING: {node['node_name']} is booting up")
+            elif server_status == 'running':
+                logger.info(f"✅ SERVER RUNNING: {node['node_name']} is now active and running")
+            elif server_status == 'stopped':
+                logger.info(f"⏹️ SERVER STOPPED: {node['node_name']} is currently stopped")
+            elif server_status == 'failed':
+                logger.error(f"❌ SERVER FAILED: {node['node_name']} deployment has failed")
+        
         return {'message': 'Status updated successfully'}
 
     def collect_and_store_health_metrics(self, node_id):
