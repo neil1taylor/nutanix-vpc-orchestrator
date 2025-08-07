@@ -486,7 +486,7 @@ class NodeProvisioner:
             node_name = node['node_name'] if node else f"Node {node_id}"
             
             # Log with high visibility
-            logger.info(f"🚀 MONITORING INITIALIZATION: Starting deployment monitoring for {node_name}")
+            logger.info(f"Starting deployment monitoring for {node_name}")
             
             self.db.log_deployment_event(
                 node_id,
@@ -504,9 +504,9 @@ class NodeProvisioner:
             )
             monitor_thread.start()
             
-            logger.info(f"🧵 THREAD STARTED: Background monitoring thread launched for {node_name}")
+            logger.info(f"Background monitoring thread launched for {node_name}")
         except Exception as e:
-            logger.error(f"❌ MONITORING ERROR: Failed to start monitoring for node {node_id}: {str(e)}")
+            logger.error(f"Failed to start monitoring for node {node_id}: {str(e)}")
             # Log full traceback for debugging
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -518,20 +518,20 @@ class NodeProvisioner:
         
         while retry_count < max_retries:
             try:
-                logger.info(f"🔄 MONITORING ATTEMPT #{retry_count+1}: Starting server status monitoring for node {node_id}")
+                logger.info(f"#{retry_count+1}: Starting server status monitoring for node {node_id}")
                 self.monitor_server_status(node_id)
                 # If successful, break out of the retry loop
                 break
             except Exception as e:
                 retry_count += 1
-                logger.error(f"❌ MONITORING ERROR (Attempt #{retry_count}): {str(e)}")
+                logger.error(f"(Attempt #{retry_count}): {str(e)}")
                 if retry_count < max_retries:
                     # Wait before retrying (exponential backoff)
                     wait_time = 5 * (2 ** retry_count)
-                    logger.info(f"⏳ RETRY: Will retry monitoring in {wait_time} seconds...")
+                    logger.info(f"Will retry monitoring in {wait_time} seconds...")
                     time.sleep(wait_time)
                 else:
-                    logger.error(f"❌ MONITORING FAILED: All {max_retries} attempts to start monitoring for node {node_id} failed")
+                    logger.error(f"All {max_retries} attempts to start monitoring for node {node_id} failed")
     
     def monitor_server_status(self, node_id):
         """Monitor IBM Cloud server status and log state transitions"""
@@ -539,18 +539,18 @@ class NodeProvisioner:
             # Get node information
             node = self.db.get_node(node_id)
             if not node:
-                logger.warning(f"⚠️ NODE NOT FOUND: Cannot monitor server status for node {node_id}")
+                logger.warning(f"Cannot monitor server status for node {node_id}")
                 return
                 
             logger.info(f"🔍 MONITOR DETAILS: Node ID: {node_id}, Name: {node['node_name']}, Bare Metal ID: {node.get('bare_metal_id', 'None')}")
                 
             # For existing nodes that might not have bare_metal_id yet
             if not node.get('bare_metal_id'):
-                logger.warning(f"⏳ WAITING FOR ID: Node {node_id} ({node['node_name']}) doesn't have bare_metal_id yet")
+                logger.warning(f"Node {node_id} ({node['node_name']}) doesn't have bare_metal_id yet")
                 
                 # Check if deployment_status indicates the server has been requested
                 if node.get('deployment_status') in ['provisioning', 'deploying', 'bare_metal_deploy_success']:
-                    logger.info(f"🔄 DEPLOYMENT IN PROGRESS: Node {node['node_name']} is in {node.get('deployment_status')} state")
+                    logger.info(f"Node {node['node_name']} is in {node.get('deployment_status')} state")
                     
                     # Start a thread to wait for bare_metal_id to be assigned and then monitor
                     wait_thread = threading.Thread(
@@ -560,30 +560,28 @@ class NodeProvisioner:
                         name=f"wait-{node_id}"
                     )
                     wait_thread.start()
-                    logger.info(f"🧵 WAIT THREAD STARTED: Waiting for bare_metal_id assignment for {node['node_name']}")
+                    logger.info(f"Waiting for bare_metal_id assignment for {node['node_name']}")
                 else:
-                    logger.warning(f"⚠️ UNEXPECTED STATE: Node {node['node_name']} is in {node.get('deployment_status')} state, not waiting for bare_metal_id")
+                    logger.warning(f"Node {node['node_name']} is in {node.get('deployment_status')} state, not waiting for bare_metal_id")
                 return
                 
             # Get current server status from IBM Cloud
             try:
-                logger.info(f"🔍 FETCHING STATUS: Getting status for server {node['bare_metal_id']} ({node['node_name']})")
+                logger.info(f"Getting status for server {node['bare_metal_id']} ({node['node_name']})")
                 server_info = self.ibm_cloud.get_bare_metal_server(node['bare_metal_id'])
                 current_status = server_info.get('status', 'unknown')
-                logger.info(f"📊 SERVER INFO: {json.dumps(server_info, indent=2, default=str)[:500]}...")
             except Exception as server_error:
-                logger.error(f"❌ SERVER INFO ERROR: Error getting server info: {str(server_error)}")
+                logger.error(f"Error getting server info: {str(server_error)}")
                 # Log full traceback for debugging
                 import traceback
                 logger.error(f"Full traceback: {traceback.format_exc()}")
                 current_status = 'unknown'
             
             # Log initial status with high visibility
-            logger.info(f"⚙️ INITIAL STATUS: Server {node['node_name']} IBM Cloud status is {current_status.upper()}")
+            logger.info(f"Server {node['node_name']} IBM Cloud status is {current_status.upper()}")
             
             # If server is already running, update status but don't start continuous monitoring
             if current_status == 'running':
-                logger.info(f"✅ SERVER ALREADY RUNNING: {node['node_name']} is already in RUNNING state")
                 # Update status in status monitor and return early to prevent continuous monitoring
                 self.status_monitor.update_deployment_phase({
                     'server_ip': str(node['management_ip']),
@@ -596,7 +594,7 @@ class NodeProvisioner:
             
             # Update status in status monitor for non-running servers
             try:
-                logger.info(f"📝 UPDATING STATUS: Sending status update for {node['node_name']}: {current_status}")
+                logger.info(f"Sending status update for {node['node_name']}: {current_status}")
                 self.status_monitor.update_deployment_phase({
                     'server_ip': str(node['management_ip']),
                     'phase': 'ibm_cloud_status',
@@ -604,9 +602,9 @@ class NodeProvisioner:
                     'message': f"Server status: {current_status}",
                     'server_status': current_status
                 })
-                logger.info(f"✅ STATUS UPDATED: Status update sent for {node['node_name']}")
+                logger.info(f"Status update sent for {node['node_name']}")
             except Exception as status_error:
-                logger.error(f"❌ STATUS UPDATE ERROR: Failed to update status: {str(status_error)}")
+                logger.error(f"Failed to update status: {str(status_error)}")
                 # Log full traceback for debugging
                 import traceback
                 logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -623,11 +621,11 @@ class NodeProvisioner:
             # Log all active threads for debugging
             all_threads = threading.enumerate()
             thread_names = [t.name for t in all_threads]
-            logger.info(f"🧵 ACTIVE THREADS: {len(all_threads)} threads running: {thread_names}")
+            logger.info(f"{len(all_threads)} threads running: {thread_names}")
             
-            logger.info(f"🔍 MONITORING STARTED: Background thread for {node['node_name']} status monitoring is running")
+            logger.info(f"Background thread for {node['node_name']} status monitoring is running")
         except Exception as e:
-            logger.error(f"❌ MONITORING ERROR: Error starting server status monitoring for node {node_id}: {str(e)}")
+            logger.error(f"Error starting server status monitoring for node {node_id}: {str(e)}")
             # Log full traceback for debugging
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -639,34 +637,34 @@ class NodeProvisioner:
             initial_node = self.db.get_node(node_id)
             node_name = initial_node['node_name'] if initial_node else f"Node {node_id}"
             
-            logger.info(f"⏳ WAIT STARTED: Waiting for bare_metal_id assignment for {node_name}")
+            logger.info(f"Waiting for bare_metal_id assignment for {node_name}")
             
             # Wait for up to 5 minutes (300 seconds)
             for attempt in range(30):  # 30 attempts, 10 seconds each
                 # Get fresh node data
                 node = self.db.get_node(node_id)
                 if not node:
-                    logger.warning(f"⚠️ NODE MISSING: Node {node_id} no longer exists in database")
+                    logger.warning(f" Node {node_id} no longer exists in database")
                     return
                     
                 # Log every 5th attempt
                 if attempt % 5 == 0:
-                    logger.info(f"🔄 WAIT ATTEMPT #{attempt+1}: Checking for bare_metal_id for {node_name}")
-                    logger.info(f"📊 NODE STATUS: {node_name} is in {node.get('deployment_status', 'unknown')} state")
+                    logger.info(f"#{attempt+1}: Checking for bare_metal_id for {node_name}")
+                    logger.info(f"{node_name} is in {node.get('deployment_status', 'unknown')} state")
                 
                 if node.get('bare_metal_id'):
-                    logger.info(f"✅ ID ASSIGNED: bare_metal_id {node['bare_metal_id']} assigned to {node_name}")
+                    logger.info(f"bare_metal_id {node['bare_metal_id']} assigned to {node_name}")
                     # Start monitoring now that we have the ID
-                    logger.info(f"🔄 STARTING MONITOR: Initiating status monitoring for {node_name}")
+                    logger.info(f"Initiating status monitoring for {node_name}")
                     self.monitor_server_status(node_id)
                     return
                     
                 # Wait 10 seconds before checking again
                 time.sleep(10)
                 
-            logger.warning(f"⏱️ TIMEOUT: Timed out waiting for bare_metal_id assignment for {node_name}")
+            logger.warning(f"Timed out waiting for bare_metal_id assignment for {node_name}")
         except Exception as e:
-            logger.error(f"❌ WAIT ERROR: Error in wait_for_bare_metal_id thread: {str(e)}")
+            logger.error(f"Error in wait_for_bare_metal_id thread: {str(e)}")
             # Log full traceback for debugging
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -677,19 +675,19 @@ class NodeProvisioner:
             # Get node information
             node = self.db.get_node(node_id)
             if not node:
-                logger.warning(f"⚠️ NODE NOT FOUND: Cannot continue monitoring: Node {node_id} not found")
+                logger.warning(f"Cannot continue monitoring: Node {node_id} not found")
                 return
                 
             # Log thread info
             thread_id = threading.get_ident()
             thread_name = threading.current_thread().name
-            logger.info(f"🧵 THREAD INFO: Monitoring running in thread {thread_id} ({thread_name})")
+            logger.info(f"Monitoring running in thread {thread_id} ({thread_name})")
             
-            logger.info(f"🔄 CONTINUOUS MONITORING: Starting for {node['node_name']} (ID: {server_id})")
-            logger.info(f"📊 INITIAL STATUS: {node['node_name']} starting with status {last_status}")
+            logger.info(f"Starting for {node['node_name']} (ID: {server_id})")
+            logger.info(f"{node['node_name']} starting with status {last_status}")
             
             # Log status monitor availability
-            logger.info(f"✅ STATUS MONITOR: Using initialized StatusMonitor")
+            logger.info(f"Using initialized StatusMonitor")
             
             # Monitor for up to 30 minutes (1800 seconds)
             end_time = time.time() + 1800
@@ -699,21 +697,21 @@ class NodeProvisioner:
                 try:
                     poll_count += 1
                     # Get current server status
-                    logger.info(f"🔍 FETCHING STATUS #{poll_count}: Getting status for {node['node_name']} (ID: {server_id})")
+                    logger.info(f"#{poll_count}: Getting status for {node['node_name']} (ID: {server_id})")
                     server_info = self.ibm_cloud.get_bare_metal_server(server_id)
                     current_status = server_info.get('status', 'unknown')
                     
                     # Log every poll for debugging
-                    logger.info(f"🔍 POLL #{poll_count}: Server {node['node_name']} status is {current_status}")
+                    logger.info(f"#{poll_count}: Server {node['node_name']} status is {current_status}")
                     
                     # If server is already running on first poll, stop monitoring
                     if poll_count == 1 and current_status == 'running':
-                        logger.info(f"✅ SERVER ALREADY RUNNING: {node['node_name']} is already in RUNNING state, no need to monitor")
+                        logger.info(f"{node['node_name']} is already in RUNNING state, no need to monitor")
                         
                         # Update status in status monitor if needed
                         if last_status != 'running':
                             try:
-                                logger.info(f"📝 UPDATING FINAL STATUS: Sending final status update for {node['node_name']}")
+                                logger.info(f"Sending final status update for {node['node_name']}")
                                 
                                 self.status_monitor.update_deployment_phase({
                                     'server_ip': str(node['management_ip']),
@@ -722,37 +720,32 @@ class NodeProvisioner:
                                     'message': f"Server is already running",
                                     'server_status': 'running'
                                 })
-                                logger.info(f"✅ FINAL STATUS UPDATED: Status update sent for {node['node_name']}")
+                                logger.info(f"Status update sent for {node['node_name']}")
                             except Exception as update_error:
-                                logger.error(f"❌ FINAL STATUS UPDATE ERROR: Failed to update status: {str(update_error)}")
+                                logger.error(f"Failed to update status: {str(update_error)}")
                                 import traceback
                                 logger.error(f"Full traceback: {traceback.format_exc()}")
                         
-                        logger.info(f"🏁 MONITORING ENDED: No need to monitor {node['node_name']} as it's already running")
+                        logger.info(f"No need to monitor {node['node_name']} as it's already running")
                         return
                     
                     # If status changed, log it with high visibility
                     if current_status != last_status:
                         # Use emoji indicators for better visibility in logs
-                        status_emoji = "⏳"
                         if current_status == "starting":
-                            status_emoji = "⚡"
-                            logger.info(f"⚡⚡⚡ SERVER STARTING: {node['node_name']} is now STARTING UP")
+                            logger.info(f"{node['node_name']} is now STARTING UP")
                         elif current_status == "running":
-                            status_emoji = "✅"
-                            logger.info(f"✅✅✅ SERVER RUNNING: {node['node_name']} is now RUNNING")
+                            logger.info(f"{node['node_name']} is now RUNNING")
                         elif current_status == "stopped":
-                            status_emoji = "⏹️"
-                            logger.info(f"⏹️⏹️⏹️ SERVER STOPPED: {node['node_name']} is now STOPPED")
+                            logger.info(f"{node['node_name']} is now STOPPED")
                         elif current_status == "failed":
-                            status_emoji = "❌"
-                            logger.info(f"❌❌❌ SERVER FAILED: {node['node_name']} has FAILED")
+                            logger.info(f"{node['node_name']} has FAILED")
                             
-                        logger.info(f"{status_emoji} STATUS CHANGE: Server {node['node_name']} changed from {last_status.upper()} to {current_status.upper()}")
+                        logger.info(f"Server {node['node_name']} changed from {last_status.upper()} to {current_status.upper()}")
                         
                         # Update status in status monitor
                         try:
-                            logger.info(f"📝 UPDATING STATUS: Sending status update for {node['node_name']}: {current_status}")
+                            logger.info(f"Sending status update for {node['node_name']}: {current_status}")
                             
                             # Map IBM Cloud status to appropriate deployment status
                             deployment_status = 'in_progress'
@@ -772,9 +765,9 @@ class NodeProvisioner:
                                 'message': f"Server status changed: {last_status} -> {current_status}",
                                 'server_status': current_status
                             })
-                            logger.info(f"✅ STATUS UPDATED: Status update sent for {node['node_name']}")
+                            logger.info(f"Status update sent for {node['node_name']}")
                         except Exception as update_error:
-                            logger.error(f"❌ STATUS UPDATE ERROR: Failed to update status: {str(update_error)}")
+                            logger.error(f"Failed to update status: {str(update_error)}")
                             import traceback
                             logger.error(f"Full traceback: {traceback.format_exc()}")
                         
@@ -783,24 +776,24 @@ class NodeProvisioner:
                         
                         # If server is running, we can stop monitoring
                         if current_status == 'running':
-                            logger.info(f"✅ MONITORING COMPLETE: Server {node['node_name']} is now RUNNING, stopping continuous monitoring")
+                            logger.info(f"Server {node['node_name']} is now RUNNING, stopping continuous monitoring")
                             break
                     
                     # Sleep for 10 seconds before checking again
-                    logger.info(f"⏳ WAITING: Sleeping for 10 seconds before next poll for {node['node_name']}")
+                    logger.info(f"Sleeping for 10 seconds before next poll for {node['node_name']}")
                     time.sleep(10)
                     
                 except Exception as poll_error:
-                    logger.error(f"❌ POLL ERROR: Error polling server status: {str(poll_error)}")
+                    logger.error(f"Error polling server status: {str(poll_error)}")
                     # Log full traceback for debugging
                     import traceback
                     logger.error(f"Full traceback: {traceback.format_exc()}")
                     time.sleep(30)  # Longer sleep on error
             
-            logger.info(f"🏁 MONITORING ENDED: Continuous status monitoring completed for {node['node_name']} after {poll_count} polls")
+            logger.info(f"Continuous status monitoring completed for {node['node_name']} after {poll_count} polls")
             
         except Exception as e:
-            logger.error(f"❌ MONITORING ERROR: Error in continuous status monitoring thread: {str(e)}")
+            logger.error(f"Error in continuous status monitoring thread: {str(e)}")
             # Log full traceback for debugging
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")

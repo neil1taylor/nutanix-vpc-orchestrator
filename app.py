@@ -190,7 +190,7 @@ def api_get_server_config(server_ip):
         if forwarded_for:
             client_ip = forwarded_for.split(',')[0].strip()
             
-        logger.info(f"📋 CONFIG REQUEST: Client {client_ip} is requesting server configuration for {server_ip}")
+        logger.info(f"Client {client_ip} is requesting server configuration for {server_ip}")
         
         # Log request headers for debugging
         logger.debug(f"Request headers: {dict(request.headers)}")
@@ -198,19 +198,19 @@ def api_get_server_config(server_ip):
         config = boot_service.get_server_config(server_ip)
         if config:
             # Log successful config retrieval with some details
-            logger.info(f"✅ CONFIG SERVED: Configuration for {server_ip} sent to {client_ip}")
-            logger.info(f"📊 CONFIG DETAILS: Node ID: {config.get('node_config', {}).get('node_id', 'unknown')}")
+            logger.info(f"Configuration for {server_ip} sent to {client_ip}")
+            logger.info(f"Node ID: {config.get('node_config', {}).get('node_id', 'unknown')}")
             
             # Log storage configuration for debugging
             storage_config = config.get('storage_config', {})
-            logger.info(f"💾 STORAGE CONFIG: Boot drives: {storage_config.get('boot_drives', [])} | Data drives: {storage_config.get('data_drives', [])}")
+            logger.info(f"Boot drives: {storage_config.get('boot_drives', [])} | Data drives: {storage_config.get('data_drives', [])}")
             
             return jsonify(config)
         else:
-            logger.warning(f"❌ CONFIG NOT FOUND: No configuration found for server {server_ip}")
+            logger.warning(f" No configuration found for server {server_ip}")
             return jsonify({'error': 'Server not found'}), 404
     except Exception as e:
-        logger.error(f"❌ CONFIG ERROR: Failed to serve configuration for {server_ip}: {str(e)}")
+        logger.error(f"Failed to serve configuration for {server_ip}: {str(e)}")
         # Log full traceback for debugging
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -229,11 +229,11 @@ def api_serve_boot_image(filename):
             
         # Log the request with high visibility
         if filename == 'vmlinuz-foundation':
-            logger.info(f"🔄 KERNEL REQUEST: Client {client_ip} is downloading kernel file")
+            logger.info(f"Client {client_ip} is downloading kernel file")
         elif filename == 'initrd-foundation.img':
-            logger.info(f"🔄 INITRD REQUEST: Client {client_ip} is downloading initrd file")
+            logger.info(f"Client {client_ip} is downloading initrd file")
         else:
-            logger.info(f"🔄 BOOT IMAGE REQUEST: Client {client_ip} is downloading {filename}")
+            logger.info(f"Client {client_ip} is downloading {filename}")
             
         # Log request headers for debugging
         logger.debug(f"Request headers: {dict(request.headers)}")
@@ -246,22 +246,22 @@ def api_serve_boot_image(filename):
         ]
         
         if filename not in allowed_files:
-            logger.warning(f"❌ SECURITY: Client {client_ip} attempted to access unauthorized file: {filename}")
+            logger.warning(f"Client {client_ip} attempted to access unauthorized file: {filename}")
             return jsonify({'error': 'File not allowed'}), 403
         
         # Log successful file serving
-        logger.info(f"✅ SERVING: {filename} to client {client_ip}")
+        logger.info(f"Serving {filename} to client {client_ip}")
         
         # Serve the file
         response = send_from_directory(Config.BOOT_IMAGES_PATH, filename)
         
         # Log file size for debugging
         file_size = response.headers.get('Content-Length', 'unknown size')
-        logger.info(f"📦 SENT: {filename} ({file_size} bytes) to {client_ip}")
+        logger.info(f"Sent {filename} ({file_size} bytes) to {client_ip}")
         
         return response
     except Exception as e:
-        logger.error(f"❌ IMAGE ERROR: Failed to serve {filename}: {str(e)}")
+        logger.error(f"Failed to serve {filename}: {str(e)}")
         # Log full traceback for debugging
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -278,7 +278,7 @@ def api_serve_boot_script(script_name):
         if forwarded_for:
             client_ip = forwarded_for.split(',')[0].strip()
             
-        logger.info(f"📜 SCRIPT REQUEST: Client {client_ip} is requesting boot script: {script_name}")
+        logger.info(f"Client {client_ip} is requesting boot script: {script_name}")
         
         allowed_scripts = [
             'foundation-init.sh',
@@ -287,22 +287,22 @@ def api_serve_boot_script(script_name):
         ]
         
         if script_name not in allowed_scripts:
-            logger.warning(f"❌ SECURITY: Client {client_ip} attempted to access unauthorized script: {script_name}")
+            logger.warning(f"Client {client_ip} attempted to access unauthorized script: {script_name}")
             return jsonify({'error': 'Script not allowed'}), 403
         
         # Log successful script serving
-        logger.info(f"✅ SERVING SCRIPT: {script_name} to client {client_ip}")
+        logger.info(f"Serving script {script_name} to client {client_ip}")
         
         # Serve the script
         response = send_from_directory(Config.BOOT_SCRIPTS_PATH, script_name)
         
         # Log file size for debugging
         file_size = response.headers.get('Content-Length', 'unknown size')
-        logger.info(f"📦 SENT SCRIPT: {script_name} ({file_size} bytes) to {client_ip}")
+        logger.info(f"Sent script {script_name} ({file_size} bytes) to {client_ip}")
         
         return response
     except Exception as e:
-        logger.error(f"❌ SCRIPT ERROR: Failed to serve script {script_name}: {str(e)}")
+        logger.error(f"Failed to serve script {script_name}: {str(e)}")
         # Log full traceback for debugging
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")

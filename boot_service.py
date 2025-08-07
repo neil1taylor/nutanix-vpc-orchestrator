@@ -32,7 +32,7 @@ class BootService:
         
         # Check if this is an ISO boot request
         if boot_type == 'iso':
-            logger.info(f"🔄 ISO BOOT: Generating ISO boot script for {mgmt_ip}")
+            logger.info(f"Generating ISO boot script for {mgmt_ip}")
             return self.generate_iso_boot_script(mgmt_ip)
         
         # Start monitoring for this IP address immediately, even before database lookup
@@ -45,15 +45,15 @@ class BootService:
                     try:
                         from node_provisioner import NodeProvisioner
                         node_provisioner = NodeProvisioner()
-                        logger.info(f"🚀 EARLY BOOT TRIGGER: Starting server status monitoring for IP {mgmt_ip} from iPXE boot request")
+                        logger.info(f"Starting server status monitoring for IP {mgmt_ip} from iPXE boot request")
                         node_provisioner.start_deployment_monitoring(node_by_ip['id'])
                     except Exception as e:
-                        logger.error(f"❌ EARLY MONITORING ERROR: Failed to start monitoring from iPXE boot request: {str(e)}")
+                        logger.error(f"Failed to start monitoring from iPXE boot request: {str(e)}")
                         # Log full traceback for debugging
                         import traceback
                         logger.error(f"Full traceback: {traceback.format_exc()}")
             except Exception as e:
-                logger.error(f"❌ IP LOOKUP ERROR: Failed to lookup node by IP {mgmt_ip}: {str(e)}")
+                logger.error(f"Failed to lookup node by IP {mgmt_ip}: {str(e)}")
                 # Continue with normal flow, don't return error here
         
         # Look up server in database by node_id (primary) or management IP (fallback)
@@ -99,10 +99,10 @@ class BootService:
         try:
             from node_provisioner import NodeProvisioner
             node_provisioner = NodeProvisioner()
-            logger.info(f"🚀 BOOT TRIGGER: Starting server status monitoring for node {node['id']} from boot service")
+            logger.info(f"Starting server status monitoring for node {node['id']} from boot service")
             node_provisioner.start_deployment_monitoring(node['id'])
         except Exception as e:
-            logger.error(f"❌ MONITORING ERROR: Failed to start monitoring from boot service: {str(e)}")
+            logger.error(f"Failed to start monitoring from boot service: {str(e)}")
             # Log full traceback for debugging
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -121,6 +121,10 @@ class BootService:
     
     def generate_boot_script(self, node):
         """Generate a generic iPXE boot script for node provisioning"""
+        # Log the node configuration for debugging
+        logger.info(f"Generating boot script for node: {node['node_name']}")
+        logger.info(f"Node configuration: Management IP: {node['management_ip']}, AHV IP: {node['nutanix_config']['ahv_ip']}, CVM IP: {node['nutanix_config']['cvm_ip']}")
+        
         template = f"""#!ipxe
 echo ===============================================
 echo Nutanix CE Node Creation
@@ -142,8 +146,8 @@ set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
 
-# Boot Phoenix with network config from DHCP
-kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 init=/installer IP=${net0/ip} NETMASK=${net0/netmask} GATEWAY=${net0/gateway} DNS=${dns} MAC=${net0/mac} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/configs/${net0/mac}.json
+# Boot Phoenix with node configuration parameters
+kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 init=/installer node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
 initrd ${{base-url}}/initrd-foundation.img
 boot || goto error
 
@@ -151,6 +155,8 @@ boot || goto error
 echo Boot failed - dropping to shell
 shell
 """
+        # Log the generated boot script for debugging
+        logger.info("Generated boot script with correct iPXE variables")
         return template
     
     def generate_error_boot_script(self, error_message):
@@ -178,7 +184,7 @@ shell
         node_name = node['node_name'] if node else f"Unknown-{management_ip}"
         
         # Log ISO boot request
-        logger.info(f"🔄 ISO BOOT: Generating ISO boot script for {node_name} ({management_ip})")
+        logger.info(f"Generating ISO boot script for {node_name} ({management_ip})")
         
         # If we have a node, log the deployment event
         if node:
@@ -193,10 +199,10 @@ shell
             try:
                 from node_provisioner import NodeProvisioner
                 node_provisioner = NodeProvisioner()
-                logger.info(f"🚀 ISO BOOT TRIGGER: Starting server status monitoring for node {node['id']} from ISO boot request")
+                logger.info(f"Starting server status monitoring for node {node['id']} from ISO boot request")
                 node_provisioner.start_deployment_monitoring(node['id'])
             except Exception as e:
-                logger.error(f"❌ ISO MONITORING ERROR: Failed to start monitoring from ISO boot request: {str(e)}")
+                logger.error(f"Failed to start monitoring from ISO boot request: {str(e)}")
                 # Log full traceback for debugging
                 import traceback
                 logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -248,10 +254,10 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
         try:
             from node_provisioner import NodeProvisioner
             node_provisioner = NodeProvisioner()
-            logger.info(f"🚀 CONFIG TRIGGER: Starting server status monitoring for node {node['id']} from config request")
+            logger.info(f"Starting server status monitoring for node {node['id']} from config request")
             node_provisioner.start_deployment_monitoring(node['id'])
         except Exception as e:
-            logger.error(f"❌ MONITORING ERROR: Failed to start monitoring from config request: {str(e)}")
+            logger.error(f"Failed to start monitoring from config request: {str(e)}")
             # Log full traceback for debugging
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")

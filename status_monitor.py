@@ -135,7 +135,7 @@ class StatusMonitor:
             
             # Log specific state transitions with more visibility
             if server_status == 'starting':
-                logger.info(f"⚡ SERVER STARTING: {node['node_name']} is booting up")
+                logger.info(f"{node['node_name']} is booting up")
                 # Log to deployment history table
                 self.db.log_deployment_event(
                     node['id'],
@@ -144,7 +144,7 @@ class StatusMonitor:
                     f"Server is starting up"
                 )
             elif server_status == 'running':
-                logger.info(f"✅ SERVER RUNNING: {node['node_name']} is now active and running")
+                logger.info(f"{node['node_name']} is now active and running")
                 # Log to deployment history table
                 self.db.log_deployment_event(
                     node['id'],
@@ -153,7 +153,7 @@ class StatusMonitor:
                     f"Server is now running"
                 )
             elif server_status == 'stopped':
-                logger.info(f"⏹️ SERVER STOPPED: {node['node_name']} is currently stopped")
+                logger.info(f"{node['node_name']} is currently stopped")
                 # Log to deployment history table
                 self.db.log_deployment_event(
                     node['id'],
@@ -162,7 +162,7 @@ class StatusMonitor:
                     f"Server is stopped"
                 )
             elif server_status == 'failed':
-                logger.error(f"❌ SERVER FAILED: {node['node_name']} deployment has failed")
+                logger.error(f"{node['node_name']} deployment has failed")
                 # Log to deployment history table
                 self.db.log_deployment_event(
                     node['id'],
@@ -172,7 +172,7 @@ class StatusMonitor:
                 )
             else:
                 # Log any other status changes
-                logger.info(f"ℹ️ SERVER STATUS: {node['node_name']} status is {server_status}")
+                logger.info(f"{node['node_name']} status is {server_status}")
                 # Log to deployment history table
                 self.db.log_deployment_event(
                     node['id'],
