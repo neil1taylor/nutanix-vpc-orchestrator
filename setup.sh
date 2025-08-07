@@ -216,9 +216,8 @@ test_static_files() {
     
     local missing_files=()
     local required_files=(
-        "/var/www/pxe/images/vmlinuz-foundation"
-        "/var/www/pxe/images/initrd-foundation.img"
-        "/var/www/pxe/scripts/foundation-init.sh"
+        "/var/www/pxe/images/vmlinuz-phoenix"
+        "/var/www/pxe/images/initrd-phoenix.img"
     )
     
     for file in "${required_files[@]}"; do
@@ -449,31 +448,25 @@ EOF
 setup_boot_files() {
     log "Setting up boot files..."
     
-    # Copy boot scripts
-    cp $PROJECT_DIR/scripts/foundation-init.sh /var/www/pxe/scripts/foundation-init.sh
-
-    # Set permissions
-    chmod +x /var/www/pxe/scripts/*.sh
-    
     # Download Nutanix ISO if not exists
     if [[ ! -f "/var/www/pxe/images/nutanix-ce-installer.iso" ]]; then
         log "Downloading Nutanix CE ISO..."
         cd /tmp
         wget -q -O nutanix-ce.iso "$NUTANIX_ISO_URL" || {
             log "Warning: Could not download Nutanix ISO, creating placeholder files"
-            touch /var/www/pxe/images/{vmlinuz-foundation,initrd-foundation.img,nutanix-ce-installer.iso}
+            touch /var/www/pxe/images/{vmlinuz-phoenix,initrd-phoenix.img,nutanix-ce-installer.iso}
             return 0
         }
         
         # Extract boot files
         mount -o loop nutanix-ce.iso /mnt 2>/dev/null || {
             log "Warning: Could not mount ISO, creating placeholder files"
-            touch /var/www/pxe/images/{vmlinuz-foundation,initrd-foundation.img,nutanix-ce-installer.iso}
+            touch /var/www/pxe/images/{vmlinuz-phoenix,initrd-phoenix.img,nutanix-ce-installer.iso}
             return 0
         }
         
-        cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-foundation 2>/dev/null || true
-        cp /mnt/boot/initrd /var/www/pxe/images/initrd-foundation.img 2>/dev/null || true
+        cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-phoenix 2>/dev/null || true
+        cp /mnt/boot/initrd /var/www/pxe/images/initrd-phoenix.img 2>/dev/null || true
         cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
         
         umount /mnt 2>/dev/null || true
