@@ -171,32 +171,28 @@ class BootService:
                 'mac': ''
             }
         
-        # Create the iPXE script with escaped $ for iPXE variables
-        # This prevents Python from trying to evaluate them as variables
+        # Create the iPXE script using CE installer automation
         template = f"""#!ipxe
 echo ===============================================
-echo Nutanix CE Node Creation
+echo Nutanix CE Automated Deployment
 echo ===============================================
 echo Node ID: {node['node_name']}
 echo Management IP: {node['management_ip']}
 echo AHV IP: {node['nutanix_config']['ahv_ip']}
 echo CVM IP: {node['nutanix_config']['cvm_ip']}
 echo ===============================================
-echo Starting Nutanix Foundation deployment...
+echo Starting Nutanix CE installer...
 
 :retry_dhcp
 dhcp || goto retry_dhcp
 sleep 2
 ntp time.adn.networklayer.com
 set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
-set node_id {node['node_name']}
-set mgmt_ip {node['management_ip']}
-set ahv_ip {node['nutanix_config']['ahv_ip']}
-set cvm_ip {node['nutanix_config']['cvm_ip']}
+set pxe_server {Config.PXE_SERVER_DNS}
 
-# Boot Phoenix with network config from DHCP
-kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 init=/installer IP={network_info['ip']} NETMASK={network_info['netmask']} GATEWAY={network_info['gateway']} DNS={network_info['dns']} MAC={network_info['mac']} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']}
-initrd ${{base-url}}/initrd-foundation.img
+# Boot CE installer with automation parameters
+kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']}
+initrd ${{base-url}}/initrd-phoenix.img
 boot || goto error
 
 :error
@@ -263,7 +259,7 @@ echo ===============================================
 echo Node ID: {node_name}
 echo Management IP: {management_ip}
 echo ===============================================
-echo Starting Nutanix Foundation deployment...
+echo Starting Nutanix CE installer...
 
 :retry_dhcp
 dhcp || goto retry_dhcp

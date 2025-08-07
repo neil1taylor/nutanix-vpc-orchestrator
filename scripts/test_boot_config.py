@@ -49,12 +49,12 @@ def test_boot_config(ip_address=None):
                 logger.error("Error still present: 'net0 is not defined'")
                 return False
             
-            # Check for the correct kernel command line format
-            if "kernel ${base-url}/vmlinuz-foundation" in content and "node_id=${node_id}" in content:
-                logger.info("Boot script contains correct kernel command line format")
+            # Check for the correct kernel command line format for CE installer automation
+            if "kernel ${base-url}/vmlinuz-phoenix" in content and "init=/ce_installer" in content and "FOUND_IP=" in content and "AZ_CONF_URL=" in content:
+                logger.info("Boot script contains correct CE installer automation parameters")
                 return True
             else:
-                logger.warning("Boot script may not contain the expected kernel command line format")
+                logger.warning("Boot script may not contain the expected CE installer automation parameters")
                 return False
             
     except requests.exceptions.ConnectionError:
@@ -69,7 +69,7 @@ def test_boot_config(ip_address=None):
 
 def main():
     """Main test function"""
-    logger.info("Testing boot configuration endpoint")
+    logger.info("Testing CE installer automation boot configuration endpoint")
     logger.info("=" * 50)
     
     # Test with the specific IP that had the issue
@@ -90,7 +90,7 @@ def main():
         logger.warning("⚠️ Boot config test without specific IP had issues")
     
     logger.info("=" * 50)
-    logger.info("Boot configuration tests completed")
+    logger.info("CE installer automation boot configuration tests completed")
     return 0
 
 if __name__ == "__main__":

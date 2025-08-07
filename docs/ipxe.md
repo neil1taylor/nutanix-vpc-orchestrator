@@ -380,27 +380,105 @@ sanboot ${base-url}/nutanix-ce-installer.iso
 ```
 
 
-The Phoenix ISO's ISOLINUX configuration shows some kernel parameters:
+## CE Installer Automation
 
-`kernel /boot/kernel init=/installer intel_iommu=on kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 quiet consoleblank=0 net.ifnames=0 mpt3sas.prot_mask=1 FOUND_IP=XXX.XXX.XXX.XXX AZ_CONF_URL=http://XXX.XXX.XXX.XXX/SerialNumber/%%NODE_SERIAL%%.json`
+The Nutanix CE installer supports automation through the Phoenix framework. The key is using the correct parameters with the CE installer.
 
- Dell Nutanix: How to initialize a Nutanix Node using the Phoenix ISO on the 14th generation Nutanix | Dell US
+### CE Installer Location and Automation Support
 
-These Phoenix-specific parameters were mentioned:
+The CE installer exists at:
+- `/tmp/initrd/ce_installer`
+- `/tmp/initrd/do_ce_installer.sh`
 
-```bash
-FOUND_IP - IP address of the Foundation server
-AZ_CONF_URL - URL to fetch JSON configuration
-%%NODE_SERIAL%% - Variable replaced with actual node serial number
-init=/installer - Launches Phoenix installer
+The init script dispatches correctly by reading `init=/ce_installer` from the kernel command line.
+
+### Automation Parameters
+
+The CE installer supports the following automation parameters:
+- `FOUND_IP` - IP address of the Foundation/PXE server
+- `AZ_CONF_URL` - URL to fetch JSON configuration
+
+### Updated iPXE Configuration
+
+Here's an updated iPXE configuration that leverages the CE installer automation:
+
+```ipxe
+#!ipxe
+echo ===============================================
+echo Nutanix CE Automated Deployment
+echo ===============================================
+
+# Get network config from DHCP
+:retry_dhcp
+dhcp || goto retry_dhcp
+echo Network configured: ${net0/ip}
+
+# Set your PXE server details
+set pxe_server ${next-server}
+set base-url http://${pxe_server}:8080
+
+# Boot CE installer with automation parameters
+kernel ${base-url}/images/vmlinuz-phoenix
+  init=/ce_installer
+  intel_iommu=on
+  iommu=pt
+  kvm-intel.nested=1
+  kvm.ignore_msrs=1
+  kvm-intel.ept=1
+  vga=791
+  net.ifnames=0
+  mpt3sas.prot_mask=1
+  IMG=squashfs
+  console=tty0
+  console=ttyS0,115200
+  FOUND_IP=${pxe_server}
+  AZ_CONF_URL=http://${pxe_server}:8080/configs/${net0/mac}.json
+
+initrd ${base-url}/images/initrd-phoenix.img
+boot || goto error
+
+:error
+echo Boot failed
+shell
 ```
 
-Standard Linux Kernel Parameters
+### Configuration JSON Format
+
+To support the CE installer automation, create a configuration JSON file at `/var/www/pxe/configs/<MAC_ADDRESS>.json`:
+
+```json
+{
+  "nodes": [{
+    "node_position": "A",
+    "hypervisor": "kvm",
+    "hypervisor_ip": "${DHCP_IP}",
+    "hypervisor_hostname": "ahv-node1",
+    "cvm_ip": "${DHCP_IP+1}",
+    "cvm_gb_ram": 32,
+    "cvm_num_vcpus": 8,
+    "device_hint": "vm_installer",
+    "install_mode": "ce"
+  }],
+  "clusters": [{
+    "cluster_name": "ce-cluster",
+    "redundancy_factor": 1,
+    "cluster_init_now": true,
+    "timezone": "America/New_York",
+    "cvm_ntp_servers": "0.pool.ntp.org",
+    "cvm_dns_servers": "8.8.8.8"
+  }]
+}
+```
+
+### Standard Linux Kernel Parameters
 
 ```bash
 intel_iommu=on - Enable Intel IOMMU
+iommu=pt - Enable IOMMU pass-through
 kvm-intel.nested=1 - Enable nested virtualization
-quiet - Reduce boot messages
-consoleblank=0 - Disable console blanking
+kvm.ignore_msrs=1 - Ignore unhandled MSRs
+kvm-intel.ept=1 - Enable Extended Page Tables
+vga=791 - Set VGA mode
 net.ifnames=0 - Use traditional network interface names
+mpt3sas.prot_mask=1 - Storage controller configuration
 ```
