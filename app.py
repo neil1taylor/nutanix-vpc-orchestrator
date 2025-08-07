@@ -228,9 +228,9 @@ def api_serve_boot_image(filename):
             client_ip = forwarded_for.split(',')[0].strip()
             
         # Log the request with high visibility
-        if filename == 'vmlinuz-foundation':
+        if filename == 'vmlinuz-phoenix':
             logger.info(f"Client {client_ip} is downloading kernel file")
-        elif filename == 'initrd-foundation.img':
+        elif filename == 'initrd-phoenix.img':
             logger.info(f"Client {client_ip} is downloading initrd file")
         else:
             logger.info(f"Client {client_ip} is downloading {filename}")
@@ -240,8 +240,8 @@ def api_serve_boot_image(filename):
         
         # Security check - only allow approved files
         allowed_files = [
-            'vmlinuz-foundation',
-            'initrd-foundation.img',
+            'vmlinuz-phoenix',
+            'initrd-phoenix.img',
             'nutanix-ce-installer.iso'
         ]
         

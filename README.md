@@ -91,8 +91,8 @@ Replace the placeholder boot images with actual Nutanix images:
 ssh nutanix@nutanix-pxe-config.nutanix-ce-poc.cloud
 
 # Upload actual Nutanix images
-sudo cp nutanix-foundation-kernel /var/www/pxe/images/vmlinuz-foundation
-sudo cp nutanix-foundation-initrd.img /var/www/pxe/images/initrd-foundation.img
+sudo cp nutanix-phoenix-kernel /var/www/pxe/images/vmlinuz-phoenix
+sudo cp nutanix-phoenix-initrd.img /var/www/pxe/images/initrd-phoenix.img
 sudo cp nutanix-ce-installer.iso /var/www/pxe/images/
 
 # Set permissions
@@ -318,7 +318,7 @@ Phase 1: iPXE/PXE Setup Process:
     - Prepare storage devices
     - Complete initial node setup
 
-Phase 2: Manual Cluster Creation (Post-Foundation), a post-installation script in the PXE orchestration:
+Phase 2: Manual Cluster Creation (Post-Phoenix), a post-installation script in the PXE orchestration:
 
 - Script waits for CVM to be ready
 - Script SSH into the CVM: ssh nutanix@<cvm_ip> (password: nutanix/4u)

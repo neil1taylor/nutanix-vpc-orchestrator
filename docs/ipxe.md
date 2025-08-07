@@ -30,11 +30,11 @@ IBM Cloud VPC Bare Metal         PXE/Config Server
 │                         │    │                          │
 │  2. Fetch iPXE script   │───▶│  /boot/config            │
 │                         │    │                          │
-│  3. Download vmlinuz    │───▶│  vmlinuz-foundation      │
-│     -foundation         │    │                          │
+│  3. Download vmlinuz    │───▶│  vmlinuz-phoenix         │
+│     -phoenix            │    │                          │
 │                         │    │                          │
-│  4. Download initrd     │───▶│  initrd-foundation.img   │
-│     -foundation.img     │    │                          │
+│  4. Download initrd     │───▶│  initrd-phoenix.img      │
+│     -phoenix.img        │    │                          │
 │                         │    │                          │
 │  5. Boot Foundation     │    │                          │
 │                         │    │                          │
@@ -60,13 +60,13 @@ Bare Metal Server (<management_ip>) → PXE Server
     - cvm_ip: <cvm_ip> (Foundation will configure)
     - config_server: pxe/config server
 
-**Step 3: vmlinuz-foundation**
+**Step 3: vmlinuz-phoenix**
 Bare Metal Server (<management_ip>) → PXE Server
-- Downloads vmlinuz-foundation from PXE server
+- Downloads vmlinuz-phoenix from PXE server
 
-**Step 4: initrd-foundation.img**
+**Step 4: initrd-phoenix.img**
 Bare Metal Server (<management_ip>) → PXE Server
-- Downloads initrd-foundation.img from PXE server
+- Downloads initrd-phoenix.img from PXE server
 
 **Step 5: Boot Foundation**
 - Boots Foundation with mgmt_ip=<management_ip>
@@ -129,8 +129,8 @@ set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
 
-kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
-initrd ${{base-url}}/initrd-foundation.img
+kernel ${{base-url}}/vmlinuz-phoenix console=tty0 console=ttyS0,115200 node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
+initrd ${{base-url}}/initrd-phoenix.img
 
 boot || goto error
 
@@ -148,8 +148,8 @@ shell
 **Key iPXE Script Functions**:
 ```ipxe
 dhcp                                            # Get IP address from DHCP server
-kernel http://{pxe_server_dns}:8080/boot/images/vmlinuz-foundation     # Download Foundation kernel
-initrd http://{pxe_server_dns}:8080/boot/images/initrd-foundation.img  # Download Foundation initrd
+kernel http://{pxe_server_dns}:8080/boot/images/vmlinuz-phoenix     # Download Foundation kernel
+initrd http://{pxe_server_dns}:8080/boot/images/initrd-phoenix.img  # Download Foundation initrd
 boot                                            # Start the Foundation kernel
 ```
 **Foundation Boot Parameters**:
@@ -160,7 +160,7 @@ boot                                            # Start the Foundation kernel
 - `config_server`: URL to retrieve storage configuration (dynamically generated based on PXE server DNS)
 - `console`: Console output settings for remote management
 
-### 2. vmlinuz-foundation (Foundation Linux Kernel)
+### 2. vmlinuz-phoenix (Foundation Linux Kernel)
 
 **Purpose**: The specialized Linux kernel that contains the Foundation service for Nutanix deployment.
 
@@ -177,13 +177,13 @@ boot                                            # Start the Foundation kernel
 - Supports the hardware platform (x86_64)
 
 **Boot process**:
-1. iPXE downloads vmlinuz-foundation from PXE server
+1. iPXE downloads vmlinuz-phoenix from PXE server
 2. Kernel is loaded into memory
 3. Kernel initializes hardware
 4. Kernel mounts the initial ramdisk
 5. Control is passed to Foundation service in initrd
 
-### 3. initrd-foundation.img (Foundation Initial RAM Disk)
+### 3. initrd-phoenix.img (Foundation Initial RAM Disk)
 
 **Purpose**: A specialized temporary root filesystem containing the Foundation service and tools.
 
@@ -195,7 +195,7 @@ boot                                            # Start the Foundation kernel
 - Drivers and kernel modules
 
 **Key Functions**:
-Inside initrd-foundation.img, these processes happen:
+Inside initrd-phoenix.img, these processes happen:
 - Hardware discovery and validation
 - Network interface initialization
 - Download of node configuration from PXE server
@@ -256,8 +256,8 @@ The storage configuration is dynamically generated based on the server profile i
 ├── configs/
 │   └── (dynamic configuration via API endpoint)
 ├── images/
-│   ├── initrd-foundation.img
-│   ├── vmlinuz-foundation
+│   ├── initrd-phoenix.img
+│   ├── vmlinuz-phoenix
 │   └── nutanix-ce.iso
 └── scripts/
     ├── foundation-init.sh
