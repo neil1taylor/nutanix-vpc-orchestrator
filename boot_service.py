@@ -125,7 +125,7 @@ class BootService:
         logger.info(f"Generating boot script for node: {node['node_name']}")
         logger.info(f"Node configuration: Management IP: {node['management_ip']}, AHV IP: {node['nutanix_config']['ahv_ip']}, CVM IP: {node['nutanix_config']['cvm_ip']}")
         
-        # Try to get network information from VPC SDK as a fallback
+        # Get network information from VPC SDK
         try:
             # Get the management subnet ID from the node configuration
             management_subnet_id = Config.MANAGEMENT_SUBNET_ID
@@ -151,19 +151,28 @@ class BootService:
             dns_server = dns_servers[0] if dns_servers else '161.26.0.10'
             logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}")
             
-            # Store network information for fallback
-            fallback_network_info = {
+            # Store network information
+            network_info = {
                 'ip': str(node['management_ip']),
                 'netmask': netmask,
                 'gateway': gateway,
                 'dns': dns_server,
                 'mac': ''  # We don't have the MAC address from the SDK
             }
-            logger.info(f"Fallback network info prepared: {fallback_network_info}")
+            logger.info(f"Network info prepared: {network_info}")
         except Exception as e:
             logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
-            fallback_network_info = None
+            # Use default values if VPC SDK fails
+            network_info = {
+                'ip': str(node['management_ip']),
+                'netmask': '255.255.255.0',
+                'gateway': '',
+                'dns': '161.26.0.10',
+                'mac': ''
+            }
         
+        # Create the iPXE script with escaped $ for iPXE variables
+        # This prevents Python from trying to evaluate them as variables
         template = f"""#!ipxe
 echo ===============================================
 echo Nutanix CE Node Creation
@@ -185,16 +194,8 @@ set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
 
-# Try to use iPXE variables first, with fallback to our configured values
-# The || operator in iPXE allows for fallback if a variable is not defined
-set ip ${net0/ip} || set ip {fallback_network_info['ip'] if fallback_network_info else node['management_ip']}
-set netmask ${net0/netmask} || set netmask {fallback_network_info['netmask'] if fallback_network_info else '255.255.255.0'}
-set gateway ${net0/gateway} || set gateway {fallback_network_info['gateway'] if fallback_network_info else ''}
-set dns_server ${dns} || set dns_server {fallback_network_info['dns'] if fallback_network_info else '161.26.0.10'}
-set mac_addr ${net0/mac} || set mac_addr {fallback_network_info['mac'] if fallback_network_info else ''}
-
-# Boot Phoenix with network config from DHCP or fallback values
-kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 init=/installer IP=${{ip}} NETMASK=${{netmask}} GATEWAY=${{gateway}} DNS=${{dns_server}} MAC=${{mac_addr}} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/configs/${{mac_addr}}.json
+# Boot Phoenix with network config from DHCP
+kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 init=/installer IP={network_info['ip']} NETMASK={network_info['netmask']} GATEWAY={network_info['gateway']} DNS={network_info['dns']} MAC={network_info['mac']} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/configs/{{mac}}.json
 initrd ${{base-url}}/initrd-foundation.img
 boot || goto error
 
@@ -203,7 +204,7 @@ echo Boot failed - dropping to shell
 shell
 """
         # Log the generated boot script for debugging
-        logger.info("Generated boot script with iPXE variables and fallback to VPC SDK values")
+        logger.info("Generated boot script with network information from VPC SDK")
         return template
     
     def generate_error_boot_script(self, error_message):
