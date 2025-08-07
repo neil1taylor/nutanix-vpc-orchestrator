@@ -125,6 +125,45 @@ class BootService:
         logger.info(f"Generating boot script for node: {node['node_name']}")
         logger.info(f"Node configuration: Management IP: {node['management_ip']}, AHV IP: {node['nutanix_config']['ahv_ip']}, CVM IP: {node['nutanix_config']['cvm_ip']}")
         
+        # Try to get network information from VPC SDK as a fallback
+        try:
+            # Get the management subnet ID from the node configuration
+            management_subnet_id = Config.MANAGEMENT_SUBNET_ID
+            
+            # Get network information from VPC SDK
+            from ibm_cloud_client import IBMCloudClient
+            ibm_cloud = IBMCloudClient()
+            
+            # Get subnet information
+            subnet_info = ibm_cloud.get_subnet_info(management_subnet_id)
+            logger.info(f"Retrieved subnet info for {management_subnet_id}")
+            
+            # Get gateway address
+            gateway = ibm_cloud.get_subnet_gateway(management_subnet_id)
+            logger.info(f"Retrieved gateway for subnet {management_subnet_id}: {gateway}")
+            
+            # Get netmask
+            netmask = ibm_cloud.get_subnet_netmask(management_subnet_id)
+            logger.info(f"Retrieved netmask for subnet {management_subnet_id}: {netmask}")
+            
+            # Get DNS servers
+            dns_servers = ibm_cloud.get_vpc_dns_servers(Config.VPC_ID)
+            dns_server = dns_servers[0] if dns_servers else '161.26.0.10'
+            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}")
+            
+            # Store network information for fallback
+            fallback_network_info = {
+                'ip': str(node['management_ip']),
+                'netmask': netmask,
+                'gateway': gateway,
+                'dns': dns_server,
+                'mac': ''  # We don't have the MAC address from the SDK
+            }
+            logger.info(f"Fallback network info prepared: {fallback_network_info}")
+        except Exception as e:
+            logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
+            fallback_network_info = None
+        
         template = f"""#!ipxe
 echo ===============================================
 echo Nutanix CE Node Creation
@@ -146,8 +185,16 @@ set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
 
-# Boot Phoenix with node configuration parameters
-kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 init=/installer node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
+# Try to use iPXE variables first, with fallback to our configured values
+# The || operator in iPXE allows for fallback if a variable is not defined
+set ip ${net0/ip} || set ip {fallback_network_info['ip'] if fallback_network_info else node['management_ip']}
+set netmask ${net0/netmask} || set netmask {fallback_network_info['netmask'] if fallback_network_info else '255.255.255.0'}
+set gateway ${net0/gateway} || set gateway {fallback_network_info['gateway'] if fallback_network_info else ''}
+set dns_server ${dns} || set dns_server {fallback_network_info['dns'] if fallback_network_info else '161.26.0.10'}
+set mac_addr ${net0/mac} || set mac_addr {fallback_network_info['mac'] if fallback_network_info else ''}
+
+# Boot Phoenix with network config from DHCP or fallback values
+kernel ${{base-url}}/vmlinuz-foundation console=tty0 console=ttyS0,115200 init=/installer IP=${{ip}} NETMASK=${{netmask}} GATEWAY=${{gateway}} DNS=${{dns_server}} MAC=${{mac_addr}} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/configs/${{mac_addr}}.json
 initrd ${{base-url}}/initrd-foundation.img
 boot || goto error
 
@@ -156,7 +203,7 @@ echo Boot failed - dropping to shell
 shell
 """
         # Log the generated boot script for debugging
-        logger.info("Generated boot script with correct iPXE variables")
+        logger.info("Generated boot script with iPXE variables and fallback to VPC SDK values")
         return template
     
     def generate_error_boot_script(self, error_message):
