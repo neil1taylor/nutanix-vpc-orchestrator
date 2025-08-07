@@ -58,7 +58,7 @@ class ServerProfileConfig:
             'memory_gb': 128,
             'boot_drives': ['sda', 'sdb'],
             'boot_drive_size': '960GB',
-            'data_drives': ['nvme0n1', 'nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1'],
+            'data_drives': ['nvme0n1', 'nvme1n1', 'nvme2n1', 'nvme3n1'],
             'data_drive_size': '3.2TB',
             'data_drive_count': 8,
             'network_interfaces': ['eth0', 'eth1'],

@@ -44,6 +44,8 @@ cat /var/log/nutanix-pxe/pxe-server.log
 `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10`
 `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=${net0/ip}`
 
+`http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10`
+
 ## Log files
 
 `deploy.sh` logs to `/var/log/nutanix-deployment.log`

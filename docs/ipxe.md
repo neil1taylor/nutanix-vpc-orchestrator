@@ -228,21 +228,17 @@ The storage configuration is based on the IBM Cloud server profile. It is reques
 
 ```json
 {
-    "node_config": {
-        "node_id": "{node_name}",
-        "mgmt_ip": "{management_ip}",
-        "ahv_ip": "{ahv_ip}",
-        "cvm_ip": "{cvm_ip}"
-    },
-    "storage_config": {
-        "data_drives": ["nvme0n1", "nvme1n1", "nvme2n1", "nvme3n1", "nvme4n1", "nvme5n1", "nvme6n1", "nvme7n1"],
-        "boot_drives": ["sda"]
-    },
-    "cluster_config": {
-        "cluster_role": "compute-storage",
-        "cluster_name": "nutanix-cluster"
-    },
-    "server_profile": "cx3d-metal-48x128"
+  "hypervisor_ip": "10.240.0.10",  // The bare metal server's management IP
+  "cvm_ip": "10.240.0.101",        // The CVM that runs on top
+  "cluster_name": "ce-cluster",
+  "cvm_gb_ram": 48,
+  "cvm_num_vcpus": 16,
+  "cvm_gateway": "10.240.0.1",
+  "cvm_netmask": "255.255.255.0",
+  "cvm_dns_servers": "161.26.0.7,161.26.0.8",
+  "dns_ip": "161.26.0.7,161.26.0.8",
+  "hypervisor_nameserver": "161.26.0.7,161.26.0.8",
+  "hypervisor": "kvm"
 }
 ```
 
@@ -432,7 +428,7 @@ kernel ${base-url}/images/vmlinuz-phoenix
   console=tty0
   console=ttyS0,115200
   FOUND_IP=${pxe_server}
-  AZ_CONF_URL=http://${pxe_server}:8080/configs/${net0/mac}.json
+  AZ_CONF_URL=http://${pxe_server}:8080/boot/server/${net0/ip}
 
 initrd ${base-url}/images/initrd-phoenix.img
 boot || goto error
@@ -444,9 +440,30 @@ shell
 
 ### Configuration JSON Format
 
-To support the CE installer automation, create a configuration JSON file at `/var/www/pxe/configs/<MAC_ADDRESS>.json`:
+The CE installer expects a configuration JSON in the following format:
 
 ```json
+{
+  "hypervisor_ip": "10.240.0.10",  // The bare metal server's management IP
+  "cvm_ip": "10.240.0.101",        // The CVM that runs on top
+  "cluster_name": "ce-cluster",
+  "cvm_gb_ram": 48,
+  "cvm_num_vcpus": 16,
+  "cvm_gateway": "10.240.0.1",
+  "cvm_netmask": "255.255.255.0",
+  "cvm_dns_servers": "161.26.0.7,161.26.0.8",
+  "dns_ip": "161.26.0.7,161.26.0.8",
+  "hypervisor_nameserver": "161.26.0.7,161.26.0.8",
+  "hypervisor": "kvm"
+}
+```
+
+This configuration is returned by the `/boot/server/<mgmt_ip>` endpoint on the PXE/Config server.
+
+The previous format with nested "nodes" and "clusters" objects is no longer used:
+
+```json
+// Old format - no longer used
 {
   "nodes": [{
     "node_position": "A",

@@ -279,7 +279,7 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
         return template
     
     def get_server_config(self, server_ip):
-        """Get detailed server configuration for Foundation"""
+        """Get detailed server configuration for CE installer automation"""
         node = self.db.get_node_by_management_ip(server_ip)
         
         if not node:
@@ -306,20 +306,50 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
         
-        # Generate storage configuration in the documented format
-        storage_config = self.generate_documented_storage_config(node)
+        # Get network information from VPC SDK
+        try:
+            # Get the management subnet ID from the node configuration
+            management_subnet_id = Config.MANAGEMENT_SUBNET_ID
+            
+            # Get network information from VPC SDK
+            from ibm_cloud_client import IBMCloudClient
+            ibm_cloud = IBMCloudClient()
+            
+            # Get gateway address
+            gateway = ibm_cloud.get_subnet_gateway(management_subnet_id)
+            logger.info(f"Retrieved gateway for subnet {management_subnet_id}: {gateway}")
+            
+            # Get netmask
+            netmask = ibm_cloud.get_subnet_netmask(management_subnet_id)
+            logger.info(f"Retrieved netmask for subnet {management_subnet_id}: {netmask}")
+            
+            # Get DNS servers
+            dns_servers = ibm_cloud.get_vpc_dns_servers(Config.VPC_ID)
+            dns_server_list = ','.join(dns_servers) if dns_servers else '161.26.0.7,161.26.0.8'
+            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}")
+        except Exception as e:
+            logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
+            # Use default values if VPC SDK fails
+            gateway = '10.240.0.1'
+            netmask = '255.255.255.0'
+            dns_server_list = '161.26.0.7,161.26.0.8'
         
+        # Format response according to CE installer requirements
         response = {
-            'node_config': {
-                'node_id': node['node_name'],
-                'mgmt_ip': str(node['management_ip']),
-                'ahv_ip': node['nutanix_config']['ahv_ip'],
-                'cvm_ip': node['nutanix_config']['cvm_ip']
-            },
-            'storage_config': storage_config,
-            'server_profile': node['server_profile']
+            'hypervisor_ip': str(node['management_ip']),  # Use management IP as hypervisor_ip
+            'cvm_ip': node['nutanix_config']['cvm_ip'],
+            'cluster_name': 'ce-cluster',
+            'cvm_gb_ram': 48,
+            'cvm_num_vcpus': 16,
+            'cvm_gateway': gateway,
+            'cvm_netmask': netmask,
+            'cvm_dns_servers': dns_server_list,
+            'dns_ip': dns_server_list,
+            'hypervisor_nameserver': dns_server_list,
+            'hypervisor': 'kvm'
         }
         
+        logger.info(f"Generated CE installer configuration for {node['node_name']}: {response}")
         return response
     
     
