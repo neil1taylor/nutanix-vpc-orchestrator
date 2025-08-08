@@ -172,6 +172,7 @@ class BootService:
             }
         
         # Create the iPXE script using CE installer automation
+        # kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_hyp_boot_disk=/dev/nvme0n1 ce_cvm_boot_disks=/dev/nvme1n1 ce_cvm_data_disks=/dev/nvme2n1,/dev/nvme3n1,/dev/nvme4n1 ce_eula_accepted=true ce_eula_viewed=true create_1node_cluster=true COMMUNITY_EDITION=1
         template = f"""#!ipxe
 echo ===============================================
 echo Nutanix CE Automated Deployment
@@ -191,7 +192,7 @@ set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
 set pxe_server {Config.PXE_SERVER_DNS}
 
 # Boot CE installer with automation parameters for NVMe drives
-kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_hyp_boot_disk=/dev/nvme0n1 ce_cvm_boot_disks=/dev/nvme1n1 ce_cvm_data_disks=/dev/nvme2n1,/dev/nvme3n1,/dev/nvme4n1 ce_eula_accepted=true ce_eula_viewed=true create_1node_cluster=true COMMUNITY_EDITION=1
+kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer IMG=squashfs console=tty0 console=ttyS0,115200 PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_hyp_boot_disk=/dev/nvme0n1 ce_cvm_boot_disks=/dev/nvme1n1 ce_cvm_data_disks=/dev/nvme2n1,/dev/nvme3n1,/dev/nvme4n1 ce_eula_accepted=true ce_eula_viewed=true create_1node_cluster=true COMMUNITY_EDITION=1
 initrd ${{base-url}}/initrd-phoenix.img
 boot || goto error
 
