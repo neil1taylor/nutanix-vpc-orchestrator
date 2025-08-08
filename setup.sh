@@ -527,6 +527,7 @@ find_squashfs_in_iso_ce ()
 EOF
 
         # Repack the initrd
+        cd /mnt
         find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-phoenix.img
 
         # Clean up temporary directory
