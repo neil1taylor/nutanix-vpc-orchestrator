@@ -46,6 +46,69 @@ cat /var/log/nutanix-pxe/pxe-server.log
 
 `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10`
 
+
+## To boot from the iso (livecd files not found)
+
+```bash
+#!ipxe
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+ntp time.adn.networklayer.com
+
+# Set longer timeouts (values in milliseconds)
+set net-timeout 300000
+set http-timeout 300000
+
+set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
+
+# Boot with parameters to specify ISO location
+sanboot --drive 0x80 ${base-url}/nutanix-ce-installer.iso
+```
+
+```bash
+#!ipxe
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+ntp time.adn.networklayer.com
+
+# Set longer timeouts (values in milliseconds)
+set net-timeout 300000
+set http-timeout 300000
+
+set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
+
+# Boot with explicit ISO location
+kernel ${base-url}/vmlinuz-phoenix iso-url=${base-url}/nutanix-ce-installer.iso init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=${base-url}/nutanix-ce-installer.iso
+initrd ${base-url}/initrd-phoenix.img
+boot
+```
+
+
+
+## Boot
+
+```bash
+#!ipxe
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+ntp time.adn.networklayer.com
+set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
+set iso_url ${base-url}/nutanix-ce-installer.iso
+
+kernel http://your-server.com/memdisk iso raw
+initrd ${iso_url} iso
+
+boot || goto error
+
+:error
+echo Boot failed - dropping to shell
+shell
+```
+
+
 ## Log files
 
 `deploy.sh` logs to `/var/log/nutanix-deployment.log`
@@ -356,3 +419,10 @@ https://download.nutanix.com/virtIO/1.2.3/Nutanix-VirtIO-1.2.3-x86.msi
 
 Nutanix VirtIO for Windows (iso) (Version: 1.2.3)
 https://download.nutanix.com/virtIO/1.2.3/Nutanix-VirtIO-1.2.3.iso
+
+After the host restarts, the AHV host and the CVM run their first boot setup processes. These processes can take 15 to 20 minutes to complete. After these processes finish running, you can perform the following steps:
+
+Sign in to the CE host and open a secure shell session (SSH) to the CVM IP address.
+Configure a single-node or multinode cluster.
+See the Next Steps section.
+For a multinode cluster, you must install CE on every node that you plan to use in the cluster. When the system restarts after installation, validate that the CVMs are online and ready to join a cluster.

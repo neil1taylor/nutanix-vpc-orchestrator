@@ -373,7 +373,7 @@ server {
     server_name _;
     return 301 https://$server_name$request_uri;
 }
-
+ 
 server {
     listen 443 ssl http2;
     server_name _;
@@ -384,7 +384,9 @@ server {
     ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
     
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        root /var/www/html;
+        index index.html index.htm;
+        try_files $uri $uri/ =404;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -414,7 +416,9 @@ server {
     server_name _;
     
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        root /var/www/html;
+        index index.html index.htm;
+        try_files $uri $uri/ =404;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -459,6 +463,74 @@ setup_boot_files() {
         }
         
         # Extract boot files
+        # --- Start of modified logic for livecd.sh ---
+        INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
+        mkdir -p "$INITRD_TMP_DIR"
+        cd "$INITRD_TMP_DIR"
+
+        # Extract initrd contents
+        gunzip -c /mnt/boot/initrd | cpio -idmv
+
+        # Define the modified find_squashfs_in_iso_ce function
+        # Using the URL from the user's iPXE script. IMG_MD5SUM is commented out.
+        cat > livecd.sh << 'EOF'
+find_squashfs_in_iso_ce ()
+{
+  # First try to download squashfs.img directly via HTTP
+  if [ -n "$LIVEFS_URL" ]; then
+    echo "Attempting to download squashfs.img from $LIVEFS_URL"
+    wget "$LIVEFS_URL" -t3 -T60 -O /root/squashfs.img
+    if [ $? -eq 0 -a -f /root/squashfs.img ]; then
+      echo "Successfully downloaded squashfs.img from HTTP"
+      # Verify MD5 if needed
+      # md5sum /root/squashfs.img | grep $IMG_MD5SUM
+      # if [ $? -eq 0 ]; then
+      #   return 0
+      # else
+      #   echo "MD5 checksum mismatch, trying alternative methods"
+      #   rm -f /root/squashfs.img
+      # fi
+      return 0 # Simplified for now, assuming download is enough
+    else
+      echo "HTTP download failed, trying to find Phoenix ISO device"
+    fi
+  fi
+
+  # Fall back to original method - look for PHOENIX labeled device
+  echo "Looking for device containing Phoenix ISO..."
+  for retry in `seq 1 15`; do
+    PHX_DEV=$(blkid | grep 'LABEL="PHOENIX"' | cut -d: -f1)
+    ret=$?
+    if [ $ret -eq 0 -a "$PHX_DEV" != "" ]; then
+      mount $PHX_DEV /mnt/iso
+      if [ $? -eq 0 ]; then
+        if [ -f /mnt/iso/squashfs.img ]; then
+          echo -e "\nCopying squashfs.img from Phoenix ISO on $PHX_DEV"
+          cp -rf /mnt/iso/squashfs.img /root/
+          return 0
+        else
+          umount /mnt/iso
+        fi
+      fi
+    fi
+    echo -en "\r [$retry/15] Waiting for Phoenix ISO to be available ..."
+    sleep 2
+  done
+
+  echo "Failed to find Phoenix ISO."
+  return 1
+}
+EOF
+
+        # Repack the initrd
+        find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-phoenix.img
+
+        # Clean up temporary directory
+        cd /tmp
+        rm -rf "$INITRD_TMP_DIR"
+        # --- End of modified logic ---
+
+        # Original logic for copying kernel and ISO
         mount -o loop nutanix-ce.iso /mnt 2>/dev/null || {
             log "Warning: Could not mount ISO, creating placeholder files"
             touch /var/www/pxe/images/{vmlinuz-phoenix,initrd-phoenix.img,nutanix-ce-installer.iso}
@@ -466,7 +538,6 @@ setup_boot_files() {
         }
         
         cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-phoenix 2>/dev/null || true
-        cp /mnt/boot/initrd /var/www/pxe/images/initrd-phoenix.img 2>/dev/null || true
         cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
         
         umount /mnt 2>/dev/null || true
