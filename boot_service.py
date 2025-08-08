@@ -191,8 +191,16 @@ ntp time.adn.networklayer.com
 set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
 set pxe_server {Config.PXE_SERVER_DNS}
 
-# Boot CE installer with automation parameters for NVMe drives
-kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer IMG=squashfs console=tty0 console=ttyS0,115200 PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_hyp_boot_disk=/dev/nvme0n1 ce_cvm_boot_disks=/dev/nvme1n1 ce_cvm_data_disks=/dev/nvme2n1,/dev/nvme3n1,/dev/nvme4n1 ce_eula_accepted=true ce_eula_viewed=true create_1node_cluster=true COMMUNITY_EDITION=1
+# Boot CE installer with minimal parameters and point to full JSON config
+# This implements the two-stage approach:
+# 1. Minimal kernel parameters for boot
+# 2. Full JSON configuration retrieved via AZ_CONF_URL
+#
+# Kernel parameters optimized for NVMe-based bare metal server:
+# - intel_iommu=on, iommu=pt: Essential for device passthrough
+# - kvm-intel.ept=1: Improves virtualization performance
+# - kvm.ignore_msrs=1: Helps with VM compatibility
+kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.ept=1 kvm.ignore_msrs=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true COMMUNITY_EDITION=1
 initrd ${{base-url}}/initrd-phoenix.img
 boot || goto error
 
@@ -336,17 +344,53 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
             dns_server_list = '161.26.0.7,161.26.0.8'
         
         # Format response according to CE installer requirements
+        # This is the full JSON configuration retrieved via AZ_CONF_URL
         response = {
-            'hypervisor_ip': str(node['management_ip']),  # Use management IP as hypervisor_ip
-            'cvm_ip': node['nutanix_config']['cvm_ip'],
+            # Basic node information
+            'hyp_type': 'kvm',
+            'model': 'NX-3060-G7',
+            'node_position': 'A',
+            'block_id': f"BLOCK-{node['id']}",
+            'node_serial': f"SERIAL-{node['id']}",
+            'cluster_id': 1,
+            'node_name': node['node_name'],
             'cluster_name': 'ce-cluster',
-            'cvm_gb_ram': 48,
-            'cvm_num_vcpus': 16,
-            'cvm_gateway': gateway,
-            'cvm_netmask': netmask,
-            'cvm_dns_servers': dns_server_list,
+            
+            # Installation types
+            'hyp_install_type': 'clean',
+            'svm_install_type': 'clean',
+            
+            # NVMe disk configuration for our specific server
+            'ce_hyp_boot_disk': '/dev/nvme0n1',
+            'ce_cvm_boot_disks': ['/dev/nvme1n1'],
+            'ce_cvm_data_disks': ['/dev/nvme2n1', '/dev/nvme3n1', '/dev/nvme4n1'],
+            
+            # Network configuration
+            'hypervisor_ip': str(node['management_ip']),
+            'host_ip': str(node['management_ip']),
+            'host_subnet_mask': netmask,
+            'default_gw': gateway,
+            
+            'cvm_ip': node['nutanix_config']['cvm_ip'],
+            'svm_ip': node['nutanix_config']['cvm_ip'],
+            'svm_subnet_mask': netmask,
+            'svm_default_gw': gateway,
+            
             'dns_ip': dns_server_list,
+            'per_node_ntp_servers': 'pool.ntp.org,time.google.com',
             'hypervisor_nameserver': dns_server_list,
+            'cvm_dns_servers': dns_server_list,
+            
+            # Resource allocation
+            'svm_gb_ram': 48,
+            'svm_num_vcpus': 16,
+            
+            # CE-specific flags
+            'create_1node_cluster': True,
+            'ce_eula_accepted': True,
+            'ce_eula_viewed': True,
+            
+            # Hypervisor type
             'hypervisor': 'kvm'
         }
         

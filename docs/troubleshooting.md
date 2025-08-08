@@ -321,3 +321,38 @@ created_at: 2025-08-04 15:12:04.420621
 updated_at: 2025-08-04 15:12:07.145722
 workload_vnics: {'workload_vni_1': {'ip': '10.240.1.10', 'vnic_id': '0717-92f915e8-cb24-4a4f-86e7-49850df3c3ad', 'dns_name': 'nutanix-poc-bm-node-01-workload-1.nutanix-ce-poc.cloud', 'subnet_id': ''}}
 ```
+
+
+You can reach the CVM based Foundation by going to http://yourCVM-IPaddress:8000
+
+AOS is the operating system of the Nutanix Controller VM, which is a VM that must be running in the hypervisor to provide Nutanix-specific functionality.
+
+Foundation is the official deployment software of Nutanix. Foundation allows you to configure a pre-imaged node, or image a node with a hypervisor and an AOS of your choice. Foundation also allows you to form a cluster out of nodes whose hypervisor and AOS versions are the same, with or without re-imaging. Foundation is available for download at https://portal.nutanix.com/#/page/Foundation.
+
+If you already have a running cluster and want to add nodes to it, you must use the Expand Cluster option in Prism, instead of using Foundation. Expand Cluster allows you to directly re-image a node whose hypervisor/AOS version does not match the cluster's version.
+
+Nutanix and its OEM partners install some software on a node at the factory, before shipping it to the customer. For shipments inside the USA, this software is a hypervisor and an AOS. For Nutanix factory nodes, the hypervisor is AHV. In case of the OEM factories, it is up to the vendor to decide what hypervisor to ship to the customer. However, they always install AOS, regardless of the hypervisor.
+
+For shipments outside the USA, Nutanix installs a light-weight software called DiscoveryOS, which allows the node to be discovered in Foundation or in the Expand Cluster option of Prism.
+
+Since a node with DiscoveryOS is not pre-imaged with a hypervisor and an AOS, it must go through imaging first before joining a cluster. Both Foundation and Expand Cluster allow you to directly image it with the correct hypervisor and AOS.
+
+Vendors who do not have an OEM agreement with Nutanix ship a node without any software (not even DiscoveryOS) installed on it. Foundation supports bare-metal imaging of such nodes. In contrast, Expand Cluster does not support direct bare-metal imaging. Therefore, if you want to add a software-less node to an existing cluster, you must first image it using Foundation, then use Expand Cluster.
+
+Foundation is a Nutanix provided tool used for bootstrapping, imaging, and deployment of Nutanix clusters. The imaging process will install the desired version of the AOS software and the hypervisor of your choice. One of the ways to use Foundation services is to make use of the APIs provided by Foundation https://www.nutanix.dev/api_reference/apis/foundation.html#section/Foundation.
+
+
+https://portal.nutanix.com/page/documents/details?targetId=Nutanix-Community-Edition-Getting-Started-v2_1:Nutanix-Community-Edition-Getting-Started-v2_1
+
+Installer ISO
+https://download.nutanix.com/ce/2024.08.19/phoenix.x86_64-fnd_5.6.1_patch-aos_6.8.1_ga.iso
+
+Nutanix VirtIO for Windows (x64 installer)(Version: 1.2.3)
+https://download.nutanix.com/virtIO/1.2.3/Nutanix-VirtIO-1.2.3-x64.msi
+
+Nutanix VirtIO for Windows (x86 installer) (Version: 1.2.3)
+https://download.nutanix.com/virtIO/1.2.3/Nutanix-VirtIO-1.2.3-x86.msi
+
+
+Nutanix VirtIO for Windows (iso) (Version: 1.2.3)
+https://download.nutanix.com/virtIO/1.2.3/Nutanix-VirtIO-1.2.3.iso
