@@ -215,9 +215,15 @@ test_static_files() {
     log "Testing static files..."
     
     local missing_files=()
+<<<<<<< REPLACE
     local required_files=(
+<<<<<<< REPLACE
         "/var/www/pxe/images/vmlinuz-phoenix"
         "/var/www/pxe/images/initrd-phoenix.img"
+        "/var/www/pxe/images/nutanix-ce-installer.iso"
+        "/var/www/pxe/images/squashfs.img"
+        "/var/www/pxe/images/nutanix_installer_package.tar.gz"
+        "/var/www/pxe/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
     )
     
     for file in "${required_files[@]}"; do
@@ -453,27 +459,28 @@ setup_boot_files() {
     log "Setting up boot files..."
     
     # Download Nutanix ISO if not exists
+<<<<<<< REPLACE
     if [[ ! -f "/var/www/pxe/images/nutanix-ce-installer.iso" ]]; then
         log "Downloading Nutanix CE ISO..."
         cd /tmp
         wget -q -O nutanix-ce.iso "$NUTANIX_ISO_URL" || {
             log "Warning: Could not download Nutanix ISO, creating placeholder files"
             touch /var/www/pxe/images/{vmlinuz-phoenix,initrd-phoenix.img,nutanix-ce-installer.iso}
-            return 0
         }
-        
-        # Extract boot files
-        # --- Start of modified logic for livecd.sh ---
-        INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
-        mkdir -p "$INITRD_TMP_DIR"
-        cd "$INITRD_TMP_DIR"
+    fi
+    
+    # Extract boot files (always run)
+    # --- Start of modified logic for livecd.sh ---
+    INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
+    mkdir -p "$INITRD_TMP_DIR"
+    cd "$INITRD_TMP_DIR"
 
-        # Extract initrd contents
-        gunzip -c /mnt/boot/initrd | cpio -idmv
+    # Extract initrd contents
+    gunzip -c /mnt/boot/initrd | cpio -idmv
 
-        # Define the modified find_squashfs_in_iso_ce function
-        # Using the URL from the user's iPXE script. IMG_MD5SUM is commented out.
-        cat > livecd.sh << 'EOF'
+    # Define the modified find_squashfs_in_iso_ce function
+    # Using the URL from the user's iPXE script. IMG_MD5SUM is commented out.
+    cat > livecd.sh << 'EOF'
 find_squashfs_in_iso_ce ()
 {
   # First try to download squashfs.img directly via HTTP
