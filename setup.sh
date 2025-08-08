@@ -536,7 +536,7 @@ EOF
         # --- End of modified logic ---
 
         # Original logic for copying kernel and ISO
-        mount -o loop nutanix-ce.iso /mnt 2>/dev/null || {
+        mount -o loop nutanix-ce.iso /mnt || {
             log "Warning: Could not mount ISO, creating placeholder files"
             touch /var/www/pxe/images/{vmlinuz-phoenix,initrd-phoenix.img,nutanix-ce-installer.iso}
             return 0
