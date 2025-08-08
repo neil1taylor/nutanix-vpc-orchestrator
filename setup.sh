@@ -545,7 +545,6 @@ EOF
         cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
         
         umount /mnt 2>/dev/null || true
-    fi
     
     chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
 }
