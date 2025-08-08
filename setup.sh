@@ -215,9 +215,7 @@ test_static_files() {
     log "Testing static files..."
     
     local missing_files=()
-<<<<<<< REPLACE
     local required_files=(
-<<<<<<< REPLACE
         "/var/www/pxe/images/vmlinuz-phoenix"
         "/var/www/pxe/images/initrd-phoenix.img"
         "/var/www/pxe/images/nutanix-ce-installer.iso"
@@ -459,7 +457,6 @@ setup_boot_files() {
     log "Setting up boot files..."
     
     # Download Nutanix ISO if not exists
-<<<<<<< REPLACE
     if [[ ! -f "/var/www/pxe/images/nutanix-ce-installer.iso" ]]; then
         log "Downloading Nutanix CE ISO..."
         cd /tmp
