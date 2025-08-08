@@ -457,12 +457,12 @@ setup_boot_files() {
     log "Setting up boot files..."
     
     # Download Nutanix ISO if not exists
-    if [[ ! -f "/var/www/pxe/images/nutanix-ce-installer.iso" ]]; then
+    if [[ ! -f "/tmp/nutanix-ce-installer.iso" ]]; then
         log "Downloading Nutanix CE ISO..."
         cd /tmp
         wget -q -O nutanix-ce.iso "$NUTANIX_ISO_URL" || {
-            log "Warning: Could not download Nutanix ISO, creating placeholder files"
-            touch /var/www/pxe/images/{vmlinuz-phoenix,initrd-phoenix.img,nutanix-ce-installer.iso}
+            log "Warning: Could not download Nutanix ISO"
+            exit 0
         }
     fi
     
