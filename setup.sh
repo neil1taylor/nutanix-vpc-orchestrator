@@ -216,9 +216,9 @@ test_static_files() {
     
     local missing_files=()
     local required_files=(
-        "/var/www/pxe/images/vmlinuz-phoenix"
+        "/var/www/pxe/images/kernel"
         "/var/www/pxe/images/initrd-modified.img"
-        "/var/www/pxe/images/nutanix-ce-installer.iso"
+        "/var/www/pxe/images/nutanix-ce.iso"
         "/var/www/pxe/images/squashfs.img"
         "/var/www/pxe/images/nutanix_installer_package.tar.gz"
         "/var/www/pxe/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
@@ -546,9 +546,20 @@ find_squashfs_in_iso_ce ()\\
         # Original logic for copying kernel and ISO
         # ISO is already mounted above, no need to mount again
         
-        cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-phoenix 2>/dev/null || true
-        cp /tmp/nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
-        
+        cp /mnt/boot/kernel /var/www/pxe/images/kernel 2>/dev/null || true
+        cp /tmp/nutanix-ce.iso /var/www/pxe/images
+        cp /mnt/nutanix/squashfs.img /var/www/pxe/images
+        cp /mnt/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso  /var/www/pxe/images
+
+        # Copy split installer parts
+        cp /mnt/nutanix/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
+
+        # Reconstruct complete installer
+        cd /var/www/pxe/images
+        cat nutanix_installer_package.tar.p* > nutanix_installer_package.tar.gz
+        rm nutanix_installer_package.tar.p*
+        cd /tmp
+
         umount /mnt 2>/dev/null || true
     
     chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe

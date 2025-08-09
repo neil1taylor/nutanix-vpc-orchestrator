@@ -307,7 +307,7 @@ The boot files `kernel` and `squashfs.img` are copied so that they can be served
 sudo mkdir -p /var/www/pxe
 
 # Extract kernel and copy to /var/www/pxe/images (it is renamed for no real reason!)
-sudo cp /mnt/nutanix/boot/kernel /var/www/pxe/images/vmlinuz-phoenix
+sudo cp /mnt/nutanix/boot/kernel /var/www/pxe/images/kernel
 
 # Extract squashfs root filesystem and copy to /var/www/pxe/image
 sudo cp /mnt/nutanix/squashfs.img /var/www/pxe/images
