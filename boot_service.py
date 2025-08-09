@@ -365,14 +365,38 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
                 logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
                 logger.warning("Using default network values")
             
-            # Get storage configuration from server profiles
+            # Get storage configuration from server profiles with robust error handling
             try:
                 from server_profiles import ServerProfileConfig
                 server_profiles = ServerProfileConfig()
-                storage_config = server_profiles.get_storage_config(node.get('server_profile', 'bx2d-metal-48x192'))
+                profile = node.get('server_profile', 'bx2d-metal-48x192')
+                logger.info(f"Getting storage config for profile: {profile}")
+                storage_config = server_profiles.get_storage_config(profile)
+                
+                # Verify storage config has required keys
+                if not storage_config:
+                    logger.error(f"Empty storage configuration returned for profile {profile}")
+                    storage_config = {
+                        'boot_device': '/dev/sda',  # Default boot device
+                        'data_drives': ['/dev/sdb']  # Default data drive
+                    }
+                    logger.info(f"Using default storage configuration: {storage_config}")
+                elif 'boot_device' not in storage_config or 'data_drives' not in storage_config:
+                    logger.error(f"Incomplete storage configuration: {storage_config}")
+                    # Add missing keys with defaults
+                    if 'boot_device' not in storage_config:
+                        storage_config['boot_device'] = '/dev/sda'
+                    if 'data_drives' not in storage_config:
+                        storage_config['data_drives'] = ['/dev/sdb']
+                    logger.info(f"Completed storage configuration: {storage_config}")
             except Exception as e:
                 logger.error(f"Failed to get storage configuration: {str(e)}")
-                return None
+                # Use default storage configuration
+                storage_config = {
+                    'boot_device': '/dev/sda',  # Default boot device
+                    'data_drives': ['/dev/sdb']  # Default data drive
+                }
+                logger.info(f"Using fallback storage configuration due to error: {storage_config}")
             
             # Define URLs for installer packages
             base_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/images"
@@ -435,9 +459,9 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
                         'svm_netmask': netmask,
                         'svm_gateway': gateway,
                         'disk_layout': {
-                            'boot_disk': storage_config['boot_device'],
-                            'cvm_disk': storage_config['boot_device'],  # Use same disk for boot and CVM as in example
-                            'storage_pool_disks': storage_config['data_drives']
+                            'boot_disk': storage_config.get('boot_device', '/dev/sda'),
+                            'cvm_disk': storage_config.get('boot_device', '/dev/sda'),  # Use same disk for boot and CVM
+                            'storage_pool_disks': storage_config.get('data_drives', ['/dev/sdb'])
                         }
                     }
                 ],
@@ -460,7 +484,10 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
                 'node_name': node['node_name']
             }
             
-            logger.info(f"Generated Arizona configuration for {node['node_name']}")
+            # Log the full configuration for debugging
+            logger.info(f"Generated Arizona configuration for {node.get('node_name', 'unknown')}")
+            logger.info(f"Configuration details: nodes={len(response['nodes'])}, dns={response['dns_servers']}")
+            logger.info(f"Disk layout: boot={response['nodes'][0]['disk_layout']['boot_disk']}, data={response['nodes'][0]['disk_layout']['storage_pool_disks']}")
             return response
             
         except Exception as e:
@@ -469,15 +496,31 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
-            return None
     
     def calculate_md5(self, file_path):
         """Calculate MD5 checksum of a file"""
         try:
+            # Check if file exists
             if not os.path.exists(file_path):
                 logger.warning(f"File not found for MD5 calculation: {file_path}")
                 return "file_not_found"
-                
+            
+            # Check if file is readable
+            if not os.access(file_path, os.R_OK):
+                logger.warning(f"File not readable for MD5 calculation: {file_path}")
+                return "file_not_readable"
+            
+            # Check file size
+            try:
+                file_size = os.path.getsize(file_path)
+                logger.info(f"File size for MD5 calculation: {file_path} = {file_size} bytes")
+                if file_size == 0:
+                    logger.warning(f"Empty file for MD5 calculation: {file_path}")
+                    return "empty_file"
+            except Exception as e:
+                logger.warning(f"Could not get file size: {file_path}: {str(e)}")
+            
+            # Calculate MD5
             md5_hash = hashlib.md5()
             with open(file_path, "rb") as f:
                 # Read file in chunks to handle large files efficiently
@@ -485,25 +528,71 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
                     md5_hash.update(chunk)
             
             md5_checksum = md5_hash.hexdigest()
-            logger.debug(f"MD5 checksum for {file_path}: {md5_checksum}")
+            logger.info(f"MD5 checksum for {file_path}: {md5_checksum}")
             return md5_checksum
+            
+        except PermissionError as e:
+            logger.error(f"Permission error calculating MD5 for {file_path}: {str(e)}")
+            return "permission_denied"
+        except IOError as e:
+            logger.error(f"IO error calculating MD5 for {file_path}: {str(e)}")
+            return "io_error"
         except Exception as e:
             logger.error(f"Failed to calculate MD5 checksum for {file_path}: {str(e)}")
+            import traceback
+            logger.error(f"MD5 calculation traceback: {traceback.format_exc()}")
             return "md5_calculation_failed"
     
     
     
     def generate_documented_storage_config(self, node):
         """Generate storage configuration in the documented format"""
-        # Get storage configuration from server profiles
-        server_profiles = ServerProfileConfig()
-        storage_config = server_profiles.get_storage_config(node['server_profile'])
-        
-        # Extract just the drive names without the /dev/ prefix
-        data_drives = [drive.replace('/dev/', '') for drive in storage_config['data_drives']]
-        boot_drives = [drive.replace('/dev/', '') for drive in [storage_config['boot_device']]]
-        
-        return {
-            'data_drives': data_drives,
-            'boot_drives': boot_drives
-        }
+        try:
+            # Get storage configuration from server profiles
+            server_profiles = ServerProfileConfig()
+            
+            # Safely get server profile with fallback
+            profile = node.get('server_profile', 'bx2d-metal-48x192')
+            logger.info(f"Getting documented storage config for profile: {profile}")
+            
+            # Get storage configuration with error handling
+            try:
+                storage_config = server_profiles.get_storage_config(profile)
+            except Exception as e:
+                logger.error(f"Failed to get storage config for {profile}: {str(e)}")
+                # Use default values
+                storage_config = {
+                    'boot_device': '/dev/sda',
+                    'data_drives': ['/dev/sdb']
+                }
+                logger.info(f"Using default storage configuration: {storage_config}")
+            
+            # Safely extract drive names with error handling
+            try:
+                # Extract just the drive names without the /dev/ prefix
+                data_drives = [drive.replace('/dev/', '') for drive in storage_config.get('data_drives', ['/dev/sdb'])]
+                boot_drives = [drive.replace('/dev/', '') for drive in [storage_config.get('boot_device', '/dev/sda')]]
+                
+                logger.info(f"Documented storage config: boot={boot_drives}, data={data_drives}")
+                
+                return {
+                    'data_drives': data_drives,
+                    'boot_drives': boot_drives
+                }
+            except Exception as e:
+                logger.error(f"Error formatting drive names: {str(e)}")
+                # Return default values
+                return {
+                    'data_drives': ['sdb'],
+                    'boot_drives': ['sda']
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to generate documented storage config: {str(e)}")
+            import traceback
+            logger.error(f"Storage config traceback: {traceback.format_exc()}")
+            # Return default values
+            return {
+                'data_drives': ['sdb'],
+                'boot_drives': ['sda']
+            }
