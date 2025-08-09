@@ -547,7 +547,7 @@ find_squashfs_in_iso_ce ()\\
         find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified.img
 
         # Clean up temporary directory
-        log "Clean up temporary directory by removing ${$INITRD_TMP_DIR}"
+        log "Clean up temporary directory by removing ${INITRD_TMP_DIR}"
         cd /tmp
         rm -rf "$INITRD_TMP_DIR"
 
