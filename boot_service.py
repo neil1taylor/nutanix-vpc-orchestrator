@@ -169,7 +169,7 @@ class BootService:
             # Use default values if VPC SDK fails
             network_info = {
                 'ip': str(node['management_ip']),
-                'netmask': '255.255.255.0',
+                'netmask': '255.255.0.0',
                 'gateway': '',
                 'dns': '8.8.8.8',
                 'mac': ''
@@ -331,8 +331,8 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
                 # Continue processing even if monitoring fails
             
             # Default network values in case VPC SDK fails
-            gateway = '10.240.0.1'
-            netmask = '255.255.255.0'
+            gateway = '192.168.0.1'
+            netmask = '255.255.0.0'
             dns_server_list = '8.8.8.8,9.9.9.9'
             
             # Get network information from VPC SDK

@@ -354,22 +354,25 @@ class IBMCloudClient:
             # Log the entire VPC info for debugging
             logger.info(f"VPC info for {vpc_id}: {vpc_info}")
             
-            # Check if dns_servers exists in the VPC info
-            if 'dns_servers' in vpc_info:
-                logger.info(f"Found DNS servers in VPC info: {vpc_info['dns_servers']}")
-                return vpc_info['dns_servers']
+            # Check if DNS servers exist in the correct location in VPC info
+            # The actual path is vpc_info['dns']['resolver']['servers']
+            if 'dns' in vpc_info and 'resolver' in vpc_info['dns'] and 'servers' in vpc_info['dns']['resolver']:
+                servers = vpc_info['dns']['resolver']['servers']
+                # Extract the addresses from the server objects
+                dns_servers = [server['address'] for server in servers if 'address' in server]
+                if dns_servers:
+                    logger.info(f"Found DNS servers in VPC info: {dns_servers}")
+                    return dns_servers
             
-            # IBM Cloud VPC DNS servers should be 161.26.0.7 and 161.26.0.8
-            # But the API might be returning different values
-            logger.info("No DNS servers found in VPC info, using IBM Cloud default DNS servers")
-            return ['161.26.0.7', '161.26.0.8']
+            logger.info("No DNS servers found in VPC info structure, using default DNS servers")
+            return ['8.8.8.8', '9.9.9.9']
         except Exception as e:
             logger.error(f"Failed to get DNS servers for VPC {vpc_id}: {str(e)}")
             # Log the full exception for debugging
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
             # Return IBM Cloud default DNS servers
-            return ['161.26.0.7', '161.26.0.8']
+            return ['8.8.8.8', '9.9.9.9']
     
     def get_custom_image(self, image_identifier):
         """Get custom image by name or ID using VPC SDK"""

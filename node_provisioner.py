@@ -542,7 +542,7 @@ class NodeProvisioner:
                 logger.warning(f"Cannot monitor server status for node {node_id}")
                 return
                 
-            logger.info(f"🔍 MONITOR DETAILS: Node ID: {node_id}, Name: {node['node_name']}, Bare Metal ID: {node.get('bare_metal_id', 'None')}")
+            logger.info(f"Node ID: {node_id}, Name: {node['node_name']}, Bare Metal ID: {node.get('bare_metal_id', 'None')}")
                 
             # For existing nodes that might not have bare_metal_id yet
             if not node.get('bare_metal_id'):
