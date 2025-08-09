@@ -457,7 +457,7 @@ setup_boot_files() {
     log "Setting up boot files..."
     
     # Download Nutanix ISO if not exists
-    if [[ ! -f "/tmp/nutanix-ce-installer.iso" ]]; then
+    if [[ ! -f "/tmp/nutanix-ce.iso" ]]; then
         log "Downloading Nutanix CE ISO..."
         cd /tmp
         wget -q -O nutanix-ce.iso "$NUTANIX_ISO_URL" || {
