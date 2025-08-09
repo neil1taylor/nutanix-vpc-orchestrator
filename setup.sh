@@ -469,6 +469,14 @@ setup_boot_files() {
     # Extract boot files
     INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
     mkdir -p "$INITRD_TMP_DIR"
+    mkdir -p /mnt/iso
+    
+    # Mount ISO first
+    mount -o loop /tmp/nutanix-ce.iso /mnt || {
+        log "Warning: Could not mount ISO"
+        return 0
+    }
+    
     cd "$INITRD_TMP_DIR"
 
     # Extract initrd contents
@@ -552,7 +560,7 @@ find_squashfs_in_iso_ce ()\\
     fi
 
         # Repack the initrd
-        cd /mnt
+        cd "$INITRD_TMP_DIR"
         find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified.img
 
         # Clean up temporary directory
@@ -560,13 +568,10 @@ find_squashfs_in_iso_ce ()\\
         rm -rf "$INITRD_TMP_DIR"
 
         # Original logic for copying kernel and ISO
-        mount -o loop nutanix-ce.iso /mnt || {
-            log "Warning: Could not mount ISO"
-            return 0
-        }
+        # ISO is already mounted above, no need to mount again
         
         cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-phoenix 2>/dev/null || true
-        cp nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
+        cp /tmp/nutanix-ce.iso /var/www/pxe/images/nutanix-ce-installer.iso
         
         umount /mnt 2>/dev/null || true
     
