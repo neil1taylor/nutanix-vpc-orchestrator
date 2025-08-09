@@ -484,7 +484,7 @@ setup_boot_files() {
     cd "$INITRD_TMP_DIR"
 
     # Extract initrd contents
-    log "Extracting the contentes of initrd to /mnt/boot/initrd"
+    log "Extracting the contents of initrd to ${INITRD_TMP_DIR}"
     gunzip -c /mnt/boot/initrd | cpio -idmv
 
     # Modify the find_squashfs_in_iso_ce function in the existing livecd.sh file
@@ -545,17 +545,17 @@ find_squashfs_in_iso_ce ()\\
         log "Repacking the initrd with the modified livecd.sh and saving to /var/www/pxe/images/initrd-modified.img"
         cd "$INITRD_TMP_DIR"
         find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified.img
+        cd /tmp
 
         # Clean up temporary directory
-        log "Clean up temporary directory by removing ${INITRD_TMP_DIR}"
-        cd /tmp
-        rm -rf "$INITRD_TMP_DIR"
+        #log "Clean up temporary directory by removing ${INITRD_TMP_DIR}"
+        #rm -rf "$INITRD_TMP_DIR"
 
         # Copy files
-        log " Copying files; kernel, nutanix-ce.iso, squashfs.img and AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso to /var/www/pxe/images"
+        log "Copying files; kernel, nutanix-ce.iso, squashfs.img and AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso to /var/www/pxe/images"
         cp /mnt/boot/kernel /var/www/pxe/images
         cp /tmp/nutanix-ce.iso /var/www/pxe/images
-        cp /mnt/nutanix/squashfs.img /var/www/pxe/images
+        cp /mnt/squashfs.img /var/www/pxe/images
         cp /mnt/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso  /var/www/pxe/images
 
         # Copy split installer parts

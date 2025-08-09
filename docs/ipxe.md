@@ -307,10 +307,10 @@ The boot files `kernel` and `squashfs.img` are copied so that they can be served
 sudo mkdir -p /var/www/pxe
 
 # Extract kernel and copy to /var/www/pxe/images (it is renamed for no real reason!)
-sudo cp /mnt/nutanix/boot/kernel /var/www/pxe/images/kernel
+sudo cp /mnt/boot/kernel /var/www/pxe/images/kernel
 
 # Extract squashfs root filesystem and copy to /var/www/pxe/image
-sudo cp /mnt/nutanix/squashfs.img /var/www/pxe/images
+sudo cp /mnt/squashfs.img /var/www/pxe/images
 ```
 
 ### 1.3 Extract AOS Installer Package
@@ -319,7 +319,7 @@ Th AOS installer will create the CVM during the install. On the ISO there are tw
 
 ```bash
 # Copy split installer parts
-sudo cp /mnt/nutanix/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
+sudo cp /mnt/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
 
 # Reconstruct complete installer
 cd /var/www/pxe/images
@@ -330,7 +330,7 @@ sudo rm nutanix_installer_package.tar.p*
 ### 1.4 Extract AHV Hypervisor ISO
 ```bash
 # Copy AHV ISO
-sudo cp "/mnt/nutanix/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso" /var/www/pxe/images
+sudo cp "/mnt/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso" /var/www/pxe/images
 ```
 
 ### 1.5 Generate MD5 Checksums
