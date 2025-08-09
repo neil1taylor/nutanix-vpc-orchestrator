@@ -469,7 +469,7 @@ setup_boot_files() {
     # Extract boot files
     INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
     mkdir -p "$INITRD_TMP_DIR"
-    mkdir -p /mnt/iso
+    mkdir -p /mnt
     
     # Mount ISO first
     mount -o loop /tmp/nutanix-ce.iso /mnt || {
@@ -527,30 +527,6 @@ find_squashfs_in_iso_ce ()\\
       echo \"HTTP download failed, trying to find Phoenix ISO device\"\\
     fi\\
   fi\\
-
-  # Fall back to original method - look for PHOENIX labeled device\\
-  echo \"Looking for device containing Phoenix ISO...\"\\
-  for retry in \`seq 1 15\`; do\\
-    PHX_DEV=\$(blkid | grep 'LABEL=\"PHOENIX\"' | cut -d: -f1)\\
-    ret=\$?\\
-    if [ \$ret -eq 0 -a \"\$PHX_DEV\" != \"\" ]; then\\
-      mount \$PHX_DEV /mnt/iso\\
-      if [ \$? -eq 0 ]; then\\
-        if [ -f /mnt/iso/squashfs.img ]; then\\
-          echo -e \"\\nCopying squashfs.img from Phoenix ISO on \$PHX_DEV\"\\
-          cp -rf /mnt/iso/squashfs.img /root/\\
-          return 0\\
-        else\\
-          umount /mnt/iso\\
-        fi\\
-      fi\\
-    fi\\
-    echo -en \"\\r [\$retry/15] Waiting for Phoenix ISO to be available ...\"\\
-    sleep 2\\
-  done\\
-\\
-  echo \"Failed to find Phoenix ISO.\"\\
-  return 1\\
 }" livecd.sh
         
         log "Modified find_squashfs_in_iso_ce function in livecd.sh"
