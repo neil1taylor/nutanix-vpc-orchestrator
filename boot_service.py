@@ -431,7 +431,7 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
                         'hyp_ip': str(node['management_ip']),
                         'hyp_netmask': netmask,
                         'hyp_gateway': gateway,
-                        'svm_ip': node['nutanix_config']['cvm_ip'],
+                        'svm_ip': node.get('nutanix_config', {}).get('cvm_ip', str(node['management_ip'])),
                         'svm_netmask': netmask,
                         'svm_gateway': gateway,
                         'disk_layout': {

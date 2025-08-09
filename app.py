@@ -182,42 +182,62 @@ def api_handle_boot_config():
 @app.route('/boot/server/<server_ip>', methods=['GET'])
 def api_get_server_config(server_ip):
     """Get detailed server configuration for Arizona"""
+    # Get client IP for logging
+    client_ip = request.remote_addr
+    # Check for X-Forwarded-For header
+    forwarded_for = request.headers.get('X-Forwarded-For')
+    if forwarded_for:
+        client_ip = forwarded_for.split(',')[0].strip()
+        
+    logger.info(f"Client {client_ip} is requesting server configuration for {server_ip}")
+    
+    # Log request headers for debugging
+    logger.debug(f"Request headers: {dict(request.headers)}")
+    
     try:
-        # Get client IP for logging
-        client_ip = request.remote_addr
-        # Check for X-Forwarded-For header
-        forwarded_for = request.headers.get('X-Forwarded-For')
-        if forwarded_for:
-            client_ip = forwarded_for.split(',')[0].strip()
-            
-        logger.info(f"Client {client_ip} is requesting server configuration for {server_ip}")
+        # First check if the server IP exists in the database
+        from database import Database
+        db = Database()
+        node = db.get_node_by_management_ip(server_ip)
         
-        # Log request headers for debugging
-        logger.debug(f"Request headers: {dict(request.headers)}")
+        if not node:
+            logger.warning(f"No node found in database for IP: {server_ip}")
+            return jsonify({'error': 'Server not found in database'}), 404
         
-        config = boot_service.get_server_config(server_ip)
-        if config:
-            # Log successful config retrieval with some details
-            logger.info(f"Configuration for {server_ip} sent to {client_ip}")
+        logger.info(f"Found node in database: {node.get('node_name', 'unknown')}")
+        
+        # Now try to get the full configuration
+        try:
+            config = boot_service.get_server_config(server_ip)
             
-            # Log node name if available
-            node_name = config.get('node_name', 'unknown')
-            logger.info(f"Node name: {node_name}")
-            
-            # Log DNS servers for debugging
-            dns_servers = config.get('dns_servers', 'unknown')
-            logger.info(f"DNS servers: {dns_servers}")
-            
-            return jsonify(config)
-        else:
-            logger.warning(f" No configuration found for server {server_ip}")
-            return jsonify({'error': 'Server not found'}), 404
+            if config:
+                # Log successful config retrieval with some details
+                logger.info(f"Configuration for {server_ip} sent to {client_ip}")
+                
+                # Log node name if available
+                node_name = config.get('node_name', 'unknown')
+                logger.info(f"Node name: {node_name}")
+                
+                # Log DNS servers for debugging
+                dns_servers = config.get('dns_servers', 'unknown')
+                logger.info(f"DNS servers: {dns_servers}")
+                
+                return jsonify(config)
+            else:
+                logger.warning(f"No configuration generated for server {server_ip}")
+                return jsonify({'error': 'Failed to generate server configuration'}), 500
+        except Exception as e:
+            logger.error(f"Error in boot_service.get_server_config: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return jsonify({'error': f'Internal server error: {str(e)}'}), 500
     except Exception as e:
         logger.error(f"Failed to serve configuration for {server_ip}: {str(e)}")
         # Log full traceback for debugging
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        # Return a valid response even if there's an error
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/boot/images/<filename>', methods=['GET'])
 def api_serve_boot_image(filename):
