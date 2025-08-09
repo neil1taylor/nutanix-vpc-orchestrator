@@ -574,8 +574,26 @@ EOF
 
     # Repack the initrd
     log "Repacking the initrd with the modified livecd.sh and saving to /var/www/pxe/images/initrd-modified.img"
+    
+    # Ensure the target directory exists
+    mkdir -p /var/www/pxe/images
+    
+    # Repack from the extraction directory
     cd "$INITRD_TMP_DIR"
-    find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified.img
+    log "Creating new initrd from directory: $(pwd)"
+    
+    # Use a more reliable repacking method
+    find . -print | cpio -o -H newc 2>/dev/null | gzip > /var/www/pxe/images/initrd-modified.img
+    
+    # Check if the repacking was successful
+    if [ -f "/var/www/pxe/images/initrd-modified.img" ]; then
+        INITRD_SIZE=$(du -h /var/www/pxe/images/initrd-modified.img | cut -f1)
+        log "Successfully created initrd-modified.img (Size: $INITRD_SIZE)"
+    else
+        log "Error: Failed to create initrd-modified.img"
+        return 1
+    fi
+    
     cd /tmp
 
     # Clean up temporary directory
