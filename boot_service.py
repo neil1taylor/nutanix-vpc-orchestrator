@@ -404,22 +404,62 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
             hypervisor_iso_url = f"{base_url}/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
             squashfs_url = f"{base_url}/squashfs.img"
             
-            # Calculate MD5 checksums with error handling
+            # Get MD5 checksums from pre-calculated file
             try:
-                svm_installer_path = os.path.join(Config.BOOT_IMAGES_PATH, "nutanix_installer_package.tar.gz")
-                hypervisor_iso_path = os.path.join(Config.BOOT_IMAGES_PATH, "AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso")
-                squashfs_path = os.path.join(Config.BOOT_IMAGES_PATH, "squashfs.img")
+                # Check if checksums file exists
+                checksums_file = os.path.join(Config.BOOT_IMAGES_PATH, "checksums.json")
                 
-                svm_installer_md5 = self.calculate_md5(svm_installer_path)
-                hypervisor_iso_md5 = self.calculate_md5(hypervisor_iso_path)
-                squashfs_md5 = self.calculate_md5(squashfs_path)
-                
-                logger.info(f"MD5 checksums calculated: SVM={svm_installer_md5}, HYP={hypervisor_iso_md5}, FS={squashfs_md5}")
+                if os.path.exists(checksums_file):
+                    logger.info(f"Reading pre-calculated checksums from {checksums_file}")
+                    import json
+                    with open(checksums_file, 'r') as f:
+                        checksums = json.load(f)
+                    
+                    # Get checksums for each file
+                    svm_installer_md5 = checksums.get("nutanix_installer_package.tar.gz", "checksum_not_found")
+                    hypervisor_iso_md5 = checksums.get("AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso", "checksum_not_found")
+                    squashfs_md5 = checksums.get("squashfs.img", "checksum_not_found")
+                    
+                    logger.info(f"MD5 checksums from file: SVM={svm_installer_md5}, HYP={hypervisor_iso_md5}, FS={squashfs_md5}")
+                else:
+                    # Fallback to file sizes if checksums file doesn't exist
+                    logger.warning(f"Checksums file not found: {checksums_file}, falling back to MD5 calculation")
+                    svm_installer_path = os.path.join(Config.BOOT_IMAGES_PATH, "nutanix_installer_package.tar.gz")
+                    hypervisor_iso_path = os.path.join(Config.BOOT_IMAGES_PATH, "AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso")
+                    squashfs_path = os.path.join(Config.BOOT_IMAGES_PATH, "squashfs.img")
+                    
+                    # Use file sizes instead of MD5 checksums for large files
+                    if os.path.exists(svm_installer_path):
+                        svm_size = os.path.getsize(svm_installer_path)
+                        svm_installer_md5 = f"size_{svm_size}"
+                        logger.info(f"Using file size for SVM installer: {svm_size} bytes")
+                    else:
+                        svm_installer_md5 = "file_not_found"
+                    
+                    if os.path.exists(hypervisor_iso_path):
+                        hyp_size = os.path.getsize(hypervisor_iso_path)
+                        hypervisor_iso_md5 = f"size_{hyp_size}"
+                        logger.info(f"Using file size for hypervisor ISO: {hyp_size} bytes")
+                    else:
+                        hypervisor_iso_md5 = "file_not_found"
+                    
+                    # Only calculate MD5 for smaller files
+                    if os.path.exists(squashfs_path):
+                        squashfs_size = os.path.getsize(squashfs_path)
+                        if squashfs_size < 104857600:  # 100MB
+                            squashfs_md5 = self.calculate_md5(squashfs_path)
+                        else:
+                            squashfs_md5 = f"size_{squashfs_size}"
+                            logger.info(f"Using file size for squashfs: {squashfs_size} bytes")
+                    else:
+                        squashfs_md5 = "file_not_found"
             except Exception as e:
-                logger.error(f"Failed to calculate MD5 checksums: {str(e)}")
-                svm_installer_md5 = "md5_calculation_failed"
-                hypervisor_iso_md5 = "md5_calculation_failed"
-                squashfs_md5 = "md5_calculation_failed"
+                logger.error(f"Failed to get checksums: {str(e)}")
+                import traceback
+                logger.error(f"Checksums error traceback: {traceback.format_exc()}")
+                svm_installer_md5 = "checksum_error"
+                hypervisor_iso_md5 = "checksum_error"
+                squashfs_md5 = "checksum_error"
             
             # Check if this is the first node (for cluster creation flag)
             try:

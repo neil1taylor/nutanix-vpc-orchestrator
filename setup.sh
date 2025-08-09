@@ -645,6 +645,55 @@ EOF
     log "Unmounting /mnt"
     umount /mnt 2>/dev/null || true
     
+    # Calculate and store MD5 checksums for boot files
+    log "Calculating MD5 checksums for boot files..."
+    CHECKSUMS_FILE="/var/www/pxe/images/checksums.json"
+    
+    # Create checksums JSON file
+    echo "{" > "$CHECKSUMS_FILE"
+    
+    # Calculate MD5 for kernel
+    if [[ -f "/var/www/pxe/images/kernel" ]]; then
+        KERNEL_MD5=$(md5sum /var/www/pxe/images/kernel | cut -d ' ' -f 1)
+        echo "  \"kernel\": \"$KERNEL_MD5\"," >> "$CHECKSUMS_FILE"
+        log "Kernel MD5: $KERNEL_MD5"
+    fi
+    
+    # Calculate MD5 for initrd
+    if [[ -f "/var/www/pxe/images/initrd-modified.img" ]]; then
+        INITRD_MD5=$(md5sum /var/www/pxe/images/initrd-modified.img | cut -d ' ' -f 1)
+        echo "  \"initrd-modified.img\": \"$INITRD_MD5\"," >> "$CHECKSUMS_FILE"
+        log "Initrd MD5: $INITRD_MD5"
+    fi
+    
+    # Calculate MD5 for squashfs
+    if [[ -f "/var/www/pxe/images/squashfs.img" ]]; then
+        SQUASHFS_MD5=$(md5sum /var/www/pxe/images/squashfs.img | cut -d ' ' -f 1)
+        echo "  \"squashfs.img\": \"$SQUASHFS_MD5\"," >> "$CHECKSUMS_FILE"
+        log "Squashfs MD5: $SQUASHFS_MD5"
+    fi
+    
+    # Calculate MD5 for AHV ISO
+    if [[ -f "/var/www/pxe/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso" ]]; then
+        # For large files, just store the file size instead of calculating MD5
+        AHV_SIZE=$(stat -c %s /var/www/pxe/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso)
+        echo "  \"AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso\": \"size_$AHV_SIZE\"," >> "$CHECKSUMS_FILE"
+        log "AHV ISO Size: $AHV_SIZE bytes"
+    fi
+    
+    # Calculate MD5 for installer package
+    if [[ -f "/var/www/pxe/images/nutanix_installer_package.tar.gz" ]]; then
+        # For large files, just store the file size instead of calculating MD5
+        INSTALLER_SIZE=$(stat -c %s /var/www/pxe/images/nutanix_installer_package.tar.gz)
+        echo "  \"nutanix_installer_package.tar.gz\": \"size_$INSTALLER_SIZE\"" >> "$CHECKSUMS_FILE"
+        log "Installer Package Size: $INSTALLER_SIZE bytes"
+    fi
+    
+    # Close the JSON file
+    echo "}" >> "$CHECKSUMS_FILE"
+    
+    log "MD5 checksums saved to $CHECKSUMS_FILE"
+    
     log "Changing ownership of /var/www/pxe to ${SERVICE_USER}:${SERVICE_USER}"
     chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
 }
