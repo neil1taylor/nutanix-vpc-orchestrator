@@ -471,6 +471,13 @@ setup_boot_files() {
     # Extract boot files
     INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
     log "Making directories /mnt and ${INITRD_TMP_DIR}"
+    
+    # Clean up existing directory to avoid cpio conflicts
+    if [ -d "$INITRD_TMP_DIR" ]; then
+        log "Cleaning up existing extraction directory"
+        rm -rf "$INITRD_TMP_DIR"
+    fi
+    
     mkdir -p "$INITRD_TMP_DIR"
     mkdir -p /mnt
     
@@ -485,7 +492,16 @@ setup_boot_files() {
 
     # Extract initrd contents
     log "Extracting the contents of initrd to ${INITRD_TMP_DIR}"
-    gunzip -c /mnt/boot/initrd | cpio -idmv
+    gunzip -c /mnt/boot/initrd | cpio -idm
+    
+    # Check if livecd.sh exists in the extracted files
+    if [ ! -f "livecd.sh" ]; then
+        log "Error: livecd.sh not found in extracted initrd"
+        ls -la
+        return 1
+    else
+        log "Found livecd.sh in extracted initrd"
+    fi
 
     # Modify the find_squashfs_in_iso_ce function in the existing livecd.sh file
     log "Modifying the 'find_squashfs_in_iso_ce' function in the existing 'livecd.sh' file"
