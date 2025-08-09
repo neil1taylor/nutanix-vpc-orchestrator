@@ -488,21 +488,21 @@ setup_boot_files() {
     gunzip -c /mnt/boot/initrd | cpio -idmv
 
     # Modify the find_squashfs_in_iso_ce function in the existing livecd.sh file
-    log "Modifing the 'find_squashfs_in_iso_ce' function in the existing 'livecd.sh' file"
+    log "Modifying the 'find_squashfs_in_iso_ce' function in the existing 'livecd.sh' file"
     if [ -f livecd.sh ]; then
         # Create backup of original file
         cp livecd.sh livecd.sh.orig
         
         # Use sed to replace the function
         # First, find the start and end of the existing function
-        START_LINE=$(grep -n "^find_squashfs_in_iso_ce" livecd.sh | cut -d: -f1)
+        START_LINE=$(grep -n "find_squashfs_in_iso_ce[[:space:]]*(" livecd.sh | cut -d: -f1)
         if [ -z "$START_LINE" ]; then
             log "Error: Could not find find_squashfs_in_iso_ce function in livecd.sh"
             return 1
         fi
         
         # Find the end of the function (next function or EOF)
-        END_LINE=$(tail -n +$((START_LINE+1)) livecd.sh | grep -n "^[a-zA-Z0-9_]\+ ()" | head -1 | cut -d: -f1)
+        END_LINE=$(tail -n +$((START_LINE+1)) livecd.sh | grep -n "[a-zA-Z0-9_][a-zA-Z0-9_]*[[:space:]]*(" | head -1 | cut -d: -f1)
         if [ -z "$END_LINE" ]; then
             # If no next function, use end of file
             END_LINE=$(wc -l livecd.sh | awk '{print $1}')
@@ -511,31 +511,46 @@ setup_boot_files() {
             END_LINE=$((START_LINE + END_LINE - 1))
         fi
         
-        # Replace the function with our modified version
-        sed -i "${START_LINE},${END_LINE}c\\
-find_squashfs_in_iso_ce ()\\
-{\\
-  # First try to download squashfs.img directly via HTTP\\
-  if [ -n \"\$LIVEFS_URL\" ]; then\\
-    echo \"Attempting to download squashfs.img from \$LIVEFS_URL\"\\
-    wget \"\$LIVEFS_URL\" -t3 -T60 -O /root/squashfs.img\\
-    if [ \$? -eq 0 -a -f /root/squashfs.img ]; then\\
-      echo \"Successfully downloaded squashfs.img from HTTP\"\\
-      # Verify MD5 if needed\\
-      md5sum /root/squashfs.img | grep \$IMG_MD5SUM\\
-      if [ \$? -eq 0 ]; then\\
-        return 0\\
-      else\\
-        echo \"MD5 checksum mismatch, trying alternative methods\"\\
-        rm -f /root/squashfs.img\\
-      fi\\
-    else\\
-      echo \"HTTP download failed, trying to find Phoenix ISO device\"\\
-    fi\\
-  fi\\
-}" livecd.sh
+        log "Found function from line $START_LINE to $END_LINE"
         
-        log "Modified 'find_squashfs_in_iso_ce' function in 'livecd.sh'"
+        # Create a temporary file with the new function
+        cat > /tmp/new_function.sh << 'EOF'
+find_squashfs_in_iso_ce ()
+{
+  # This function has been replaced to enable usage with IBM Cloud VPC Bare Metal Servers
+  # Download squashfs.img directly via HTTP
+  if [ -n "$LIVEFS_URL" ]; then
+    echo "Attempting to download squashfs.img from $LIVEFS_URL"
+    wget "$LIVEFS_URL" -t3 -T60 -O /root/squashfs.img
+    if [ $? -eq 0 -a -f /root/squashfs.img ]; then
+      echo "Successfully downloaded squashfs.img from HTTP"
+      # Verify MD5 if needed
+      md5sum /root/squashfs.img | grep $IMG_MD5SUM
+      if [ $? -eq 0 ]; then
+        return 0
+      else
+        echo "MD5 checksum mismatch, trying alternative methods"
+        rm -f /root/squashfs.img
+      fi
+    else
+      echo "HTTP download failed, trying to find Phoenix ISO device"
+    fi
+  fi
+}
+EOF
+
+        # Replace the function with our modified version
+        sed -i "${START_LINE},${END_LINE}d" livecd.sh  # Delete the old function
+        sed -i "${START_LINE}r /tmp/new_function.sh" livecd.sh  # Insert the new function
+        rm -f /tmp/new_function.sh  # Clean up
+        
+        # Verify the function was replaced successfully
+        if grep -q "This function has been replaced to enable usage with IBM Cloud VPC Bare Metal Servers" livecd.sh; then
+            log "Successfully modified 'find_squashfs_in_iso_ce' function in 'livecd.sh'"
+        else
+            log "Error: Function replacement verification failed"
+            return 1
+        fi
     else
         log "Error: livecd.sh not found in extracted initrd"
         return 1
