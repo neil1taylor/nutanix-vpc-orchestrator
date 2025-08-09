@@ -470,7 +470,7 @@ setup_boot_files() {
     
     # Extract boot files
     INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
-    log " Making directories /mnt and ${INITRD_TMP_DIR}"
+    log "Making directories /mnt and ${INITRD_TMP_DIR}"
     mkdir -p "$INITRD_TMP_DIR"
     mkdir -p /mnt
     
@@ -556,18 +556,18 @@ EOF
         return 1
     fi
 
-        # Repack the initrd
-        log "Repacking the initrd with the modified livecd.sh and saving to /var/www/pxe/images/initrd-modified.img"
-        cd "$INITRD_TMP_DIR"
-        find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified.img
-        cd /tmp
+    # Repack the initrd
+    log "Repacking the initrd with the modified livecd.sh and saving to /var/www/pxe/images/initrd-modified.img"
+    cd "$INITRD_TMP_DIR"
+    find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified.img
+    cd /tmp
 
-        # Clean up temporary directory
-        #log "Clean up temporary directory by removing ${INITRD_TMP_DIR}"
-        #rm -rf "$INITRD_TMP_DIR"
+    # Clean up temporary directory
+    #log "Clean up temporary directory by removing ${INITRD_TMP_DIR}"
+    #rm -rf "$INITRD_TMP_DIR"
 
-        # Copy files
-        log "Copying the static files to /var/www/pxe/images only if they don't exist"
+    # Copy files
+    log "Copying the static files to /var/www/pxe/images only if they don't exist"
         if [[ ! -f "/var/www/pxe/images/kernel" ]]; then
             log "Copying the file kernel to /var/www/pxe/images..."
             cp /mnt/boot/kernel /var/www/pxe/images
@@ -593,10 +593,10 @@ EOF
             log "Skipping file copy, AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso is already in /var/www/pxe/images "
         fi
 
-        # Copy split installer parts
-        if [[ ! -f "/var/www/pxe/images/nutanix_installer_package.tar.gz" ]]; then
-            log "Copying file nutanix_installer_package.tar.gz to /var/www/pxe/images..."
-            cp /mnt/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
+    # Copy split installer parts
+    if [[ ! -f "/var/www/pxe/images/nutanix_installer_package.tar.gz" ]]; then
+        log "Copying file nutanix_installer_package.tar.gz to /var/www/pxe/images..."
+        cp /mnt/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
 
             # Reconstruct complete installer
             cd /var/www/pxe/images
