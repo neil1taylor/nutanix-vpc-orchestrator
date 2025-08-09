@@ -575,7 +575,7 @@ EOF
 
         # Copy split installer parts
         log "Copying file nutanix_installer_package.tar.gz to /var/www/pxe/images"
-        cp /mnt/nutanix/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
+        cp /mnt/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
 
         # Reconstruct complete installer
         cd /var/www/pxe/images
