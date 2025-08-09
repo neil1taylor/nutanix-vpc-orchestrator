@@ -17,6 +17,7 @@ PROJECT_DIR="/opt/nutanix-pxe"
 rm -rf "$PROJECT_DIR"
 git clone --branch "$GITHUB_BRANCH" "$GITHUB_REPO" "$PROJECT_DIR"
 cd "$PROJECT_DIR"
+umount /mnt
 chmod +x setup.sh
 bash setup.sh
 bash scripts/reset-database.sh --clear-data --yes # Will reset the database

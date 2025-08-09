@@ -464,14 +464,18 @@ setup_boot_files() {
             log "Warning: Could not download Nutanix ISO"
             exit 0
         }
+    else
+        log "Nutanix CE ISO already downloaded to /tmp"
     fi
     
     # Extract boot files
     INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
+    log " Making directories /mnt and ${INITRD_TMP_DIR}"
     mkdir -p "$INITRD_TMP_DIR"
     mkdir -p /mnt
     
     # Mount ISO first
+    log "Mounting the nutanix-ce.iso to /mnt..."
     mount -o loop /tmp/nutanix-ce.iso /mnt || {
         log "Warning: Could not mount ISO"
         return 0
@@ -480,9 +484,11 @@ setup_boot_files() {
     cd "$INITRD_TMP_DIR"
 
     # Extract initrd contents
+    log "Extracting the contentes of initrd to /mnt/boot/initrd"
     gunzip -c /mnt/boot/initrd | cpio -idmv
 
     # Modify the find_squashfs_in_iso_ce function in the existing livecd.sh file
+    log "Modifing the 'find_squashfs_in_iso_ce' function in the existing 'livecd.sh' file"
     if [ -f livecd.sh ]; then
         # Create backup of original file
         cp livecd.sh livecd.sh.orig
@@ -529,29 +535,31 @@ find_squashfs_in_iso_ce ()\\
   fi\\
 }" livecd.sh
         
-        log "Modified find_squashfs_in_iso_ce function in livecd.sh"
+        log "Modified 'find_squashfs_in_iso_ce' function in 'livecd.sh'"
     else
         log "Error: livecd.sh not found in extracted initrd"
         return 1
     fi
 
         # Repack the initrd
+        log "Repacking the initrd with the modified livecd.sh and saving to /var/www/pxe/images/initrd-modified.img"
         cd "$INITRD_TMP_DIR"
         find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified.img
 
         # Clean up temporary directory
+        log "Clean up temporary directory by removing ${$INITRD_TMP_DIR}"
         cd /tmp
         rm -rf "$INITRD_TMP_DIR"
 
-        # Original logic for copying kernel and ISO
-        # ISO is already mounted above, no need to mount again
-        
-        cp /mnt/boot/kernel /var/www/pxe/images/kernel 2>/dev/null || true
+        # Copy files
+        log " Copying files; kernel, nutanix-ce.iso, squashfs.img and AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso to /var/www/pxe/images"
+        cp /mnt/boot/kernel /var/www/pxe/images
         cp /tmp/nutanix-ce.iso /var/www/pxe/images
         cp /mnt/nutanix/squashfs.img /var/www/pxe/images
         cp /mnt/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso  /var/www/pxe/images
 
         # Copy split installer parts
+        log "Copying file nutanix_installer_package.tar.gz to /var/www/pxe/images"
         cp /mnt/nutanix/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
 
         # Reconstruct complete installer
@@ -560,8 +568,10 @@ find_squashfs_in_iso_ce ()\\
         rm nutanix_installer_package.tar.p*
         cd /tmp
 
+        log "Unmounting /mnt"
         umount /mnt 2>/dev/null || true
     
+    log "Chaning ownership of /var/www/pxe to ${SERVICE_USER}:${SERVICE_USER}"
     chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
 }
 
