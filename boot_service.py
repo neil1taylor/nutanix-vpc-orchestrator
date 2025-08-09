@@ -298,144 +298,178 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
     
     def get_server_config(self, server_ip):
         """Get detailed server configuration for CE installer automation (Arizona configuration)"""
-        node = self.db.get_node_by_management_ip(server_ip)
+        logger.info(f"Attempting to get server config for IP: {server_ip}")
         
-        if not node:
-            logger.error(f"Server config requested for unknown IP: {server_ip}")
-            return None
-        
-        # Log configuration request
-        self.db.log_deployment_event(
-            node['id'],
-            'config_requested',
-            'success',
-            f'Configuration delivered to {server_ip}'
-        )
-        
-        # Start server status monitoring if not already running
         try:
-            from node_provisioner import NodeProvisioner
-            node_provisioner = NodeProvisioner()
-            logger.info(f"Starting server status monitoring for node {node['id']} from config request")
-            node_provisioner.start_deployment_monitoring(node['id'])
-        except Exception as e:
-            logger.error(f"Failed to start monitoring from config request: {str(e)}")
-            # Log full traceback for debugging
-            import traceback
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-        
-        # Get network information from VPC SDK
-        try:
-            # Get the management subnet ID from the node configuration
-            management_subnet_id = Config.MANAGEMENT_SUBNET_ID
+            # Get node information from database
+            node = self.db.get_node_by_management_ip(server_ip)
             
-            # Get network information from VPC SDK
-            from ibm_cloud_client import IBMCloudClient
-            ibm_cloud = IBMCloudClient()
+            if not node:
+                logger.error(f"Server config requested for unknown IP: {server_ip}")
+                return None
             
-            # Get gateway address
-            gateway = ibm_cloud.get_subnet_gateway(management_subnet_id)
-            logger.info(f"Retrieved gateway for subnet {management_subnet_id}: {gateway}")
+            # Log configuration request
+            try:
+                self.db.log_deployment_event(
+                    node['id'],
+                    'config_requested',
+                    'success',
+                    f'Configuration delivered to {server_ip}'
+                )
+            except Exception as e:
+                logger.error(f"Failed to log deployment event: {str(e)}")
+                # Continue processing even if logging fails
             
-            # Get netmask
-            netmask = ibm_cloud.get_subnet_netmask(management_subnet_id)
-            logger.info(f"Retrieved netmask for subnet {management_subnet_id}: {netmask}")
+            # Start server status monitoring if not already running
+            try:
+                from node_provisioner import NodeProvisioner
+                node_provisioner = NodeProvisioner()
+                logger.info(f"Starting server status monitoring for node {node['id']} from config request")
+                node_provisioner.start_deployment_monitoring(node['id'])
+            except Exception as e:
+                logger.error(f"Failed to start monitoring from config request: {str(e)}")
+                # Continue processing even if monitoring fails
             
-            # Get DNS servers
-            dns_servers = ibm_cloud.get_vpc_dns_servers(Config.VPC_ID)
-            # Join all DNS servers with comma, with consistent fallback
-            dns_server_list = ','.join(dns_servers) if dns_servers else '8.8.8.8,9.9.9.9'
-            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}, using list: {dns_server_list}")
-        except Exception as e:
-            logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
-            # Use default values if VPC SDK fails
+            # Default network values in case VPC SDK fails
             gateway = '10.240.0.1'
             netmask = '255.255.255.0'
             dns_server_list = '8.8.8.8,9.9.9.9'
-        
-        # Get storage configuration from server profiles
-        from server_profiles import ServerProfileConfig
-        server_profiles = ServerProfileConfig()
-        storage_config = server_profiles.get_storage_config(node.get('server_profile', 'bx2d-metal-48x192'))
-        
-        # Define URLs and file paths for installer packages
-        base_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/images"
-        svm_installer_url = f"{base_url}/nutanix_installer_package.tar.gz"
-        hypervisor_iso_url = f"{base_url}/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
-        squashfs_url = f"{base_url}/squashfs.img"
-        
-        # Calculate MD5 checksums from the actual files
-        svm_installer_path = os.path.join(Config.BOOT_IMAGES_PATH, "nutanix_installer_package.tar.gz")
-        hypervisor_iso_path = os.path.join(Config.BOOT_IMAGES_PATH, "AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso")
-        squashfs_path = os.path.join(Config.BOOT_IMAGES_PATH, "squashfs.img")
-        
-        svm_installer_md5 = self.calculate_md5(svm_installer_path)
-        hypervisor_iso_md5 = self.calculate_md5(hypervisor_iso_path)
-        squashfs_md5 = self.calculate_md5(squashfs_path)
-        
-        logger.info(f"MD5 checksums calculated: SVM={svm_installer_md5}, HYP={hypervisor_iso_md5}, FS={squashfs_md5}")
-        
-        # Check if this is the first node (for cluster creation flag)
-        is_first_node = self.db.is_first_node()
-        
-        # Format response according to Arizona configuration format
-        response = {
-            # Basic node information
-            'hyp_type': 'kvm',  # AHV is based on KVM
-            'node_position': 'A',  # All nodes use position A as requested
             
-            # URLs for installer packages with MD5 checksums
-            'svm_installer_url': {
-                'url': svm_installer_url,
-                'md5sum': svm_installer_md5
-            },
-            'hypervisor_iso_url': {
-                'url': hypervisor_iso_url,
-                'md5sum': hypervisor_iso_md5
-            },
-            'squashfs_url': {
-                'url': squashfs_url,
-                'md5sum': squashfs_md5
-            },
+            # Get network information from VPC SDK
+            try:
+                # Get the management subnet ID from the node configuration
+                management_subnet_id = Config.MANAGEMENT_SUBNET_ID
+                
+                # Get network information from VPC SDK
+                from ibm_cloud_client import IBMCloudClient
+                ibm_cloud = IBMCloudClient()
+                
+                # Get gateway address
+                vpc_gateway = ibm_cloud.get_subnet_gateway(management_subnet_id)
+                if vpc_gateway:
+                    gateway = vpc_gateway
+                    logger.info(f"Retrieved gateway for subnet {management_subnet_id}: {gateway}")
+                
+                # Get netmask
+                vpc_netmask = ibm_cloud.get_subnet_netmask(management_subnet_id)
+                if vpc_netmask:
+                    netmask = vpc_netmask
+                    logger.info(f"Retrieved netmask for subnet {management_subnet_id}: {netmask}")
+                
+                # Get DNS servers
+                dns_servers = ibm_cloud.get_vpc_dns_servers(Config.VPC_ID)
+                if dns_servers:
+                    dns_server_list = ','.join(dns_servers)
+                    logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}")
+            except Exception as e:
+                logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
+                logger.warning("Using default network values")
             
-            # Node configuration array (single node in our case)
-            'nodes': [
-                {
-                    'node_position': 'A',  # All nodes use position A
-                    'hyp_ip': str(node['management_ip']),
-                    'hyp_netmask': netmask,
-                    'hyp_gateway': gateway,
-                    'svm_ip': node['nutanix_config']['cvm_ip'],
-                    'svm_netmask': netmask,
-                    'svm_gateway': gateway,
-                    'disk_layout': {
-                        'boot_disk': storage_config['boot_device'],
-                        'cvm_disk': storage_config['boot_device'],  # Use same disk for boot and CVM as in example
-                        'storage_pool_disks': storage_config['data_drives']
+            # Get storage configuration from server profiles
+            try:
+                from server_profiles import ServerProfileConfig
+                server_profiles = ServerProfileConfig()
+                storage_config = server_profiles.get_storage_config(node.get('server_profile', 'bx2d-metal-48x192'))
+            except Exception as e:
+                logger.error(f"Failed to get storage configuration: {str(e)}")
+                return None
+            
+            # Define URLs for installer packages
+            base_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/images"
+            svm_installer_url = f"{base_url}/nutanix_installer_package.tar.gz"
+            hypervisor_iso_url = f"{base_url}/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
+            squashfs_url = f"{base_url}/squashfs.img"
+            
+            # Calculate MD5 checksums with error handling
+            try:
+                svm_installer_path = os.path.join(Config.BOOT_IMAGES_PATH, "nutanix_installer_package.tar.gz")
+                hypervisor_iso_path = os.path.join(Config.BOOT_IMAGES_PATH, "AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso")
+                squashfs_path = os.path.join(Config.BOOT_IMAGES_PATH, "squashfs.img")
+                
+                svm_installer_md5 = self.calculate_md5(svm_installer_path)
+                hypervisor_iso_md5 = self.calculate_md5(hypervisor_iso_path)
+                squashfs_md5 = self.calculate_md5(squashfs_path)
+                
+                logger.info(f"MD5 checksums calculated: SVM={svm_installer_md5}, HYP={hypervisor_iso_md5}, FS={squashfs_md5}")
+            except Exception as e:
+                logger.error(f"Failed to calculate MD5 checksums: {str(e)}")
+                svm_installer_md5 = "md5_calculation_failed"
+                hypervisor_iso_md5 = "md5_calculation_failed"
+                squashfs_md5 = "md5_calculation_failed"
+            
+            # Check if this is the first node (for cluster creation flag)
+            try:
+                is_first_node = self.db.is_first_node()
+            except Exception as e:
+                logger.warning(f"Failed to determine if this is the first node: {str(e)}")
+                is_first_node = True  # Default to creating a cluster
+            
+            # Format response according to Arizona configuration format
+            response = {
+                # Basic node information
+                'hyp_type': 'kvm',  # AHV is based on KVM
+                'node_position': 'A',  # All nodes use position A as requested
+                
+                # URLs for installer packages with MD5 checksums
+                'svm_installer_url': {
+                    'url': svm_installer_url,
+                    'md5sum': svm_installer_md5
+                },
+                'hypervisor_iso_url': {
+                    'url': hypervisor_iso_url,
+                    'md5sum': hypervisor_iso_md5
+                },
+                'squashfs_url': {
+                    'url': squashfs_url,
+                    'md5sum': squashfs_md5
+                },
+                
+                # Node configuration array (single node in our case)
+                'nodes': [
+                    {
+                        'node_position': 'A',  # All nodes use position A
+                        'hyp_ip': str(node['management_ip']),
+                        'hyp_netmask': netmask,
+                        'hyp_gateway': gateway,
+                        'svm_ip': node['nutanix_config']['cvm_ip'],
+                        'svm_netmask': netmask,
+                        'svm_gateway': gateway,
+                        'disk_layout': {
+                            'boot_disk': storage_config['boot_device'],
+                            'cvm_disk': storage_config['boot_device'],  # Use same disk for boot and CVM as in example
+                            'storage_pool_disks': storage_config['data_drives']
+                        }
                     }
-                }
-            ],
+                ],
+                
+                # Network configuration
+                'dns_servers': dns_server_list,
+                'ntp_servers': 'time.adn.networklayer.com',
+                
+                # Installation flags
+                'skip_hypervisor': False,
+                'install_cvm': True,
+                
+                # CE-specific flags
+                'create_1node_cluster': is_first_node,  # Only create cluster if this is the first node
+                'ce_eula_accepted': True,
+                'ce_eula_viewed': True,
+                
+                # Additional metadata
+                'cluster_name': 'ce-cluster',
+                'node_name': node['node_name']
+            }
             
-            # Network configuration
-            'dns_servers': dns_server_list,
-            'ntp_servers': 'time.adn.networklayer.com',
+            logger.info(f"Generated Arizona configuration for {node['node_name']}")
+            return response
             
-            # Installation flags
-            'skip_hypervisor': False,
-            'install_cvm': True,
-            
-            # CE-specific flags
-            'create_1node_cluster': is_first_node,  # Only create cluster if this is the first node
-            'ce_eula_accepted': True,
-            'ce_eula_viewed': True,
-            
-            # Additional metadata
-            'cluster_name': 'ce-cluster',
-            'node_name': node['node_name']
-        }
-        
-        logger.info(f"Generated Arizona configuration for {node['node_name']}")
-        return response
+        except Exception as e:
+            logger.error(f"Failed to generate server configuration for {server_ip}: {str(e)}")
+            # Log full traceback for debugging
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return None
+            return None
     
     def calculate_md5(self, file_path):
         """Calculate MD5 checksum of a file"""

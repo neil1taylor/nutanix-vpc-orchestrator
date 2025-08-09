@@ -199,11 +199,14 @@ def api_get_server_config(server_ip):
         if config:
             # Log successful config retrieval with some details
             logger.info(f"Configuration for {server_ip} sent to {client_ip}")
-            logger.info(f"Node ID: {config.get('node_config', {}).get('node_id', 'unknown')}")
             
-            # Log storage configuration for debugging
-            storage_config = config.get('storage_config', {})
-            logger.info(f"Boot drives: {storage_config.get('boot_drives', [])} | Data drives: {storage_config.get('data_drives', [])}")
+            # Log node name if available
+            node_name = config.get('node_name', 'unknown')
+            logger.info(f"Node name: {node_name}")
+            
+            # Log DNS servers for debugging
+            dns_servers = config.get('dns_servers', 'unknown')
+            logger.info(f"DNS servers: {dns_servers}")
             
             return jsonify(config)
         else:

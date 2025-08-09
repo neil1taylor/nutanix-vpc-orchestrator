@@ -40,12 +40,20 @@ cat /var/log/nutanix-pxe/pxe-server.log
 
 1. Monitor the install in the console
 
-## iPXE URL for bare metal server reboot
+## iPXE URL for bare metal server
 
 `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10`
 `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=${net0/ip}`
 
-`http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10`
+to test the response:
+
+`curl http://localhost:8080/boot/config?mgmt_ip=10.240.0.10`
+`curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10`
+
+## Arizona config for server
+
+`curl http://localhost/boot/server/10.240.0.10`
+`curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10`
 
 
 ## To boot from the iso (livecd files not found)
