@@ -598,18 +598,18 @@ EOF
         log "Copying file nutanix_installer_package.tar.gz to /var/www/pxe/images..."
         cp /mnt/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
 
-            # Reconstruct complete installer
-            cd /var/www/pxe/images
-            cat nutanix_installer_package.tar.p* > nutanix_installer_package.tar.gz
-            rm nutanix_installer_package.tar.p*
-        else
-            log "Skipping file copy, nutanix_installer_package.tar.gz is already in /var/www/pxe/images"
-        fi
+        # Reconstruct complete installer
+        cd /var/www/pxe/images
+        cat nutanix_installer_package.tar.p* > nutanix_installer_package.tar.gz
+        rm nutanix_installer_package.tar.p*
+    else
+        log "Skipping file copy, nutanix_installer_package.tar.gz is already in /var/www/pxe/images"
+    fi
 
-        cd /tmp
+    cd /tmp
 
-        log "Unmounting /mnt"
-        umount /mnt 2>/dev/null || true
+    log "Unmounting /mnt"
+    umount /mnt 2>/dev/null || true
     
     log "Changing ownership of /var/www/pxe to ${SERVICE_USER}:${SERVICE_USER}"
     chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
