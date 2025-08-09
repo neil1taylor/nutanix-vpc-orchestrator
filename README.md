@@ -80,48 +80,6 @@ curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/nodes/1/history
 curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/deployment/summary
 ```
 
-## Post-Deployment Setup
-
-### Upload Nutanix Boot Images
-
-Replace the placeholder boot images with actual Nutanix images:
-
-```bash
-# SSH to PXE server
-ssh nutanix@nutanix-pxe-config.nutanix-ce-poc.cloud
-
-# Upload actual Nutanix images
-sudo cp nutanix-phoenix-kernel /var/www/pxe/images/vmlinuz-phoenix
-sudo cp nutanix-phoenix-initrd.img /var/www/pxe/images/initrd-phoenix.img
-sudo cp nutanix-ce-installer.iso /var/www/pxe/images/
-
-# Set permissions
-sudo chown -R nutanix:nutanix /var/www/pxe/images/
-```
-
-### Update Configuration
-
-```bash
-# Edit environment file
-sudo nano /opt/nutanix-pxe/.env
-
-# Restart service to apply changes
-sudo systemctl restart nutanix-pxe
-```
-
-### Update Application from GitHub
-
-```bash
-# Use the built-in update script
-/opt/nutanix-pxe/update.sh
-
-# Or manually update
-cd /opt/nutanix-pxe
-sudo -u nutanix git pull origin main
-sudo -u nutanix ./venv/bin/pip install -r requirements.txt
-sudo systemctl restart nutanix-pxe
-```
-
 ## Operations and Maintenance
 
 ### Service Management

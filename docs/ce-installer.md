@@ -46,7 +46,7 @@ cat /mnt/EFI/BOOT/grub.cfg
 ```bash
 # Extract kernel and initrd for PXE booting
 cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-phoenix
-cp /mnt/boot/initrd /var/www/pxe/images/initrd-phoenix.img
+cp /mnt/boot/initrd /var/www/pxe/images/initrd-modified.img
 ```
 
 ## Step 3: Analyze the Squashfs Image
@@ -193,7 +193,7 @@ kernel http://${next-server}:8080/images/vmlinuz-phoenix
   FOUND_IP=${next-server} 
   AZ_CONF_URL=http://${next-server}:8080/configs/${net0/mac}.json
 
-initrd http://${next-server}:8080/images/initrd-phoenix.img
+initrd http://${next-server}:8080/images/initrd-modified.img
 boot
 ```
 

@@ -181,7 +181,7 @@ def api_handle_boot_config():
 
 @app.route('/boot/server/<server_ip>', methods=['GET'])
 def api_get_server_config(server_ip):
-    """Get detailed server configuration for Foundation"""
+    """Get detailed server configuration for Arizona"""
     try:
         # Get client IP for logging
         client_ip = request.remote_addr
@@ -230,7 +230,7 @@ def api_serve_boot_image(filename):
         # Log the request with high visibility
         if filename == 'vmlinuz-phoenix':
             logger.info(f"Client {client_ip} is downloading kernel file")
-        elif filename == 'initrd-phoenix.img':
+        elif filename == 'initrd-modified.img':
             logger.info(f"Client {client_ip} is downloading initrd file")
         else:
             logger.info(f"Client {client_ip} is downloading {filename}")
@@ -241,7 +241,7 @@ def api_serve_boot_image(filename):
         # Security check - only allow approved files
         allowed_files = [
             'vmlinuz-phoenix',
-            'initrd-phoenix.img',
+            'initrd-modified.img',
             'nutanix-ce-installer.iso'
         ]
         

@@ -217,7 +217,7 @@ test_static_files() {
     local missing_files=()
     local required_files=(
         "/var/www/pxe/images/vmlinuz-phoenix"
-        "/var/www/pxe/images/initrd-phoenix.img"
+        "/var/www/pxe/images/initrd-modified.img"
         "/var/www/pxe/images/nutanix-ce-installer.iso"
         "/var/www/pxe/images/squashfs.img"
         "/var/www/pxe/images/nutanix_installer_package.tar.gz"
@@ -271,7 +271,7 @@ setup_system() {
     apt-get install -y \
         python3 python3-pip python3-venv \
         postgresql postgresql-contrib \
-        nginx git curl wget unzip \
+        nginx git curl wget unzip gunzip \
         bc netstat-nat openssl sshpass
 }
 
@@ -466,8 +466,7 @@ setup_boot_files() {
         }
     fi
     
-    # Extract boot files (always run)
-    # --- Start of modified logic for livecd.sh ---
+    # Extract boot files
     INITRD_TMP_DIR="/tmp/nutanix-initrd-extracted"
     mkdir -p "$INITRD_TMP_DIR"
     cd "$INITRD_TMP_DIR"
@@ -475,70 +474,94 @@ setup_boot_files() {
     # Extract initrd contents
     gunzip -c /mnt/boot/initrd | cpio -idmv
 
-    # Define the modified find_squashfs_in_iso_ce function
-    # Using the URL from the user's iPXE script. IMG_MD5SUM is commented out.
-    cat > livecd.sh << 'EOF'
-find_squashfs_in_iso_ce ()
-{
-  # First try to download squashfs.img directly via HTTP
-  if [ -n "$LIVEFS_URL" ]; then
-    echo "Attempting to download squashfs.img from $LIVEFS_URL"
-    wget "$LIVEFS_URL" -t3 -T60 -O /root/squashfs.img
-    if [ $? -eq 0 -a -f /root/squashfs.img ]; then
-      echo "Successfully downloaded squashfs.img from HTTP"
-      # Verify MD5 if needed
-      # md5sum /root/squashfs.img | grep $IMG_MD5SUM
-      # if [ $? -eq 0 ]; then
-      #   return 0
-      # else
-      #   echo "MD5 checksum mismatch, trying alternative methods"
-      #   rm -f /root/squashfs.img
-      # fi
-      return 0 # Simplified for now, assuming download is enough
-    else
-      echo "HTTP download failed, trying to find Phoenix ISO device"
-    fi
-  fi
-
-  # Fall back to original method - look for PHOENIX labeled device
-  echo "Looking for device containing Phoenix ISO..."
-  for retry in `seq 1 15`; do
-    PHX_DEV=$(blkid | grep 'LABEL="PHOENIX"' | cut -d: -f1)
-    ret=$?
-    if [ $ret -eq 0 -a "$PHX_DEV" != "" ]; then
-      mount $PHX_DEV /mnt/iso
-      if [ $? -eq 0 ]; then
-        if [ -f /mnt/iso/squashfs.img ]; then
-          echo -e "\nCopying squashfs.img from Phoenix ISO on $PHX_DEV"
-          cp -rf /mnt/iso/squashfs.img /root/
-          return 0
-        else
-          umount /mnt/iso
+    # Modify the find_squashfs_in_iso_ce function in the existing livecd.sh file
+    if [ -f livecd.sh ]; then
+        # Create backup of original file
+        cp livecd.sh livecd.sh.orig
+        
+        # Use sed to replace the function
+        # First, find the start and end of the existing function
+        START_LINE=$(grep -n "^find_squashfs_in_iso_ce" livecd.sh | cut -d: -f1)
+        if [ -z "$START_LINE" ]; then
+            log "Error: Could not find find_squashfs_in_iso_ce function in livecd.sh"
+            return 1
         fi
-      fi
-    fi
-    echo -en "\r [$retry/15] Waiting for Phoenix ISO to be available ..."
-    sleep 2
-  done
+        
+        # Find the end of the function (next function or EOF)
+        END_LINE=$(tail -n +$((START_LINE+1)) livecd.sh | grep -n "^[a-zA-Z0-9_]\+ ()" | head -1 | cut -d: -f1)
+        if [ -z "$END_LINE" ]; then
+            # If no next function, use end of file
+            END_LINE=$(wc -l livecd.sh | awk '{print $1}')
+        else
+            # Adjust for the offset from tail command
+            END_LINE=$((START_LINE + END_LINE - 1))
+        fi
+        
+        # Replace the function with our modified version
+        sed -i "${START_LINE},${END_LINE}c\\
+find_squashfs_in_iso_ce ()\\
+{\\
+  # First try to download squashfs.img directly via HTTP\\
+  if [ -n \"\$LIVEFS_URL\" ]; then\\
+    echo \"Attempting to download squashfs.img from \$LIVEFS_URL\"\\
+    wget \"\$LIVEFS_URL\" -t3 -T60 -O /root/squashfs.img\\
+    if [ \$? -eq 0 -a -f /root/squashfs.img ]; then\\
+      echo \"Successfully downloaded squashfs.img from HTTP\"\\
+      # Verify MD5 if needed\\
+      md5sum /root/squashfs.img | grep \$IMG_MD5SUM\\
+      if [ \$? -eq 0 ]; then\\
+        return 0\\
+      else\\
+        echo \"MD5 checksum mismatch, trying alternative methods\"\\
+        rm -f /root/squashfs.img\\
+      fi\\
+    else\\
+      echo \"HTTP download failed, trying to find Phoenix ISO device\"\\
+    fi\\
+  fi\\
 
-  echo "Failed to find Phoenix ISO."
-  return 1
-}
-EOF
+  # Fall back to original method - look for PHOENIX labeled device\\
+  echo \"Looking for device containing Phoenix ISO...\"\\
+  for retry in \`seq 1 15\`; do\\
+    PHX_DEV=\$(blkid | grep 'LABEL=\"PHOENIX\"' | cut -d: -f1)\\
+    ret=\$?\\
+    if [ \$ret -eq 0 -a \"\$PHX_DEV\" != \"\" ]; then\\
+      mount \$PHX_DEV /mnt/iso\\
+      if [ \$? -eq 0 ]; then\\
+        if [ -f /mnt/iso/squashfs.img ]; then\\
+          echo -e \"\\nCopying squashfs.img from Phoenix ISO on \$PHX_DEV\"\\
+          cp -rf /mnt/iso/squashfs.img /root/\\
+          return 0\\
+        else\\
+          umount /mnt/iso\\
+        fi\\
+      fi\\
+    fi\\
+    echo -en \"\\r [\$retry/15] Waiting for Phoenix ISO to be available ...\"\\
+    sleep 2\\
+  done\\
+\\
+  echo \"Failed to find Phoenix ISO.\"\\
+  return 1\\
+}" livecd.sh
+        
+        log "Modified find_squashfs_in_iso_ce function in livecd.sh"
+    else
+        log "Error: livecd.sh not found in extracted initrd"
+        return 1
+    fi
 
         # Repack the initrd
         cd /mnt
-        find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-phoenix.img
+        find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified.img
 
         # Clean up temporary directory
         cd /tmp
         rm -rf "$INITRD_TMP_DIR"
-        # --- End of modified logic ---
 
         # Original logic for copying kernel and ISO
         mount -o loop nutanix-ce.iso /mnt || {
-            log "Warning: Could not mount ISO, creating placeholder files"
-            touch /var/www/pxe/images/{vmlinuz-phoenix,initrd-phoenix.img,nutanix-ce-installer.iso}
+            log "Warning: Could not mount ISO"
             return 0
         }
         

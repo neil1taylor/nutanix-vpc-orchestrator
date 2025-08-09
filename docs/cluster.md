@@ -4,7 +4,7 @@
    ```bash
    # In setup.sh
    cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-phoenix
-   cp /mnt/boot/initrd /var/www/pxe/images/initrd-phoenix.img
+   cp /mnt/boot/initrd /var/www/pxe/images/initrd-modified.img
    ```
 
 2. **iPXE Script Generation**: In `boot_service.py`:
@@ -25,7 +25,7 @@
    set base-url http://{self.pxe_server_ip}/pxe
    
    kernel ${{base-url}}/images/vmlinuz-phoenix console=tty0 console=ttyS0,115200
-   initrd ${{base-url}}/images/initrd-phoenix.img
+   initrd ${{base-url}}/images/initrd-modified.img
    
    imgargs vmlinuz-phoenix node_id={server_id} mgmt_ip={mgmt_ip}
    
@@ -101,7 +101,7 @@
    - Check firewall rules for HTTP/HTTPS traffic
 
 2. **Missing Files**: 
-   - Verify vmlinuz-phoenix and initrd-phoenix.img exist
+   - Verify vmlinuz-phoenix and initrd-modified.img exist
    - Check file permissions (should be readable by web server)
    - Validate file integrity with checksums
 

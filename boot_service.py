@@ -8,6 +8,9 @@ from server_profiles import ServerProfileConfig
 
 logger = logging.getLogger(__name__)
 
+import hashlib
+import os
+
 class BootService:
     def __init__(self):
         self.db = Database()
@@ -120,7 +123,7 @@ class BootService:
         return boot_script
     
     def generate_boot_script(self, node):
-        """Generate a generic iPXE boot script for node provisioning"""
+        """Generate an iPXE boot script for Nutanix CE automated installation"""
         # Log the node configuration for debugging
         logger.info(f"Generating boot script for node: {node['node_name']}")
         logger.info(f"Node configuration: Management IP: {node['management_ip']}, AHV IP: {node['nutanix_config']['ahv_ip']}, CVM IP: {node['nutanix_config']['cvm_ip']}")
@@ -171,11 +174,11 @@ class BootService:
                 'mac': ''
             }
         
-        # Create the iPXE script using CE installer automation
-        # kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_hyp_boot_disk=/dev/nvme0n1 ce_cvm_boot_disks=/dev/nvme1n1 ce_cvm_data_disks=/dev/nvme2n1,/dev/nvme3n1,/dev/nvme4n1 ce_eula_accepted=true ce_eula_viewed=true create_1node_cluster=true COMMUNITY_EDITION=1
-        # kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.ept=1 kvm.ignore_msrs=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true COMMUNITY_EDITION=1
-        # root=live:${{base-url}}/nutanix-ce-installer.iso rd.live.image quiet
-
+        # Define URLs for boot files
+        base_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/images"
+        squashfs_url = f"{base_url}/squashfs.img"
+        arizona_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']}"
+        
         template = f"""#!ipxe
 echo ===============================================
 echo Nutanix CE Automated Deployment
@@ -194,18 +197,19 @@ ntp time.adn.networklayer.com
 set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
 set pxe_server {Config.PXE_SERVER_DNS}
 
-# Boot CE installer with minimal parameters and point to full JSON config
+# Boot CE installer with parameters for HTTP-based installation
 # This implements the two-stage approach:
-# 1. Minimal kernel parameters for boot
+# 1. Minimal kernel parameters for boot with LIVEFS_URL for HTTP download
 # 2. Full JSON configuration retrieved via AZ_CONF_URL
 #
 # Kernel parameters optimized for NVMe-based bare metal server:
 # - intel_iommu=on, iommu=pt: Essential for device passthrough
 # - kvm-intel.ept=1: Improves virtualization performance
 # - kvm.ignore_msrs=1: Helps with VM compatibility
-kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.ept=1 kvm.ignore_msrs=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} AZ_CONF_URL=http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true COMMUNITY_EDITION=1
-root=live:${{base-url}}/nutanix-ce-installer.iso rd.live.image quiet
-initrd ${{base-url}}/initrd-phoenix.img
+# - LIVEFS_URL: Points to squashfs.img for HTTP download
+# - AZ_CONF_URL: Points to Arizona configuration for automation
+kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.ept=1 kvm.ignore_msrs=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true COMMUNITY_EDITION=1
+initrd ${{base-url}}/initrd-modified.img
 boot || goto error
 
 :error
@@ -213,7 +217,7 @@ echo Boot failed - dropping to shell
 shell
 """
         # Log the generated boot script for debugging
-        logger.info("Generated boot script with network information from VPC SDK")
+        logger.info("Generated iPXE boot script with HTTP-based squashfs download")
         return template
     
     def generate_error_boot_script(self, error_message):
@@ -292,7 +296,7 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
         return template
     
     def get_server_config(self, server_ip):
-        """Get detailed server configuration for CE installer automation"""
+        """Get detailed server configuration for CE installer automation (Arizona configuration)"""
         node = self.db.get_node_by_management_ip(server_ip)
         
         if not node:
@@ -347,59 +351,109 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
             netmask = '255.255.255.0'
             dns_server_list = '161.26.0.7,161.26.0.8'
         
-        # Format response according to CE installer requirements
-        # This is the full JSON configuration retrieved via AZ_CONF_URL
+        # Get storage configuration from server profiles
+        from server_profiles import ServerProfileConfig
+        server_profiles = ServerProfileConfig()
+        storage_config = server_profiles.get_storage_config(node.get('server_profile', 'bx2d-metal-48x192'))
+        
+        # Define URLs and file paths for installer packages
+        base_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/images"
+        svm_installer_url = f"{base_url}/nutanix_installer_package.tar.gz"
+        hypervisor_iso_url = f"{base_url}/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
+        squashfs_url = f"{base_url}/squashfs.img"
+        
+        # Calculate MD5 checksums from the actual files
+        svm_installer_path = os.path.join(Config.BOOT_IMAGES_PATH, "nutanix_installer_package.tar.gz")
+        hypervisor_iso_path = os.path.join(Config.BOOT_IMAGES_PATH, "AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso")
+        squashfs_path = os.path.join(Config.BOOT_IMAGES_PATH, "squashfs.img")
+        
+        svm_installer_md5 = self.calculate_md5(svm_installer_path)
+        hypervisor_iso_md5 = self.calculate_md5(hypervisor_iso_path)
+        squashfs_md5 = self.calculate_md5(squashfs_path)
+        
+        logger.info(f"MD5 checksums calculated: SVM={svm_installer_md5}, HYP={hypervisor_iso_md5}, FS={squashfs_md5}")
+        
+        # Check if this is the first node (for cluster creation flag)
+        is_first_node = self.db.is_first_node()
+        
+        # Format response according to Arizona configuration format
         response = {
             # Basic node information
-            'hyp_type': 'kvm',
-            'model': 'NX-3060-G7',
-            'node_position': 'A',
-            'block_id': f"BLOCK-{node['id']}",
-            'node_serial': f"SERIAL-{node['id']}",
-            'cluster_id': 1,
-            'node_name': node['node_name'],
-            'cluster_name': 'ce-cluster',
+            'hyp_type': 'kvm',  # AHV is based on KVM
+            'node_position': 'A',  # All nodes use position A as requested
             
-            # Installation types
-            'hyp_install_type': 'clean',
-            'svm_install_type': 'clean',
+            # URLs for installer packages with MD5 checksums
+            'svm_installer_url': {
+                'url': svm_installer_url,
+                'md5sum': svm_installer_md5
+            },
+            'hypervisor_iso_url': {
+                'url': hypervisor_iso_url,
+                'md5sum': hypervisor_iso_md5
+            },
+            'squashfs_url': {
+                'url': squashfs_url,
+                'md5sum': squashfs_md5
+            },
             
-            # NVMe disk configuration for our specific server
-            'ce_hyp_boot_disk': '/dev/nvme0n1',
-            'ce_cvm_boot_disks': ['/dev/nvme1n1'],
-            'ce_cvm_data_disks': ['/dev/nvme2n1', '/dev/nvme3n1', '/dev/nvme4n1'],
+            # Node configuration array (single node in our case)
+            'nodes': [
+                {
+                    'node_position': 'A',  # All nodes use position A
+                    'hyp_ip': str(node['management_ip']),
+                    'hyp_netmask': netmask,
+                    'hyp_gateway': gateway,
+                    'svm_ip': node['nutanix_config']['cvm_ip'],
+                    'svm_netmask': netmask,
+                    'svm_gateway': gateway,
+                    'disk_layout': {
+                        'boot_disk': storage_config['boot_device'],
+                        'cvm_disk': storage_config['boot_device'],  # Use same disk for boot and CVM as in example
+                        'storage_pool_disks': storage_config['data_drives']
+                    }
+                }
+            ],
             
             # Network configuration
-            'hypervisor_ip': str(node['management_ip']),
-            'host_ip': str(node['management_ip']),
-            'host_subnet_mask': netmask,
-            'default_gw': gateway,
+            'dns_servers': dns_server_list,
+            'ntp_servers': 'time.adn.networklayer.com',
             
-            'cvm_ip': node['nutanix_config']['cvm_ip'],
-            'svm_ip': node['nutanix_config']['cvm_ip'],
-            'svm_subnet_mask': netmask,
-            'svm_default_gw': gateway,
-            
-            'dns_ip': dns_server_list,
-            'per_node_ntp_servers': 'pool.ntp.org,time.google.com',
-            'hypervisor_nameserver': dns_server_list,
-            'cvm_dns_servers': dns_server_list,
-            
-            # Resource allocation
-            'svm_gb_ram': 48,
-            'svm_num_vcpus': 16,
+            # Installation flags
+            'skip_hypervisor': False,
+            'install_cvm': True,
             
             # CE-specific flags
-            'create_1node_cluster': True,
+            'create_1node_cluster': is_first_node,  # Only create cluster if this is the first node
             'ce_eula_accepted': True,
             'ce_eula_viewed': True,
             
-            # Hypervisor type
-            'hypervisor': 'kvm'
+            # Additional metadata
+            'cluster_name': 'ce-cluster',
+            'node_name': node['node_name']
         }
         
-        logger.info(f"Generated CE installer configuration for {node['node_name']}: {response}")
+        logger.info(f"Generated Arizona configuration for {node['node_name']}")
         return response
+    
+    def calculate_md5(self, file_path):
+        """Calculate MD5 checksum of a file"""
+        try:
+            if not os.path.exists(file_path):
+                logger.warning(f"File not found for MD5 calculation: {file_path}")
+                return "file_not_found"
+                
+            md5_hash = hashlib.md5()
+            with open(file_path, "rb") as f:
+                # Read file in chunks to handle large files efficiently
+                for chunk in iter(lambda: f.read(4096), b""):
+                    md5_hash.update(chunk)
+            
+            md5_checksum = md5_hash.hexdigest()
+            logger.debug(f"MD5 checksum for {file_path}: {md5_checksum}")
+            return md5_checksum
+        except Exception as e:
+            logger.error(f"Failed to calculate MD5 checksum for {file_path}: {str(e)}")
+            return "md5_calculation_failed"
     
     
     

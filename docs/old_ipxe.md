@@ -33,7 +33,7 @@ IBM Cloud VPC Bare Metal         PXE/Config Server
 │  3. Download vmlinuz    │───▶│  vmlinuz-phoenix         │
 │     -phoenix            │    │                          │
 │                         │    │                          │
-│  4. Download initrd     │───▶│  initrd-phoenix.img      │
+│  4. Download initrd     │───▶│  initrd-modified.img      │
 │     -phoenix.img        │    │                          │
 │                         │    │                          │
 │  5. Boot Foundation     │    │                          │
@@ -64,9 +64,9 @@ Bare Metal Server (<management_ip>) → PXE Server
 Bare Metal Server (<management_ip>) → PXE Server
 - Downloads vmlinuz-phoenix from PXE server
 
-**Step 4: initrd-phoenix.img**
+**Step 4: initrd-modified.img**
 Bare Metal Server (<management_ip>) → PXE Server
-- Downloads initrd-phoenix.img from PXE server
+- Downloads initrd-modified.img from PXE server
 
 **Step 5: Boot Foundation**
 - Boots Foundation with mgmt_ip=<management_ip>
@@ -130,7 +130,7 @@ set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
 
 kernel ${{base-url}}/vmlinuz-phoenix console=tty0 console=ttyS0,115200 node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
-initrd ${{base-url}}/initrd-phoenix.img
+initrd ${{base-url}}/initrd-modified.img
 
 boot || goto error
 
@@ -149,7 +149,7 @@ shell
 ```ipxe
 dhcp                                            # Get IP address from DHCP server
 kernel http://{pxe_server_dns}:8080/boot/images/vmlinuz-phoenix     # Download Foundation kernel
-initrd http://{pxe_server_dns}:8080/boot/images/initrd-phoenix.img  # Download Foundation initrd
+initrd http://{pxe_server_dns}:8080/boot/images/initrd-modified.img  # Download Foundation initrd
 boot                                            # Start the Foundation kernel
 ```
 **Foundation Boot Parameters**:
@@ -183,7 +183,7 @@ boot                                            # Start the Foundation kernel
 4. Kernel mounts the initial ramdisk
 5. Control is passed to Foundation service in initrd
 
-### 3. initrd-phoenix.img (Foundation Initial RAM Disk)
+### 3. initrd-modified.img (Foundation Initial RAM Disk)
 
 **Purpose**: A specialized temporary root filesystem containing the Foundation service and tools.
 
@@ -195,7 +195,7 @@ boot                                            # Start the Foundation kernel
 - Drivers and kernel modules
 
 **Key Functions**:
-Inside initrd-phoenix.img, these processes happen:
+Inside initrd-modified.img, these processes happen:
 - Hardware discovery and validation
 - Network interface initialization
 - Download of node configuration from PXE server
@@ -256,7 +256,7 @@ The storage configuration is dynamically generated based on the server profile i
 ├── configs/
 │   └── (dynamic configuration via API endpoint)
 ├── images/
-│   ├── initrd-phoenix.img
+│   ├── initrd-modified.img
 │   ├── vmlinuz-phoenix
 │   └── nutanix-ce.iso
 └── scripts/
@@ -430,7 +430,7 @@ kernel ${base-url}/images/vmlinuz-phoenix
   FOUND_IP=${pxe_server}
   AZ_CONF_URL=http://${pxe_server}:8080/boot/server/${net0/ip}
 
-initrd ${base-url}/images/initrd-phoenix.img
+initrd ${base-url}/images/initrd-modified.img
 boot || goto error
 
 :error

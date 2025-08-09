@@ -81,7 +81,7 @@ set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
 
 # Boot with explicit ISO location
 kernel ${base-url}/vmlinuz-phoenix iso-url=${base-url}/nutanix-ce-installer.iso init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=${base-url}/nutanix-ce-installer.iso
-initrd ${base-url}/initrd-phoenix.img
+initrd ${base-url}/initrd-modified.img
 boot
 ```
 

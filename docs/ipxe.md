@@ -2,6 +2,25 @@
 
 This guide covers the complete process for automated Nutanix Community Edition installation on IBM Cloud VPC Bare Metal servers using iPXE and HTTP boot.
 
+The standard install involes:
+
+1. Downloading the Nutanix ISO.
+2. Using a utility such as Rufus to write to a CD-ROM or USB.
+3. Use the CD-ROM/USB as a boot device.
+4. Use the graphical installer, Nutanix Community Edition Installer, to enter the parameters:
+   * Select Hypervisor: AHV or ESXi.
+   * Select Hypervisor Boot disk.
+   * Select CUM Boot disk.
+   * Select Data disks.
+   * Host IP Address.
+   * CUM IP Address.
+   * Subnet Mask.
+   * Gateway.
+   * DNS Server.
+   * Create single-node cluster: Y/N.
+   * Accept the EULA.
+5. SSH to the CVM appliance created and complete the setup.
+
 ## Overview
 
 Instead of using the graphical installer, this method allows completely unattended installation using:
@@ -17,7 +36,167 @@ Instead of using the graphical installer, this method allows completely unattend
 - Nutanix CE ISO file
 - Basic understanding of network configuration
 
+## Nutanix and Linux Boot Terminology Terms
+
+This section explains all the key terms used in the Nutanix CE iPXE installation.
+
+### **Kernel**
+- **What it is**: The core of the Linux operating system
+- **Purpose**: Manages hardware, memory, processes, and system resources
+- **In our context**: The `vmlinuz` or `kernel` file that boots the Nutanix installer
+- **Location**: `/boot/kernel` in the Nutanix ISO
+- **Example**: When iPXE downloads the kernel, it's getting the bootable Linux core
+
+### **initrd (Initial RAM Disk)**
+- **What it is**: A compressed filesystem loaded into RAM during boot
+- **Purpose**: Contains drivers and tools needed before the main filesystem is mounted
+- **In our context**: Contains the Nutanix installer scripts and drivers
+- **Why we modified it**: To add HTTP download capability for squashfs.img
+- **File format**: Compressed cpio archive (like a .tar.gz file)
+
+### **SquashFS**
+- **What it is**: A compressed, read-only filesystem format
+- **Purpose**: Packages entire operating systems into a single compressed file
+- **In our context**: `squashfs.img` contains the complete Nutanix installer environment
+- **Benefits**: High compression (50-90% size reduction), fast random access
+- **Usage**: Live CDs, embedded systems, and installers use this format
+
+### **AHV (Acropolis Hypervisor)**
+- **What it is**: Nutanix's own hypervisor based on KVM/Linux
+- **Purpose**: Virtualizes hardware to run virtual machines
+- **Alternative to**: VMware ESXi, Microsoft Hyper-V
+- **In our context**: The `hyp_type: "kvm"` in arizona.cfg installs AHV
+- **File**: `AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso`
+
+### **CVM (Controller Virtual Machine)**
+- **What it is**: Special VM that runs Nutanix storage and management software
+- **Purpose**: Provides distributed storage services and cluster management
+- **Architecture**: Runs on each physical node, forms distributed storage system
+- **In our context**: Gets IP address `svm_ip` in arizona.cfg
+- **Access**: Prism web interface runs on CVM at port 9440
+
+### **Phoenix**
+- **What it is**: Nutanix's installation and imaging framework
+- **Components**: 
+    - Shell scripts for hardware detection and preparation
+    - Python application for main installation logic
+    - Web-based GUI for configuration
+- **In our context**: The main installer that arizona.cfg configures
+- **Execution**: Launched after initrd boots and prepares environment
+
+### **Arizona**
+- **What it is**: Nutanix's automation framework for unattended installations
+- **Purpose**: Allows scripted, non-interactive deployments
+- **File format**: JSON configuration file
+- **In our context**: `arizona.cfg` contains all installation parameters
+- **Benefits**: Enables factory installations, PXE deployments, mass rollouts
+
+### **Foundation**
+- **What it is**: Nutanix's cluster deployment and management tool
+- **Purpose**: Deploys and configures multi-node Nutanix clusters
+- **Relationship**: Arizona is Foundation's automation backend
+- **In our context**: Parameters like `FOUND_IP` refer to Foundation server
+
+### **iPXE**
+- **What it is**: Enhanced network boot firmware/software
+- **Purpose**: Boots computers over network instead of local storage
+- **Capabilities**: HTTP/HTTPS downloads, scripting, advanced protocols
+- **In our context**: Downloads and boots Nutanix installer over network
+- **Advantage**: More flexible than traditional PXE
+
+### **PXE (Preboot Execution Environment)**
+- **What it is**: Industry standard for network booting
+- **Protocol**: Uses DHCP + TFTP for boot process
+- **Limitations**: Only TFTP, no scripting, basic functionality
+- **Relationship**: iPXE is an enhanced, modern replacement for PXE
+
+### **Node Position**
+- **What it is**: Identifier for each server in a cluster (A, B, C, etc.)
+- **Purpose**: Determines installation order, cluster roles, and configuration
+- **In our context**: `"node_position": "A"` in arizona.cfg
+- **Convention**: A = first node/leader, B = second node, etc.
+- **Usage**: Maps to physical rack positions in data centers
+
+### **Container (Storage)**
+- **What it is**: Nutanix's logical storage pool abstraction
+- **Purpose**: Groups storage across cluster nodes for VM storage
+- **Not Docker**: Different from Docker containers - this is storage
+- **In our context**: Created after installation for VM storage
+- **Management**: Configured via Prism web interface
+
+### **Prism**
+- **What it is**: Nutanix's web-based management interface
+- **Purpose**: Cluster management, VM creation, monitoring, configuration
+- **Access**: `https://<cvm_ip>:9440`
+- **In our context**: Used after installation to manage the cluster
+- **Features**: Dashboard, VM management, storage configuration, monitoring
+
+### **CPIO**
+- **What it is**: Archive format similar to tar
+- **Purpose**: Packages multiple files into single archive
+- **In our context**: initrd files are cpio archives
+- **Commands**: `cpio -i` (extract), `cpio -o` (create)
+- **Usage**: Common in Linux boot processes and embedded systems
+
+### **MD5Sum**
+- **What it is**: Cryptographic hash for file integrity verification
+- **Purpose**: Ensures downloaded files aren't corrupted
+- **In our context**: arizona.cfg includes MD5 hashes for all downloaded files
+- **Format**: 32-character hexadecimal string
+- **Example**: `"md5sum": "a1b2c3d4e5f6..."`
+
+### **Split Archives (.p00, .p01)**
+- **What it is**: Large files split into smaller chunks
+- **Purpose**: Makes large files easier to handle and transfer
+- **In our context**: AOS installer is split into `.tar.p00` and `.tar.p01`
+- **Reconstruction**: `cat file.tar.p* > file.tar.gz`
+- **Reason**: Filesystem or transfer limitations for large files
+
+### **LIVEFS_URL**
+- **What it is**: Kernel parameter pointing to root filesystem
+- **Purpose**: Tells installer where to download squashfs.img
+- **In our context**: Our HTTP URL serving the root filesystem
+- **Format**: `LIVEFS_URL=http://server/squashfs.img`
+- **Usage**: Alternative to local storage or CD/DVD
+
+### **AZ_CONF_URL**
+- **What it is**: Kernel parameter pointing to Arizona configuration
+- **Purpose**: Tells Phoenix where to get automation settings
+- **In our context**: Our HTTP URL serving arizona.cfg
+- **Format**: `AZ_CONF_URL=http://server/arizona.cfg`
+- **Result**: Enables completely automated installation
+
+### **init Process**
+- **What it is**: First process started by Linux kernel
+- **Purpose**: Starts all other system processes
+- **In our context**: `init=/ce_installer` tells kernel to run CE installer
+- **Normal**: Usually `/sbin/init` or systemd
+- **Override**: We override to run Nutanix installer instead
+
+### **Screen Session**
+- **What it is**: Terminal multiplexer that persists sessions
+- **Purpose**: Keeps processes running even if connection drops
+- **In our context**: Phoenix installer runs in screen session
+- **Benefits**: Can reconnect to installer if SSH connection fails
+- **Commands**: `screen -r` to reconnect to session
+
+### **Switch Root**
+- **What it is**: Linux mechanism to change root filesystem
+- **Purpose**: Transitions from initrd to main filesystem
+- **In our context**: Switches from initrd to squashfs.img
+- **Process**: Mounts new root, moves processes, switches context
+- **Result**: System now runs from squashfs environment
+
 ## Architecture
+
+This solution works because the PXE/Config server is pre-configured with extracted and modified files from the Nutanix CE ISO file:
+
+1. **iPXE** downloads **kernel** and **initrd** over HTTP.
+2. **initrd** boots and downloads **squashfs.img** (root filesystem).
+3. **Phoenix** installer reads **Arizona** config for automation.
+4. Installs **AHV** hypervisor and **CVM** on bare metal.
+
+This results in a node that is ready to be become a single node cluster, or join with other nodes in a standard cluster and be accessible via **Prism**.
 
 ```
 IBM Bare Metal Server (iPXE) → HTTP Server → Automated Installation
@@ -29,34 +208,121 @@ IBM Bare Metal Server (iPXE) → HTTP Server → Automated Installation
 5. Automated installation based on config
 ```
 
+To achieve this the following steps are needed on the PXE\Config Server to overcome the following issues:
+
+- The Nutanix CE ISO is designed to be used in a CD-ROM or a virtual CD-ROM, not used for iPXE.
+- The installer is hard-coded to look for a block device (CD_ROM) with a label named "PHOENIX".
+- The installer is configured to launch into a UI.
+
+The issues above are overcome by mounting the ISO and changing the installer.
+
 ## Step 1: Extract Files from Nutanix CE ISO
+
+Mount the ISO so we can access the files
 
 ### 1.1 Mount the ISO
 ```bash
-sudo mkdir /mnt/nutanix
-sudo mount -o loop nutanix-ce-installer.iso /mnt/nutanix
+sudo mkdir /mnt
+sudo mount -o loop nutanix-ce-installer.iso /mnt
 ```
 
-### 1.2 Extract Boot Files
+The `/mnt` directory now contains:
+
+```bash
+/mnt
+├── EFI
+│   └── BOOT
+│       ├── BOOTX64.EFI
+│       ├── grub.cfg
+│       └── grubx64.efi
+├── boot
+│   ├── images
+│   │   └── efiboot.img
+│   ├── initrd
+│   ├── isolinux
+│   │   ├── cat.c32
+│   │   ├── chain.c32
+│   │   ├── cmd.c32
+│   │   ├── config.c32
+│   │   ├── cpuid.c32
+│   │   ├── cpuidtest.c32
+│   │   ├── disk.c32
+│   │   ├── dmitest.c32
+│   │   ├── elf.c32
+│   │   ├── ethersel.c32
+│   │   ├── gfxboot.c32
+│   │   ├── gpxecmd.c32
+│   │   ├── hdt.c32
+│   │   ├── host.c32
+│   │   ├── ifcpu.c32
+│   │   ├── ifcpu64.c32
+│   │   ├── ifplop.c32
+│   │   ├── isolinux.bin
+│   │   ├── isolinux.cfg
+│   │   ├── kbdmap.c32
+│   │   ├── linux.c32
+│   │   ├── ls.c32
+│   │   ├── lua.c32
+│   │   ├── mboot.c32
+│   │   ├── meminfo.c32
+│   │   ├── menu.c32
+│   │   ├── pcitest.c32
+│   │   ├── pmload.c32
+│   │   ├── pwd.c32
+│   │   ├── reboot.c32
+│   │   ├── rosh.c32
+│   │   ├── sanboot.c32
+│   │   ├── sdi.c32
+│   │   ├── sysdump.c32
+│   │   ├── vesainfo.c32
+│   │   ├── vesamenu.c32
+│   │   ├── vpdtest.c32
+│   │   ├── whichsys.c32
+│   │   └── zzjson.c32
+│   └── kernel
+├── boot.catalog
+├── images
+│   ├── driver_package.tar.gz
+│   ├── hypervisor
+│   │   └── kvm
+│   │       └── AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso
+│   └── svm
+│       ├── nutanix_installer_package.tar.p00
+│       └── nutanix_installer_package.tar.p01
+├── make_iso.sh
+├── phoenix_version
+├── squashfs.img
+└── templates
+    ├── grub2.cfg
+    └── grub_efi.cfg
+```
+
+
+### 1.2 Extract Boot File and squashfs.img
+
+The boot files `kernel` and `squashfs.img` are copied so that they can be served when requested.
+
 ```bash
 # Create web server directory structure
-sudo mkdir -p /var/www/html/boot
+sudo mkdir -p /var/www/pxe
 
-# Extract kernel and initrd
-sudo cp /mnt/nutanix/boot/kernel /var/www/html/boot/
-sudo cp /mnt/nutanix/boot/initrd /var/www/html/boot/
+# Extract kernel and copy to /var/www/pxe/images (it is renamed for no real reason!)
+sudo cp /mnt/nutanix/boot/kernel /var/www/pxe/images/vmlinuz-phoenix
 
-# Extract squashfs root filesystem
-sudo cp /mnt/nutanix/squashfs.img /var/www/html/
+# Extract squashfs root filesystem and copy to /var/www/pxe/image
+sudo cp /mnt/nutanix/squashfs.img /var/www/pxe/images
 ```
 
 ### 1.3 Extract AOS Installer Package
+
+Th AOS installer will create the CVM during the install. On the ISO there are two parts to the package, we combine them for ease of use
+
 ```bash
 # Copy split installer parts
-sudo cp /mnt/nutanix/images/svm/nutanix_installer_package.tar.p* /var/www/html/
+sudo cp /mnt/nutanix/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
 
 # Reconstruct complete installer
-cd /var/www/html
+cd /var/www/pxe/images
 sudo cat nutanix_installer_package.tar.p* > nutanix_installer_package.tar.gz
 sudo rm nutanix_installer_package.tar.p*
 ```
@@ -64,7 +330,7 @@ sudo rm nutanix_installer_package.tar.p*
 ### 1.4 Extract AHV Hypervisor ISO
 ```bash
 # Copy AHV ISO
-sudo cp "/mnt/nutanix/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso" /var/www/html/
+sudo cp "/mnt/nutanix/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso" /var/www/pxe/images
 ```
 
 ### 1.5 Generate MD5 Checksums
@@ -88,11 +354,14 @@ The default Nutanix installer looks for a device labeled "PHOENIX". Since we're 
 ```bash
 mkdir -p /tmp/nutanix-initrd
 cd /tmp/nutanix-initrd
-gunzip -c /var/www/html/boot/initrd | cpio -idmv
+gunzip -c /mnt/boot/initrd | cpio -idmv
 ```
 
 ### 2.2 Modify livecd.sh
-Edit `/tmp/nutanix-initrd/livecd.sh` and replace the `find_squashfs_in_iso_ce()` function:
+
+The `livecd.sh` is hard-coded to look for a block device with the name  `PHOENIX`. We need to change this so we download `squashfs.img` from the PXE\Config server.
+
+Edit `/tmp/nutanix-initrd/livecd.sh` and replace the `find_squashfs_in_iso_ce()` function, with the following function:
 
 ```bash
 find_squashfs_in_iso_ce ()
@@ -145,43 +414,82 @@ find_squashfs_in_iso_ce ()
 ### 2.3 Repack initrd
 ```bash
 cd /tmp/nutanix-initrd
-find . | cpio -o -H newc | gzip > /var/www/html/boot/initrd-modified
+find . | cpio -o -H newc | gzip > /var/www/pxe/images/initrd-modified
 ```
 
 ## Step 3: Create Arizona Configuration
 
-Create `/var/www/html/arizona.cfg` with your automation parameters:
+The automation parameters are served via the API when called with `/boot/server/<server_ip>`. The PXE\Confog server will respond with a json file an example is shown below. The disk information is retreived from `server_profiles.py`, the IP information is retrieved from the database.
 
-### 3.1 Single Node Configuration
+### 3.1 Node Configuration
 ```json
 {
   "hyp_type": "kvm",
   "node_position": "A",
   "svm_installer_url": {
     "url": "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/nutanix_installer_package.tar.gz",
-    "md5sum": "your_actual_md5_checksum_here"
+    "md5sum": "actual_md5_checksum_here"
   },
   "hypervisor_iso_url": {
     "url": "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso",
-    "md5sum": "ahv_iso_md5_checksum_here"
+    "md5sum": "actual_ahv_iso_md5_checksum_here"
   },
   "nodes": [
     {
       "node_position": "A",
-      "hyp_ip": "10.240.0.100",
+      "hyp_ip": "10.240.0.10",
       "hyp_netmask": "255.255.255.0",
       "hyp_gateway": "10.240.0.1",
-      "svm_ip": "10.240.0.101",
+      "svm_ip": "10.240.0.51",
       "svm_netmask": "255.255.255.0",
-      "svm_gateway": "10.240.0.1"
+      "svm_gateway": "10.240.0.1",
+      "disk_layout": {
+        "boot_disk": "/dev/nvme0n1",
+        "cvm_disk": "/dev/nvme0n1",
+        "storage_pool_disks": ["/dev/nvme1n1", "/dev/nvme2n1", "/dev/nvme3n1", "/dev/nvme4n1"]
+      }
     }
   ],
-  "dns_servers": "8.8.8.8,8.8.4.4",
-  "ntp_servers": "pool.ntp.org",
+  "dns_servers": "161.26.0.7,161.26.0.8",
+  "ntp_servers": "time.adn.networklayer.com",
   "skip_hypervisor": false,
   "install_cvm": true
 }
 ```
+
+### Example Bare Metal Server configuration
+
+#### **Boot Disk (RAID)**
+- **Device**: `/dev/nvme0n1`
+- **Size**: 447 GB (480GB raw)
+- **Model**: M.2 NVMe 2-Bay RAID Kit
+- **Purpose**: This is the hardware RAID 1 boot array presented as single NVMe device
+
+#### **Storage Pool Disks**
+- **Devices**: `/dev/nvme1n1`, `/dev/nvme2n1`, `/dev/nvme3n1`, `/dev/nvme4n1`
+- **Size**: 6.99 TiB each (~7.68TB raw)
+- **Model**: Micron_7450_MTFDKCC7T6TFR (Enterprise NVMe SSDs)
+- **Total Storage**: ~28TB of high-performance NVMe storage
+
+#### What This Gives You:
+
+**447GB for hypervisor + CVM** - More than enough for both  
+**~28TB for Nutanix storage pool** - Massive high-performance storage  
+**All NVMe SSDs** - Exceptional performance across the board  
+**RAID 1 boot protection** - Hardware redundancy for boot disk  
+
+#### Storage Performance:
+
+These **Micron 7450 enterprise NVMe drives** provide:
+- **Sequential Read**: Up to 6.9 GB/s  
+- **Sequential Write**: Up to 6.2 GB/s
+- **Random Read IOPS**: Up to 1.5M IOPS
+- **Random Write IOPS**: Up to 400K IOPS
+
+This will provide Nutanix CE with:
+- **Fast boot** from RAID-protected NVMe
+- **Massive storage capacity** (28TB)
+- **Enterprise-grade performance** 
 
 ### 3.2 Configuration Parameters Explained
 
@@ -199,7 +507,7 @@ Create `/var/www/html/arizona.cfg` with your automation parameters:
 
 ## Step 4: Create iPXE Boot Script
 
-Create `/var/www/html/nutanix-ce-autoinstall.ipxe`:
+The iPXE boot script is served via the API when called with `/boot/config?mgmt_ip=<server_ip>`. The PXE\Confog server will respond with an iPXE file, an example is shown below:
 
 ```bash
 #!ipxe
@@ -209,7 +517,7 @@ set net-timeout 300000
 set http-timeout 300000
 
 # Boot Nutanix CE with automated installation
-kernel http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/squashfs.img AZ_CONF_URL=http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/arizona.cfg PHOENIX_IP=10.240.0.100 MASK=255.255.255.0 GATEWAY=10.240.0.1 PXEBOOT=true
+kernel http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/squashfs.img AZ_CONF_URL=http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/arizona.cfg PHOENIX_IP=10.240.0.10 MASK=255.255.255.0 GATEWAY=10.240.0.1 PXEBOOT=true
 initrd http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/initrd-modified
 boot
 ```
@@ -226,36 +534,21 @@ boot
 | `PHOENIX_IP` | Static IP for installer |
 | `PXEBOOT=true` | Indicate PXE boot mode |
 
-## Step 5: Configure HTTP Server
-
-Ensure your HTTP server is configured and running:
+## Step 5: Verify files are accessible
 
 ```bash
-# Install web server if needed
-sudo apt install nginx  # Ubuntu/Debian
-# or
-sudo yum install httpd  # RHEL/CentOS
-
-# Start and enable service
-sudo systemctl start nginx
-sudo systemctl enable nginx
-
-# Verify files are accessible
 curl -I http://your-server-ip/squashfs.img
 curl -I http://your-server-ip/arizona.cfg
 ```
 
 ### 5.1 Required File Structure
-```
-/var/www/html/
-├── boot/
-│   ├── kernel
-│   └── initrd-modified
+```bash
+/var/www/pxe/images
+├── kernel
+├── initrd-modified
 ├── squashfs.img
 ├── nutanix_installer_package.tar.gz
 ├── AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso
-├── arizona.cfg
-└── nutanix-ce-autoinstall.ipxe
 ```
 
 ## Step 6: Boot Target Server
@@ -264,16 +557,8 @@ curl -I http://your-server-ip/arizona.cfg
 
 **Option A: Direct iPXE commands**
 ```bash
-# At iPXE prompt
-chain http://your-server-ip/nutanix-ce-autoinstall.ipxe
-```
-
-**Option B: Direct sanboot (without modification)**
-```bash
-# At iPXE prompt (requires larger timeouts)
-set net-timeout 300000
-set http-timeout 300000
-sanboot http://your-server-ip/nutanix-ce-installer.iso
+# IBM Cloud userdata
+http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10
 ```
 
 ### 6.2 Installation Process
@@ -285,53 +570,6 @@ sanboot http://your-server-ip/nutanix-ce-installer.iso
 5. **Package Download**: Downloads AOS installer and AHV ISO
 6. **Installation**: Automated installation based on configuration
 7. **Completion**: Server reboots into installed Nutanix CE
-
-## Step 7: Multi-Node Deployment
-
-### 7.1 Node Position Strategy
-- **Node A**: First node, cluster leader
-- **Node B**: Second node
-- **Node C**: Third node, etc.
-
-### 7.2 Multi-Node Arizona Configuration
-```json
-{
-  "hyp_type": "kvm",
-  "node_position": "%%NODE_POSITION%%",
-  "cluster_name": "nutanix-ce-cluster",
-  "cluster_external_ip": "10.240.0.200",
-  "nodes": [
-    {
-      "node_position": "A",
-      "hyp_ip": "10.240.0.100",
-      "svm_ip": "10.240.0.101"
-    },
-    {
-      "node_position": "B", 
-      "hyp_ip": "10.240.0.110",
-      "svm_ip": "10.240.0.111"
-    },
-    {
-      "node_position": "C",
-      "hyp_ip": "10.240.0.120",
-      "svm_ip": "10.240.0.121"
-    }
-  ]
-}
-```
-
-### 7.3 Per-Node iPXE Scripts
-Create separate iPXE scripts for each node:
-
-**nutanix-nodeA.ipxe:**
-```bash
-kernel ... AZ_CONF_URL=http://server/arizona.cfg NODE_POSITION=A
-```
-
-**nutanix-nodeB.ipxe:**
-```bash
-kernel ... AZ_CONF_URL=http://server/arizona.cfg NODE_POSITION=B
-```
 
 ## Troubleshooting
 
@@ -361,13 +599,6 @@ kernel ... AZ_CONF_URL=http://server/arizona.cfg NODE_POSITION=B
 - **Installation logs**: `/tmp/phoenix.log`
 - **Network logs**: Check DHCP/network configuration
 - **HTTP server logs**: Check web server access logs
-
-## Security Considerations
-
-1. **HTTP vs HTTPS**: Consider using HTTPS for sensitive environments
-2. **Network isolation**: Ensure HTTP server is on trusted network
-3. **Credential management**: Avoid hardcoding passwords in arizona.cfg
-4. **SSH keys**: Use SSH key authentication instead of passwords
 
 ## Post-Installation
 

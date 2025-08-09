@@ -576,7 +576,7 @@ function updateStorageInfo(profileName) {
                 return;
             }
             
-            document.getElementById('boot-storage').textContent = `${data.drive_info.boot_drive_size} RAID1 SATA M.2`;
+            document.getElementById('boot-storage').textContent = `${data.drive_info.boot_drive_size} ${data.drive_info.boot_drive_type || 'Storage'}`;
             document.getElementById('data-drives').textContent = `${data.drives_used} of ${data.total_drives} NVMe drives`;
             document.getElementById('total-capacity').textContent = data.drive_info.total_storage_capacity;
             document.getElementById('storage-config').textContent = template ? template.displayName : storageTemplate;
