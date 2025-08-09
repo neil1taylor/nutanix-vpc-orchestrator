@@ -271,7 +271,7 @@ setup_system() {
     apt-get install -y \
         python3 python3-pip python3-venv \
         postgresql postgresql-contrib \
-        nginx git curl wget unzip gunzip \
+        nginx git curl wget unzip gzip \
         bc netstat-nat openssl sshpass
 }
 
