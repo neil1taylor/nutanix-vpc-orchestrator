@@ -567,20 +567,45 @@ EOF
         #rm -rf "$INITRD_TMP_DIR"
 
         # Copy files
-        log "Copying files; kernel, nutanix-ce.iso, squashfs.img and AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso to /var/www/pxe/images"
-        cp /mnt/boot/kernel /var/www/pxe/images
-        cp /tmp/nutanix-ce.iso /var/www/pxe/images
-        cp /mnt/squashfs.img /var/www/pxe/images
-        cp /mnt/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso  /var/www/pxe/images
+        log "Copying the static files; kernel, nutanix-ce.iso, squashfs.img and AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso to /var/www/pxe/images if they don't exist"
+        if [[ ! -f "/var/www/pxe/images/kernel" ]]; then
+            log "Copying the file kernel to /var/www/pxe/images..."
+            cp /mnt/boot/kernel /var/www/pxe/images
+        else
+            log "Skipping file copy, kernel is already in /var/www/pxe/images "
+        fi
+        if [[ ! -f "/var/www/pxe/images/nutanix-ce.iso" ]]; then
+           log "Copying the file nutanix-ce.iso to /var/www/pxe/images..."
+           cp /tmp/nutanix-ce.iso /var/www/pxe/images
+        else
+            log "Skipping file copy, nutanix-ce.iso is already in /var/www/pxe/images "
+        fi
+        if [[ ! -f "/var/www/pxe/images/squashfs.img" ]]; then
+            log "Copying the file squashfs.img to /var/www/pxe/images..."
+            cp /mnt/squashfs.img /var/www/pxe/images
+        else
+            log "Skipping file copy, squashfs.img is already in /var/www/pxe/images "
+        fi
+        if [[ ! -f "/var/www/pxe/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso" ]]; then
+            log "Copying the file AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso to /var/www/pxe/images..."
+            cp /mnt/images/hypervisor/kvm/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso /var/www/pxe/images
+        else
+            log "Skipping file copy, AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso is already in /var/www/pxe/images "
+        fi
 
         # Copy split installer parts
-        log "Copying file nutanix_installer_package.tar.gz to /var/www/pxe/images"
-        cp /mnt/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
+        if [[ ! -f "/var/www/pxe/images/nutanix_installer_package.tar.gz" ]]; then
+            log "Copying file nutanix_installer_package.tar.gz to /var/www/pxe/images..."
+            cp /mnt/images/svm/nutanix_installer_package.tar.p* /var/www/pxe/images
 
-        # Reconstruct complete installer
-        cd /var/www/pxe/images
-        cat nutanix_installer_package.tar.p* > nutanix_installer_package.tar.gz
-        rm nutanix_installer_package.tar.p*
+            # Reconstruct complete installer
+            cd /var/www/pxe/images
+            cat nutanix_installer_package.tar.p* > nutanix_installer_package.tar.gz
+            rm nutanix_installer_package.tar.p*
+        else
+            log "Skipping file copy as file nutanix_installer_package.tar.gz already exists in /var/www/pxe/images"
+        fi
+
         cd /tmp
 
         log "Unmounting /mnt"
