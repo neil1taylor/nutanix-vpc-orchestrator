@@ -567,7 +567,7 @@ EOF
         #rm -rf "$INITRD_TMP_DIR"
 
         # Copy files
-        log "Copying the static files; kernel, nutanix-ce.iso, squashfs.img and AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso to /var/www/pxe/images if they don't exist"
+        log "Copying the static files to /var/www/pxe/images only if they don't exist"
         if [[ ! -f "/var/www/pxe/images/kernel" ]]; then
             log "Copying the file kernel to /var/www/pxe/images..."
             cp /mnt/boot/kernel /var/www/pxe/images
@@ -603,7 +603,7 @@ EOF
             cat nutanix_installer_package.tar.p* > nutanix_installer_package.tar.gz
             rm nutanix_installer_package.tar.p*
         else
-            log "Skipping file copy as file nutanix_installer_package.tar.gz already exists in /var/www/pxe/images"
+            log "Skipping file copy, nutanix_installer_package.tar.gz is already in /var/www/pxe/images"
         fi
 
         cd /tmp
@@ -611,7 +611,7 @@ EOF
         log "Unmounting /mnt"
         umount /mnt 2>/dev/null || true
     
-    log "Chaning ownership of /var/www/pxe to ${SERVICE_USER}:${SERVICE_USER}"
+    log "Changing ownership of /var/www/pxe to ${SERVICE_USER}:${SERVICE_USER}"
     chown -R "$SERVICE_USER:$SERVICE_USER" /var/www/pxe
 }
 

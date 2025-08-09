@@ -151,8 +151,9 @@ class BootService:
             
             # Get DNS servers
             dns_servers = ibm_cloud.get_vpc_dns_servers(Config.VPC_ID)
-            dns_server = dns_servers[0] if dns_servers else '161.26.0.10'
-            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}")
+            # Use first DNS server from the list, with consistent fallback
+            dns_server = dns_servers[0] if dns_servers else '8.8.8.8'
+            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}, using {dns_server}")
             
             # Store network information
             network_info = {
@@ -170,7 +171,7 @@ class BootService:
                 'ip': str(node['management_ip']),
                 'netmask': '255.255.255.0',
                 'gateway': '',
-                'dns': '161.26.0.10',
+                'dns': '8.8.8.8',
                 'mac': ''
             }
         
@@ -342,14 +343,15 @@ sanboot ${{base-url}}/nutanix-ce-installer.iso
             
             # Get DNS servers
             dns_servers = ibm_cloud.get_vpc_dns_servers(Config.VPC_ID)
-            dns_server_list = ','.join(dns_servers) if dns_servers else '161.26.0.7,161.26.0.8'
-            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}")
+            # Join all DNS servers with comma, with consistent fallback
+            dns_server_list = ','.join(dns_servers) if dns_servers else '8.8.8.8,9.9.9.9'
+            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}, using list: {dns_server_list}")
         except Exception as e:
             logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
             # Use default values if VPC SDK fails
             gateway = '10.240.0.1'
             netmask = '255.255.255.0'
-            dns_server_list = '161.26.0.7,161.26.0.8'
+            dns_server_list = '8.8.8.8,9.9.9.9'
         
         # Get storage configuration from server profiles
         from server_profiles import ServerProfileConfig

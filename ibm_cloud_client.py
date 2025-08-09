@@ -350,15 +350,26 @@ class IBMCloudClient:
         """Get DNS servers for VPC using VPC SDK"""
         try:
             vpc_info = self.get_vpc(vpc_id)
-            # DNS servers are typically in the VPC's default network ACL or DHCP options
-            # For IBM Cloud VPC, DNS servers are usually 161.26.0.10 and 161.26.0.11
-            # but let's try to extract them from the VPC info if available
-            dns_servers = vpc_info.get('dns_servers', ['161.26.0.10', '161.26.0.11'])
-            return dns_servers
+            
+            # Log the entire VPC info for debugging
+            logger.info(f"VPC info for {vpc_id}: {vpc_info}")
+            
+            # Check if dns_servers exists in the VPC info
+            if 'dns_servers' in vpc_info:
+                logger.info(f"Found DNS servers in VPC info: {vpc_info['dns_servers']}")
+                return vpc_info['dns_servers']
+            
+            # IBM Cloud VPC DNS servers should be 161.26.0.7 and 161.26.0.8
+            # But the API might be returning different values
+            logger.info("No DNS servers found in VPC info, using IBM Cloud default DNS servers")
+            return ['161.26.0.7', '161.26.0.8']
         except Exception as e:
             logger.error(f"Failed to get DNS servers for VPC {vpc_id}: {str(e)}")
-            # Return default IBM Cloud DNS servers
-            return ['161.26.0.10', '161.26.0.11']
+            # Log the full exception for debugging
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            # Return IBM Cloud default DNS servers
+            return ['161.26.0.7', '161.26.0.8']
     
     def get_custom_image(self, image_identifier):
         """Get custom image by name or ID using VPC SDK"""
