@@ -72,7 +72,7 @@ set http-timeout 300000
 set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
 
 # Boot with parameters to specify ISO location
-sanboot --drive 0x80 ${base-url}/nutanix-ce-installer.iso
+sanboot --drive 0x80 ${base-url}/nutanix-ce.iso
 ```
 
 ```bash
@@ -89,7 +89,7 @@ set http-timeout 300000
 set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
 
 # Boot with explicit ISO location
-kernel ${base-url}/kernel iso-url=${base-url}/nutanix-ce-installer.iso init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=${base-url}/nutanix-ce-installer.iso
+kernel ${base-url}/kernel iso-url=${base-url}/nutanix-ce.iso init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=${base-url}/nutanix-ce.iso
 initrd ${base-url}/initrd-modified.img
 boot
 ```
@@ -105,7 +105,7 @@ dhcp || goto retry_dhcp
 sleep 2
 ntp time.adn.networklayer.com
 set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
-set iso_url ${base-url}/nutanix-ce-installer.iso
+set iso_url ${base-url}/nutanix-ce.iso
 
 kernel http://your-server.com/memdisk iso raw
 initrd ${iso_url} iso

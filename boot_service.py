@@ -284,7 +284,7 @@ dhcp || goto retry_dhcp
 sleep 2
 ntp time.adn.networklayer.com
 set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
-sanboot ${{base-url}}/nutanix-ce-installer.iso
+sanboot ${{base-url}}/nutanix-ce.iso
 """
         
         # Log the boot script content with a clear separator for better readability

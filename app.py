@@ -265,7 +265,7 @@ def api_serve_boot_image(filename):
         allowed_files = [
             'kernel',
             'initrd-modified.img',
-            'nutanix-ce-installer.iso',
+            'nutanix-ce.iso',
             'squashfs.img',
             'nutanix_installer_package.tar.gz',
             'AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso'

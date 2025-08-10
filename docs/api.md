@@ -36,7 +36,7 @@ curl "http://localhost:8080/boot/config?mgmt_ip=10.240.0.10"
 **Allowed Files:**
 - `kernel` - kernel
 - `initrd-modified.img` - initial ramdisk
-- `nutanix-ce-installer.iso` - Nutanix CE installer ISO
+- `nutanix-ce.iso` - Nutanix CE installer ISO
 
 **Example:**
 ```bash

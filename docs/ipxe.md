@@ -223,7 +223,7 @@ Mount the ISO so we can access the files
 ### 1.1 Mount the ISO
 ```bash
 sudo mkdir /mnt
-sudo mount -o loop nutanix-ce-installer.iso /mnt
+sudo mount -o loop nutanix-ce.iso /mnt
 ```
 
 The `/mnt` directory now contains:
