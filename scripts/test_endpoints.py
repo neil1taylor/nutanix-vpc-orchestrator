@@ -18,7 +18,7 @@ ENDPOINTS = [
     # Boot server endpoints
     ("/boot/config", "GET"),
     ("/boot/server/192.168.1.100", "GET"),
-    ("/boot/images/vmlinuz-phoenix", "GET"),
+    ("/boot/images/kernel", "GET"),
     ("/boot/scripts/foundation-init.sh", "GET"),
     
     # Configuration API endpoints

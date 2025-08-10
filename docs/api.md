@@ -34,13 +34,13 @@ curl "http://localhost:8080/boot/config?mgmt_ip=10.240.0.10"
 **Endpoint:** `GET /boot/images/<filename>`
 **Purpose:** Serve boot images (kernel, initrd, ISO files)
 **Allowed Files:**
-- `vmlinuz-phoenix` - kernel
+- `kernel` - kernel
 - `initrd-modified.img` - initial ramdisk
 - `nutanix-ce-installer.iso` - Nutanix CE installer ISO
 
 **Example:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images/vmlinuz-phoenix"
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images/kernel"
 ```
 
 ### 1.3 Boot Scripts
@@ -430,7 +430,7 @@ These endpoints handle resource cleanup for failed or completed deployments.
 
 4. **Download Boot Images** (iPXE calls automatically)
    ```bash
-   GET /boot/images/vmlinuz-phoenix
+   GET /boot/images/kernel
    GET /boot/images/initrd-modified.img
    # iPXE downloads kernel and initrd
    ```

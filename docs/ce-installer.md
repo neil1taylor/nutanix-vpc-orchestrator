@@ -45,7 +45,7 @@ cat /mnt/EFI/BOOT/grub.cfg
 ### 2.1 Kernel and Initrd Extraction
 ```bash
 # Extract kernel and initrd for PXE booting
-cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-phoenix
+cp /mnt/boot/kernel /var/www/pxe/images/kernel
 cp /mnt/boot/initrd /var/www/pxe/images/initrd-modified.img
 ```
 
@@ -177,7 +177,7 @@ Based on analysis, the CE installer expects a flat JSON structure:
 ### 7.2 iPXE Boot Configuration
 ```ipxe
 #!ipxe
-kernel http://${next-server}:8080/images/vmlinuz-phoenix 
+kernel http://${next-server}:8080/images/kernel 
   init=/ce_installer 
   intel_iommu=on 
   iommu=pt 

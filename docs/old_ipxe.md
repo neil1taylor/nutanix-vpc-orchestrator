@@ -30,7 +30,7 @@ IBM Cloud VPC Bare Metal         PXE/Config Server
 │                         │    │                          │
 │  2. Fetch iPXE script   │───▶│  /boot/config            │
 │                         │    │                          │
-│  3. Download vmlinuz    │───▶│  vmlinuz-phoenix         │
+│  3. Download vmlinuz    │───▶│  kernel         │
 │     -phoenix            │    │                          │
 │                         │    │                          │
 │  4. Download initrd     │───▶│  initrd-modified.img      │
@@ -60,9 +60,9 @@ Bare Metal Server (<management_ip>) → PXE Server
     - cvm_ip: <cvm_ip> (Foundation will configure)
     - config_server: pxe/config server
 
-**Step 3: vmlinuz-phoenix**
+**Step 3: kernel**
 Bare Metal Server (<management_ip>) → PXE Server
-- Downloads vmlinuz-phoenix from PXE server
+- Downloads kernel from PXE server
 
 **Step 4: initrd-modified.img**
 Bare Metal Server (<management_ip>) → PXE Server
@@ -129,7 +129,7 @@ set mgmt_ip {node['management_ip']}
 set ahv_ip {node['nutanix_config']['ahv_ip']}
 set cvm_ip {node['nutanix_config']['cvm_ip']}
 
-kernel ${{base-url}}/vmlinuz-phoenix console=tty0 console=ttyS0,115200 node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
+kernel ${{base-url}}/kernel console=tty0 console=ttyS0,115200 node_id=${{node_id}} mgmt_ip=${{mgmt_ip}} ahv_ip=${{ahv_ip}} cvm_ip=${{cvm_ip}} config_server=http://{Config.PXE_SERVER_DNS}:8080/boot/server/${{mgmt_ip}}
 initrd ${{base-url}}/initrd-modified.img
 
 boot || goto error
@@ -148,7 +148,7 @@ shell
 **Key iPXE Script Functions**:
 ```ipxe
 dhcp                                            # Get IP address from DHCP server
-kernel http://{pxe_server_dns}:8080/boot/images/vmlinuz-phoenix     # Download Foundation kernel
+kernel http://{pxe_server_dns}:8080/boot/images/kernel     # Download Foundation kernel
 initrd http://{pxe_server_dns}:8080/boot/images/initrd-modified.img  # Download Foundation initrd
 boot                                            # Start the Foundation kernel
 ```
@@ -160,7 +160,7 @@ boot                                            # Start the Foundation kernel
 - `config_server`: URL to retrieve storage configuration (dynamically generated based on PXE server DNS)
 - `console`: Console output settings for remote management
 
-### 2. vmlinuz-phoenix (Foundation Linux Kernel)
+### 2. kernel (Foundation Linux Kernel)
 
 **Purpose**: The specialized Linux kernel that contains the Foundation service for Nutanix deployment.
 
@@ -177,7 +177,7 @@ boot                                            # Start the Foundation kernel
 - Supports the hardware platform (x86_64)
 
 **Boot process**:
-1. iPXE downloads vmlinuz-phoenix from PXE server
+1. iPXE downloads kernel from PXE server
 2. Kernel is loaded into memory
 3. Kernel initializes hardware
 4. Kernel mounts the initial ramdisk
@@ -257,7 +257,7 @@ The storage configuration is dynamically generated based on the server profile i
 │   └── (dynamic configuration via API endpoint)
 ├── images/
 │   ├── initrd-modified.img
-│   ├── vmlinuz-phoenix
+│   ├── kernel
 │   └── nutanix-ce.iso
 └── scripts/
     ├── foundation-init.sh
@@ -414,7 +414,7 @@ set pxe_server ${next-server}
 set base-url http://${pxe_server}:8080
 
 # Boot CE installer with automation parameters
-kernel ${base-url}/images/vmlinuz-phoenix
+kernel ${base-url}/images/kernel
   init=/ce_installer
   intel_iommu=on
   iommu=pt

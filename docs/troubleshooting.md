@@ -52,8 +52,8 @@ to test the response:
 
 ## Arizona config for server
 
-`curl http://localhost/boot/server/10.240.0.10`
-`curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10`
+`curl http://localhost:8080/boot/server/10.240.0.10 | jq`
+`curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10 | jq`
 
 
 ## To boot from the iso (livecd files not found)
@@ -89,7 +89,7 @@ set http-timeout 300000
 set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
 
 # Boot with explicit ISO location
-kernel ${base-url}/vmlinuz-phoenix iso-url=${base-url}/nutanix-ce-installer.iso init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=${base-url}/nutanix-ce-installer.iso
+kernel ${base-url}/kernel iso-url=${base-url}/nutanix-ce-installer.iso init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=${base-url}/nutanix-ce-installer.iso
 initrd ${base-url}/initrd-modified.img
 boot
 ```

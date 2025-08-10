@@ -270,7 +270,7 @@ setup_system() {
     apt-get upgrade -y
     apt-get install -y \
         python3 python3-pip python3-venv \
-        postgresql postgresql-contrib \
+        postgresql postgresql-contrib jq \
         nginx git curl wget unzip gzip \
         bc netstat-nat openssl sshpass
 }

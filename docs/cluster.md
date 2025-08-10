@@ -3,7 +3,7 @@
 1. **Boot Images**: Foundation images are extracted during setup:
    ```bash
    # In setup.sh
-   cp /mnt/boot/kernel /var/www/pxe/images/vmlinuz-phoenix
+   cp /mnt/boot/kernel /var/www/pxe/images/kernel
    cp /mnt/boot/initrd /var/www/pxe/images/initrd-modified.img
    ```
 
@@ -24,10 +24,10 @@
    
    set base-url http://{self.pxe_server_ip}/pxe
    
-   kernel ${{base-url}}/images/vmlinuz-phoenix console=tty0 console=ttyS0,115200
+   kernel ${{base-url}}/images/kernel console=tty0 console=ttyS0,115200
    initrd ${{base-url}}/images/initrd-modified.img
    
-   imgargs vmlinuz-phoenix node_id={server_id} mgmt_ip={mgmt_ip}
+   imgargs kernel node_id={server_id} mgmt_ip={mgmt_ip}
    
    boot || goto error
    
@@ -101,7 +101,7 @@
    - Check firewall rules for HTTP/HTTPS traffic
 
 2. **Missing Files**: 
-   - Verify vmlinuz-phoenix and initrd-modified.img exist
+   - Verify kernel and initrd-modified.img exist
    - Check file permissions (should be readable by web server)
    - Validate file integrity with checksums
 

@@ -251,7 +251,7 @@ def api_serve_boot_image(filename):
             client_ip = forwarded_for.split(',')[0].strip()
             
         # Log the request with high visibility
-        if filename == 'vmlinuz-phoenix':
+        if filename == 'kernel':
             logger.info(f"Client {client_ip} is downloading kernel file")
         elif filename == 'initrd-modified.img':
             logger.info(f"Client {client_ip} is downloading initrd file")
@@ -263,9 +263,13 @@ def api_serve_boot_image(filename):
         
         # Security check - only allow approved files
         allowed_files = [
-            'vmlinuz-phoenix',
+            'kernel',
             'initrd-modified.img',
-            'nutanix-ce-installer.iso'
+            'nutanix-ce-installer.iso',
+            'squashfs.img',
+            'nutanix_installer_package.tar.gz',
+            'AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso'
+
         ]
         
         if filename not in allowed_files:

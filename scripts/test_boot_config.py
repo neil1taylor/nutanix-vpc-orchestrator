@@ -50,7 +50,7 @@ def test_boot_config(ip_address=None):
                 return False
             
             # Check for the correct kernel command line format for CE installer automation
-            if "kernel ${base-url}/vmlinuz-phoenix" in content and "init=/ce_installer" in content and "FOUND_IP=" in content and "AZ_CONF_URL=" in content:
+            if "kernel ${base-url}/kernel" in content and "init=/ce_installer" in content and "FOUND_IP=" in content and "AZ_CONF_URL=" in content:
                 logger.info("Boot script contains correct CE installer automation parameters")
                 return True
             else:

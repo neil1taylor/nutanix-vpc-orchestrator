@@ -151,16 +151,16 @@ class BootService:
             
             # Get DNS servers
             dns_servers = ibm_cloud.get_vpc_dns_servers(Config.VPC_ID)
-            # Use first DNS server from the list, with consistent fallback
-            dns_server = dns_servers[0] if dns_servers else '8.8.8.8'
-            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}, using {dns_server}")
+            # Join all DNS servers with commas for the NAMESERVER parameter
+            dns_server_list = ','.join(dns_servers) if dns_servers else '8.8.8.8'
+            logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}, using {dns_server_list}")
             
             # Store network information
             network_info = {
                 'ip': str(node['management_ip']),
                 'netmask': netmask,
                 'gateway': gateway,
-                'dns': dns_server,
+                'dns': dns_server_list,
                 'mac': ''  # We don't have the MAC address from the SDK
             }
             logger.info(f"Network info prepared: {network_info}")
@@ -171,7 +171,7 @@ class BootService:
                 'ip': str(node['management_ip']),
                 'netmask': '255.255.0.0',
                 'gateway': '',
-                'dns': '8.8.8.8',
+                'dns': '8.8.8.8,9.9.9.9',  # Use multiple DNS servers by default
                 'mac': ''
             }
         
@@ -209,7 +209,7 @@ set pxe_server {Config.PXE_SERVER_DNS}
 # - kvm.ignore_msrs=1: Helps with VM compatibility
 # - LIVEFS_URL: Points to squashfs.img for HTTP download
 # - AZ_CONF_URL: Points to Arizona configuration for automation
-kernel ${{base-url}}/vmlinuz-phoenix init=/ce_installer intel_iommu=on iommu=pt kvm-intel.ept=1 kvm.ignore_msrs=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={Config.PXE_SERVER_DNS} LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true COMMUNITY_EDITION=1
+kernel ${{base-url}}/kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.ept=1 kvm.ignore_msrs=1 IMG=squashfs console=tty0 console=ttyS0,115200 FOUND_IP={self.config.PXE_SERVER_IP} LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true COMMUNITY_EDITION=1
 initrd ${{base-url}}/initrd-modified.img
 boot || goto error
 
