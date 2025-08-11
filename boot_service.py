@@ -180,6 +180,9 @@ class BootService:
         squashfs_url = f"{base_url}/squashfs.img"
         arizona_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']}"
         
+        # kernel ${{base-url}}/kernel init=/installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 PXEBOOT=true FOUND_IP={self.config.PXE_SERVER_IP} LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true
+
+
         template = f"""#!ipxe
 echo ===============================================
 echo Nutanix CE Automated Deployment
@@ -209,7 +212,7 @@ set pxe_server {Config.PXE_SERVER_DNS}
 # - kvm.ignore_msrs=1: Helps with VM compatibility
 # - LIVEFS_URL: Points to squashfs.img for HTTP download
 # - AZ_CONF_URL: Points to Arizona configuration for automation
-kernel ${{base-url}}/kernel init=/installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 PXEBOOT=true FOUND_IP={self.config.PXE_SERVER_IP} LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true
+kernel ${{base-url}}/kernel init=/installer IMG=squashfs console=tty0 console=ttyS0,115200 PXEBOOT=true LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true
 initrd ${{base-url}}/initrd-modified.img
 boot || goto error
 
