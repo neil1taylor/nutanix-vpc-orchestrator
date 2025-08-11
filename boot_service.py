@@ -331,7 +331,7 @@ sleep 2
 ntp time.adn.networklayer.com
 set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
 
-kernel ${base-url}/kernel init=/bin/sh console=tty0 console=ttyS0,115200
+kernel ${{base-url}}/kernel init=/bin/sh console=tty0 console=ttyS0,115200
 initrd ${{base-url}}/initrd.img
 boot || goto error
 
