@@ -58,6 +58,21 @@ shell
             logger.info(f"Generating ISO boot script for {mgmt_ip}")
             return self.generate_iso_boot_script(mgmt_ip)
         
+        # Special case for IP 10.240.0.10 - always use generate_boot_script
+        if mgmt_ip == '10.240.0.10' and not boot_type:
+            logger.info(f"Special case for IP {mgmt_ip} - using generate_boot_script")
+            # Create a default node configuration
+            default_node = {
+                'id': 999,
+                'node_name': f'nutanix-poc-bm-node-01',
+                'management_ip': mgmt_ip,
+                'nutanix_config': {
+                    'ahv_ip': '10.240.0.51',
+                    'cvm_ip': '10.240.0.101'
+                }
+            }
+            return self.generate_boot_script(default_node)
+        
         # Start monitoring for this IP address immediately, even before database lookup
         if mgmt_ip:
             try:
@@ -90,22 +105,6 @@ shell
         
         if not node:
             logger.warning(f"Server {mgmt_ip} not found in configuration database")
-            
-            # Special case for IP 10.240.0.10 - use generate_boot_script with a default node
-            if mgmt_ip == '10.240.0.10' and not boot_type:
-                logger.info(f"Using generate_boot_script for IP {mgmt_ip}")
-                # Create a default node configuration
-                default_node = {
-                    'id': 999,
-                    'node_name': f'default-node-{mgmt_ip}',
-                    'management_ip': mgmt_ip,
-                    'nutanix_config': {
-                        'ahv_ip': mgmt_ip,
-                        'cvm_ip': mgmt_ip
-                    }
-                }
-                return self.generate_boot_script(default_node)
-            
             return self.generate_error_boot_script(
                 f"Server {mgmt_ip} not found in configuration database"
             )
