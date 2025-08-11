@@ -22,21 +22,36 @@ class BootService:
     def handle_ipxe_boot(self, request_args):
         """Handle iPXE boot requests from provisioned servers"""
         mgmt_ip = request_args.get('mgmt_ip')
-        mgmt_mac = request_args.get('mgmt_mac')
-        workload_ip = request_args.get('workload_ip')
-        workload_mac = request_args.get('workload_mac')
-        server_serial = request_args.get('serial')
-        node_id = request_args.get('node_id')
         boot_type = request_args.get('type')
         
-        mac_info = f" (MAC: {mgmt_mac})" if mgmt_mac else ""
         type_info = f" (Type: {boot_type})" if boot_type else ""
-        logger.info(f"iPXE boot request from {mgmt_ip}{mac_info}{type_info}")
+        logger.info(f"iPXE boot request from {mgmt_ip}{type_info}")
         
         # Check if this is a default boot request
         if boot_type == 'default':
             logger.info(f"Generating default boot script for {mgmt_ip}")
-            return "kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 debug loglevel=7 rd.shell"
+            default_script = f"""#!ipxe
+echo ===============================================
+echo Nutanix CE Default Boot
+echo ===============================================
+echo Management IP: {mgmt_ip}
+echo ===============================================
+echo Starting Nutanix CE installer with default parameters...
+
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+ntp time.adn.networklayer.com
+
+kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 debug loglevel=7 rd.shell
+initrd ${{base-url}}/initrd-modified.img
+boot || goto error
+
+:error
+echo Boot failed - dropping to shell
+shell
+"""
+            return default_script
         
         # Check if this is an ISO boot request
         if boot_type == 'iso':
@@ -64,43 +79,43 @@ class BootService:
                 logger.error(f"Failed to lookup node by IP {mgmt_ip}: {str(e)}")
                 # Continue with normal flow, don't return error here
         
-        # Look up server in database by node_id (primary) or management IP (fallback)
-        if node_id:
-            # Convert node_id to integer if it's a string
-            try:
-                node_id_int = int(node_id)
-                node = self.db.get_node(node_id_int)
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid node_id format: {node_id}")
-                return self.generate_error_boot_script(
-                    f"Invalid node_id format: {node_id}"
-                )
-        elif mgmt_ip:
+        # Look up server in database by management IP
+        if mgmt_ip:
             node = self.db.get_node_by_management_ip(mgmt_ip)
         else:
-            logger.warning("No node_id or mgmt_ip provided in iPXE boot request")
+            logger.warning("No mgmt_ip provided in iPXE boot request")
             return self.generate_error_boot_script(
-                "No node_id or mgmt_ip provided in iPXE boot request"
+                "No mgmt_ip provided in iPXE boot request"
             )
         
         if not node:
-            if node_id:
-                logger.warning(f"Node {node_id} not found in configuration database")
-                return self.generate_error_boot_script(
-                    f"Node {node_id} not found in configuration database"
-                )
-            else:
-                logger.warning(f"Server {mgmt_ip} not found in configuration database")
-                return self.generate_error_boot_script(
-                    f"Server {mgmt_ip} not found in configuration database"
-                )
+            logger.warning(f"Server {mgmt_ip} not found in configuration database")
+            
+            # Special case for IP 10.240.0.10 - use generate_boot_script with a default node
+            if mgmt_ip == '10.240.0.10' and not boot_type:
+                logger.info(f"Using generate_boot_script for IP {mgmt_ip}")
+                # Create a default node configuration
+                default_node = {
+                    'id': 999,
+                    'node_name': f'default-node-{mgmt_ip}',
+                    'management_ip': mgmt_ip,
+                    'nutanix_config': {
+                        'ahv_ip': mgmt_ip,
+                        'cvm_ip': mgmt_ip
+                    }
+                }
+                return self.generate_boot_script(default_node)
+            
+            return self.generate_error_boot_script(
+                f"Server {mgmt_ip} not found in configuration database"
+            )
         
         # Update deployment status
         self.db.log_deployment_event(
             node['id'],
             'ipxe_boot',
             'in_progress',
-            f"iPXE boot initiated from node {node_id or node.get('management_ip', 'unknown')}"
+            f"iPXE boot initiated from node {node.get('management_ip', 'unknown')}"
         )
         
         # Start server status monitoring if not already running
