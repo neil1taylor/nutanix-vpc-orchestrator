@@ -531,29 +531,21 @@ setup_boot_files() {
         
         # Create a temporary file with the new function
         cat > /tmp/new_function.sh << 'EOF'
-find_squashfs_in_iso_ce ()
-{
-  # This function has been replaced to enable usage with IBM Cloud VPC Bare Metal Servers
-  # Download squashfs.img directly via HTTP
-  if [ -n "$LIVEFS_URL" ]; then
-    echo "Attempting to download squashfs.img from $LIVEFS_URL"
-    wget "$LIVEFS_URL" -t3 -T60 -O /root/squashfs.img
-    if [ $? -eq 0 -a -f /root/squashfs.img ]; then
-      echo "Successfully downloaded squashfs.img from HTTP"
-      # Verify MD5 if needed
-      md5sum /root/squashfs.img | grep $IMG_MD5SUM
-      if [ $? -eq 0 ]; then
-        return 0
-      else
-        echo "MD5 checksum mismatch, trying alternative methods"
-        rm -f /root/squashfs.img
-      fi
-    else
-      echo "HTTP download failed, trying to find Phoenix ISO device"
-    fi
-  fi
-}
-EOF
+        find_squashfs_in_iso_ce ()
+        {
+          # Ultra-simple network boot for IBM Cloud VPC
+          echo "Downloading squashfs.img from $LIVEFS_URL"
+          wget "$LIVEFS_URL" -O /root/squashfs.img
+          
+          if [ $? -eq 0 -a -f /root/squashfs.img ]; then
+            echo "squashfs.img downloaded successfully"
+            return 0
+          else
+            echo "Failed to download squashfs.img"
+            return 1
+          fi
+        }
+        EOF
 
         # Replace the function with our modified version
         sed -i "${START_LINE},${END_LINE}d" livecd.sh  # Delete the old function
@@ -608,6 +600,12 @@ EOF
         else
             log "Skipping file copy, kernel is already in /var/www/pxe/images "
         fi
+        if [[ ! -f "/var/www/pxe/images/initrd.img" ]]; then
+            log "Copying the original initrd to /var/www/pxe/images/initrd.img..."
+            cp /mnt/boot/initrd /var/www/pxe/images/initrd.img
+        else
+            log "Skipping file copy, initrd.img is already in /var/www/pxe/images "
+        fi
         if [[ ! -f "/var/www/pxe/images/nutanix-ce.iso" ]]; then
            log "Copying the file nutanix-ce.iso to /var/www/pxe/images..."
            cp /tmp/nutanix-ce.iso /var/www/pxe/images
@@ -659,11 +657,18 @@ EOF
         log "Kernel MD5: $KERNEL_MD5"
     fi
     
-    # Calculate MD5 for initrd
+    # Calculate MD5 for modified initrd
     if [[ -f "/var/www/pxe/images/initrd-modified.img" ]]; then
-        INITRD_MD5=$(md5sum /var/www/pxe/images/initrd-modified.img | cut -d ' ' -f 1)
-        echo "  \"initrd-modified.img\": \"$INITRD_MD5\"," >> "$CHECKSUMS_FILE"
-        log "Initrd MD5: $INITRD_MD5"
+        INITRD_MODIFIED_MD5=$(md5sum /var/www/pxe/images/initrd-modified.img | cut -d ' ' -f 1)
+        echo "  \"initrd-modified.img\": \"$INITRD_MODIFIED_MD5\"," >> "$CHECKSUMS_FILE"
+        log "Modified Initrd MD5: $INITRD_MODIFIED_MD5"
+    fi
+    
+    # Calculate MD5 for original initrd
+    if [[ -f "/var/www/pxe/images/initrd.img" ]]; then
+        INITRD_ORIGINAL_MD5=$(md5sum /var/www/pxe/images/initrd.img | cut -d ' ' -f 1)
+        echo "  \"initrd.img\": \"$INITRD_ORIGINAL_MD5\"," >> "$CHECKSUMS_FILE"
+        log "Original Initrd MD5: $INITRD_ORIGINAL_MD5"
     fi
     
     # Calculate MD5 for squashfs

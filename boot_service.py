@@ -33,6 +33,11 @@ class BootService:
         type_info = f" (Type: {boot_type})" if boot_type else ""
         logger.info(f"iPXE boot request from {mgmt_ip}{mac_info}{type_info}")
         
+        # Check if this is a default boot request
+        if boot_type == 'default':
+            logger.info(f"Generating default boot script for {mgmt_ip}")
+            return "kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 debug loglevel=7 rd.shell"
+        
         # Check if this is an ISO boot request
         if boot_type == 'iso':
             logger.info(f"Generating ISO boot script for {mgmt_ip}")
@@ -212,7 +217,7 @@ set pxe_server {Config.PXE_SERVER_DNS}
 # - kvm.ignore_msrs=1: Helps with VM compatibility
 # - LIVEFS_URL: Points to squashfs.img for HTTP download
 # - AZ_CONF_URL: Points to Arizona configuration for automation
-kernel ${{base-url}}/kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 PXEBOOT=true LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true
+kernel ${{base-url}}/kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 PXEBOOT=true debug loglevel=7 rd.shell LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true
 initrd ${{base-url}}/initrd-modified.img
 boot || goto error
 
@@ -431,29 +436,22 @@ sanboot ${{base-url}}/nutanix-ce.iso
                     hypervisor_iso_path = os.path.join(Config.BOOT_IMAGES_PATH, "AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso")
                     squashfs_path = os.path.join(Config.BOOT_IMAGES_PATH, "squashfs.img")
                     
-                    # Use file sizes instead of MD5 checksums for large files
+                    # Calculate MD5 checksums for all files
                     if os.path.exists(svm_installer_path):
-                        svm_size = os.path.getsize(svm_installer_path)
-                        svm_installer_md5 = f"size_{svm_size}"
-                        logger.info(f"Using file size for SVM installer: {svm_size} bytes")
+                        svm_installer_md5 = self.calculate_md5(svm_installer_path)
+                        logger.info(f"Calculated MD5 for SVM installer: {svm_installer_md5}")
                     else:
                         svm_installer_md5 = "file_not_found"
                     
                     if os.path.exists(hypervisor_iso_path):
-                        hyp_size = os.path.getsize(hypervisor_iso_path)
-                        hypervisor_iso_md5 = f"size_{hyp_size}"
-                        logger.info(f"Using file size for hypervisor ISO: {hyp_size} bytes")
+                        hypervisor_iso_md5 = self.calculate_md5(hypervisor_iso_path)
+                        logger.info(f"Calculated MD5 for hypervisor ISO: {hypervisor_iso_md5}")
                     else:
                         hypervisor_iso_md5 = "file_not_found"
                     
-                    # Only calculate MD5 for smaller files
                     if os.path.exists(squashfs_path):
-                        squashfs_size = os.path.getsize(squashfs_path)
-                        if squashfs_size < 104857600:  # 100MB
-                            squashfs_md5 = self.calculate_md5(squashfs_path)
-                        else:
-                            squashfs_md5 = f"size_{squashfs_size}"
-                            logger.info(f"Using file size for squashfs: {squashfs_size} bytes")
+                        squashfs_md5 = self.calculate_md5(squashfs_path)
+                        logger.info(f"Calculated MD5 for squashfs: {squashfs_md5}")
                     else:
                         squashfs_md5 = "file_not_found"
             except Exception as e:
@@ -502,9 +500,11 @@ sanboot ${{base-url}}/nutanix-ce.iso
                         'svm_netmask': netmask,
                         'svm_gateway': gateway,
                         'disk_layout': {
-                            'boot_disk': storage_config.get('boot_device', '/dev/sda'),
-                            'cvm_disk': storage_config.get('boot_device', '/dev/sda'),  # Use same disk for boot and CVM
-                            'storage_pool_disks': storage_config.get('data_drives', ['/dev/sdb'])
+                            # For NVMe-based servers, use /dev/nvme0n1 as boot and CVM disk
+                            'boot_disk': '/dev/nvme0n1' if 'nvme' in str(storage_config.get('data_drives', [])) else storage_config.get('boot_device', '/dev/sda'),
+                            'cvm_disk': '/dev/nvme0n1' if 'nvme' in str(storage_config.get('data_drives', [])) else storage_config.get('boot_device', '/dev/sda'),
+                            # Add /dev/ prefix to all data drives if not already present
+                            'storage_pool_disks': [f"/dev/{drive}" if not drive.startswith('/dev/') else drive for drive in storage_config.get('data_drives', ['/dev/sdb'])]
                         }
                     }
                 ],

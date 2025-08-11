@@ -254,7 +254,9 @@ def api_serve_boot_image(filename):
         if filename == 'kernel':
             logger.info(f"Client {client_ip} is downloading kernel file")
         elif filename == 'initrd-modified.img':
-            logger.info(f"Client {client_ip} is downloading initrd file")
+            logger.info(f"Client {client_ip} is downloading modified initrd file")
+        elif filename == 'initrd.img':
+            logger.info(f"Client {client_ip} is downloading original initrd file")
         else:
             logger.info(f"Client {client_ip} is downloading {filename}")
             
@@ -265,11 +267,11 @@ def api_serve_boot_image(filename):
         allowed_files = [
             'kernel',
             'initrd-modified.img',
+            'initrd.img',  # Original initrd file
             'nutanix-ce.iso',
             'squashfs.img',
             'nutanix_installer_package.tar.gz',
             'AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso'
-
         ]
         
         if filename not in allowed_files:
