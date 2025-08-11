@@ -21,7 +21,13 @@ class BootService:
     
     def handle_ipxe_boot(self, request_args):
         """Handle iPXE boot requests from provisioned servers"""
-        mgmt_ip = request_args.get('mgmt_ip')
+        # Get management IP and clean it up
+        mgmt_ip = request_args.get('mgmt_ip', '')
+        if '@' in mgmt_ip:
+            # Handle case where @ is used instead of & in URL
+            logger.warning(f"Found @ in IP: {mgmt_ip}, cleaning up")
+            mgmt_ip = mgmt_ip.split('@')[0]
+            
         boot_type = request_args.get('type')
         
         type_info = f" (Type: {boot_type})" if boot_type else ""
