@@ -30,28 +30,8 @@ class BootService:
         # Check if this is a default boot request
         if boot_type == 'default':
             logger.info(f"Generating default boot script for {mgmt_ip}")
-            default_script = f"""#!ipxe
-echo ===============================================
-echo Nutanix CE Default Boot
-echo ===============================================
-echo Management IP: {mgmt_ip}
-echo ===============================================
-echo Starting Nutanix CE installer with default parameters...
-
-:retry_dhcp
-dhcp || goto retry_dhcp
-sleep 2
-ntp time.adn.networklayer.com
-
-kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 debug loglevel=7 rd.shell
-initrd ${{base-url}}/initrd-modified.img
-boot || goto error
-
-:error
-echo Boot failed - dropping to shell
-shell
-"""
-            return default_script
+            # Create a simple response with just the kernel parameters
+            return "kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 debug loglevel=7 rd.shell"
         
         # Check if this is an ISO boot request
         if boot_type == 'iso':
