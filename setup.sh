@@ -531,21 +531,22 @@ setup_boot_files() {
         
         # Create a temporary file with the new function
         cat > /tmp/new_function.sh << 'EOF'
-        find_squashfs_in_iso_ce ()
-        {
-          # Ultra-simple network boot for IBM Cloud VPC
-          echo "Downloading squashfs.img from $LIVEFS_URL"
-          wget "$LIVEFS_URL" -O /root/squashfs.img
-          
-          if [ $? -eq 0 -a -f /root/squashfs.img ]; then
-            echo "squashfs.img downloaded successfully"
-            return 0
-          else
-            echo "Failed to download squashfs.img"
-            return 1
-          fi
-        }
-        EOF
+find_squashfs_in_iso_ce ()
+{
+  # This function has been replaced to enable usage with IBM Cloud VPC Bare Metal Servers
+  # Ultra-simple network boot for IBM Cloud VPC
+  echo "Downloading squashfs.img from $LIVEFS_URL"
+  wget "$LIVEFS_URL" -O /root/squashfs.img
+  
+  if [ $? -eq 0 -a -f /root/squashfs.img ]; then
+    echo "squashfs.img downloaded successfully"
+    return 0
+  else
+    echo "Failed to download squashfs.img"
+    return 1
+  fi
+}
+EOF
 
         # Replace the function with our modified version
         sed -i "${START_LINE},${END_LINE}d" livecd.sh  # Delete the old function
