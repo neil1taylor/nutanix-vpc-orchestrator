@@ -36,8 +36,7 @@ class BootService:
         # Check if this is a default boot request
         if boot_type == 'default':
             logger.info(f"Generating default boot script for {mgmt_ip}")
-            # Create a simple response with just the kernel parameters
-            return "kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 debug loglevel=7 rd.shell"
+            return self.generate_default_boot_script(mgmt_ip)
         
         # Check if this is an ISO boot request
         if boot_type == 'iso':
@@ -301,6 +300,66 @@ sanboot ${{base-url}}/nutanix-ce.iso
         for line in template.splitlines():
             logger.info(f"ISO BOOT: {line}")
         logger.info("--- END ISO BOOT SCRIPT ---")
+        
+        return template
+
+    def generate_default_boot_script(self, management_ip):
+        """Generate iPXE boot script for default booting"""
+        # Try to get node information if available
+        node = self.db.get_node_by_management_ip(management_ip)
+        node_name = node['node_name'] if node else f"Unknown-{management_ip}"
+        
+        # Log ISO boot request
+        logger.info(f"Generating default boot script for {node_name} ({management_ip})")
+        
+        # If we have a node, log the deployment event
+        if node:
+            self.db.log_deployment_event(
+                node['id'],
+                'default_boot',
+                'in_progress',
+                f"Default boot initiated for {node_name} ({management_ip})"
+            )
+            
+            # Start server status monitoring if not already running
+            try:
+                from node_provisioner import NodeProvisioner
+                node_provisioner = NodeProvisioner()
+                logger.info(f"Starting server status monitoring for node {node['id']} from default boot request")
+                node_provisioner.start_deployment_monitoring(node['id'])
+            except Exception as e:
+                logger.error(f"Failed to start monitoring from default boot request: {str(e)}")
+                # Log full traceback for debugging
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+        
+        # Generate the ISO boot script
+        template = f"""#!ipxe
+echo ===============================================
+echo Nutanix CE Node Creation - Default
+echo ===============================================
+echo Starting Nutanix CE installer...
+
+:retry_dhcp
+dhcp || goto retry_dhcp
+sleep 2
+ntp time.adn.networklayer.com
+
+kernel ${{base-url}}/kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 debug loglevel=7 rd.shell
+initrd ${{base-url}}/initrd-modified.img
+boot || goto error
+
+:error
+echo Boot failed - dropping to shell
+shell
+"""
+        
+        # Log the boot script content with a clear separator for better readability
+        logger.info(f"Generated default boot script for {management_ip}:")
+        logger.info("--- BEGIN DEFAULT BOOT SCRIPT ---")
+        for line in template.splitlines():
+            logger.info(f"DEFAULT BOOT: {line}")
+        logger.info("--- END DEFAULT BOOT SCRIPT ---")
         
         return template
     
