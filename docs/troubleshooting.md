@@ -40,6 +40,14 @@ cat /var/log/nutanix-pxe/pxe-server.log
 
 1. Monitor the install in the console
 
+
+Tests:
+
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10"
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10&type=default"
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10&type=iso"
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config"
+
 ## iPXE URL for bare metal server
 
 `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10`

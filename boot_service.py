@@ -344,9 +344,10 @@ echo Starting Nutanix CE installer...
 dhcp || goto retry_dhcp
 sleep 2
 ntp time.adn.networklayer.com
+set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
 
 kernel ${{base-url}}/kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 debug loglevel=7 rd.shell
-initrd ${{base-url}}/initrd-modified.img
+initrd ${{base-url}}/initrd.img
 boot || goto error
 
 :error
