@@ -257,6 +257,8 @@ def api_serve_boot_image(filename):
             logger.info(f"Client {client_ip} is downloading modified initrd file")
         elif filename == 'initrd.img':
             logger.info(f"Client {client_ip} is downloading original initrd file")
+        elif filename == 'initrd-debug.img':
+            logger.info(f"Client {client_ip} is downloading debug initrd file")
         else:
             logger.info(f"Client {client_ip} is downloading {filename}")
             
@@ -266,6 +268,7 @@ def api_serve_boot_image(filename):
         # Security check - only allow approved files
         allowed_files = [
             'kernel',
+            'initrd-debug.img',
             'initrd-modified.img',
             'initrd.img',  # Original initrd file
             'nutanix-ce.iso',
