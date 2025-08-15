@@ -346,7 +346,7 @@ setup_system() {
         python3 python3-pip python3-venv \
         postgresql postgresql-contrib jq \
         nginx git curl wget unzip gzip \
-        bc netstat-nat openssl sshpass gunicorn
+        bc netstat-nat openssl sshpass
 }
 
 setup_ssl() {
