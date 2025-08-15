@@ -258,6 +258,53 @@ shell
                     return int(float(size_str[:-2]) * 1024)
                 return 0 # Default to 0 if format is unexpected
 
+            # Get network information from VPC SDK
+            try:
+                # Get the management subnet ID from the node configuration
+                management_subnet_id = Config.MANAGEMENT_SUBNET_ID
+                
+                # Get network information from VPC SDK
+                from ibm_cloud_client import IBMCloudClient
+                ibm_cloud = IBMCloudClient()
+                
+                # Get subnet information
+                subnet_info = ibm_cloud.get_subnet_info(management_subnet_id)
+                logger.info(f"Retrieved subnet info for {management_subnet_id}")
+                
+                # Get gateway address
+                gateway = ibm_cloud.get_subnet_gateway(management_subnet_id)
+                logger.info(f"Retrieved gateway for subnet {management_subnet_id}: {gateway}")
+                
+                # Get netmask
+                netmask = ibm_cloud.get_subnet_netmask(management_subnet_id)
+                logger.info(f"Retrieved netmask for subnet {management_subnet_id}: {netmask}")
+                
+                # Get DNS servers
+                dns_servers = ibm_cloud.get_vpc_dns_servers(Config.VPC_ID)
+                # Join all DNS servers with commas for the NAMESERVER parameter
+                dns_server_list = ','.join(dns_servers) if dns_servers else '8.8.8.8'
+                logger.info(f"Retrieved DNS servers for VPC {Config.VPC_ID}: {dns_servers}, using {dns_server_list}")
+                
+                # Store network information
+                network_info = {
+                    'ip': str(node['management_ip']),
+                    'netmask': netmask,
+                    'gateway': gateway,
+                    'dns': dns_server_list,
+                    'mac': ''  # We don't have the MAC address from the SDK
+                }
+                logger.info(f"Network info prepared: {network_info}")
+            except Exception as e:
+                logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
+                # Use default values if VPC SDK fails
+                network_info = {
+                    'ip': str(node['management_ip']),
+                    'netmask': '255.255.0.0',
+                    'gateway': '',
+                    'dns': '8.8.8.8,9.9.9.9',  # Use multiple DNS servers by default
+                    'mac': ''
+                }
+            
             # Get storage configuration for installer
             storage_config = self.storage_config_for_installer(node)
             
@@ -425,33 +472,13 @@ shell
             server_profiles = ServerProfileConfig()
             storage_config = server_profiles.get_storage_config(profile)
             
-            # Extract drive information from profile config
-            profile_config = server_profiles.get_profile_config(profile)
-            
-            # Determine if we're using NVMe or SATA drives
-            is_nvme = 'nvme' in storage_config.get('boot_device', '')
-            
-            # Prepare boot device model based on drive type
-            if is_nvme:
-                boot_device_model = "NVMe SSD"
-            else:
-                boot_device_model = "SATA SSD"
-                
-            # Format data drives with /dev/ prefix if not already present
-            data_drives = []
-            for drive in storage_config.get('data_drives', []):
-                if not drive.startswith('/dev/'):
-                    data_drives.append(f"/dev/{drive}")
-                else:
-                    data_drives.append(drive)
-            
             # Create storage configuration for installer
             installer_storage_config = {
                 'boot_device': storage_config.get('boot_device'),
-                'boot_device_model': boot_device_model,
-                'boot_drive_size': profile_config.get('boot_drive_size'),
-                'data_drives': data_drives,
-                'hypervisor_device': storage_config.get('hypervisor_device')
+                'boot_device_model': storage_config.get('boot_device_model'),
+                'boot_drive_size': storage_config.get('boot_drive_size'),
+                'data_drives': storage_config.get('data_drives'),
+                'hypervisor_device': storage_config.get('boot_device')
             }
             
             return installer_storage_config

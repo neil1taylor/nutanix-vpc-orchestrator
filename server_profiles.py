@@ -17,6 +17,7 @@ class ServerProfileConfig:
             'memory_gb': 96,
             'boot_drives': ['nvme0n1'],  # RAID1 SATA M.2 drives
             'boot_drive_size': '960GB',
+            'boot_device_model': 'Micron_7450_PRO',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1', 'nvme8n1'],
             'data_drive_size': '3.2TB',
             'data_drive_count': 8,
@@ -30,6 +31,7 @@ class ServerProfileConfig:
             'memory_gb': 192,
             'boot_drives': ['nvme0n1'],
             'boot_drive_size': '960GB',
+            'boot_device_model': 'Micron_7450_PRO',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1', 'nvme8n1'],
             'data_drive_size': '3.2TB',
             'data_drive_count': 8,
@@ -43,6 +45,7 @@ class ServerProfileConfig:
             'memory_gb': 384,
             'boot_drives': ['nvme0n1'],
             'boot_drive_size': '960GB',
+            'boot_device_model': 'Micron_7450_PRO',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1', 'nvme8n1'],
             'data_drive_size': '3.2TB',
             'data_drive_count': 8,
@@ -57,10 +60,11 @@ class ServerProfileConfig:
             'cpu_cores': 24,
             'memory_gb': 128,
             'boot_drives': ['nvme0n1'],
-            'boot_drive_size': '960GB',
+            'boot_drive_size': '480GB',
+            'boot_device_model': 'Micron_7450_MTFD',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
-            'data_drive_size': '3.2TB',
-            'data_drive_count': 8,
+            'data_drive_size': '7.68TB',
+            'data_drive_count': 4,
             'network_interfaces': ['eth0', 'eth1'],
             'recommended_cluster_role': 'compute-storage',
             'generation': 'gen3'
@@ -70,10 +74,11 @@ class ServerProfileConfig:
             'cpu_cores': 32,
             'memory_gb': 128,
             'boot_drives': ['nvme0n1'],
-            'boot_drive_size': '960GB',
-            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1', 'nvme8n1'],
-            'data_drive_size': '3.2TB',
-            'data_drive_count': 8,
+            'boot_drive_size': '480GB',
+            'boot_device_model': 'Micron_7450_MTFD',
+            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
+            'data_drive_size': '7.68TB',
+            'data_drive_count': 4,
             'network_interfaces': ['eth0', 'eth1'],
             'recommended_cluster_role': 'compute-storage',
             'generation': 'gen3'
@@ -85,10 +90,11 @@ class ServerProfileConfig:
             'cpu_cores': 24,
             'memory_gb': 256,
             'boot_drives': ['nvme0n1'],
-            'boot_drive_size': '960GB',
-            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1'],
-            'data_drive_size': '3.2TB',
-            'data_drive_count': 8,
+            'boot_drive_size': '480GB',
+            'boot_device_model': 'Micron_7450_MTFD',
+            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
+            'data_drive_size': '7.68TB',
+            'data_drive_count': 4,
             'network_interfaces': ['eth0', 'eth1'],
             'recommended_cluster_role': 'compute-storage',
             'generation': 'gen3'
@@ -98,10 +104,11 @@ class ServerProfileConfig:
             'cpu_cores': 32,
             'memory_gb': 256,
             'boot_drives': ['nvme0n1'],
-            'boot_drive_size': '960GB',
-            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1', 'nvme8n1'],
-            'data_drive_size': '3.2TB',
-            'data_drive_count': 8,
+            'boot_drive_size': '480GB',
+            'boot_device_model': 'Micron_7450_MTFD',
+            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
+            'data_drive_size': '7.68TB',
+            'data_drive_count': 4,
             'network_interfaces': ['eth0', 'eth1'],
             'recommended_cluster_role': 'compute-storage',
             'generation': 'gen3'
@@ -113,9 +120,10 @@ class ServerProfileConfig:
             'cpu_cores': 8,
             'memory_gb': 128,
             'boot_drives': ['nvme0n1'],
-            'boot_drive_size': '960GB',
-            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1'],  # Fewer drives for memory-optimized
-            'data_drive_size': '3.2TB',
+            'boot_drive_size': '480GB',
+            'boot_device_model': 'Micron_7450_MTFD',
+            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],  # Memory-optimized
+            'data_drive_size': '7.68TB',
             'data_drive_count': 4,
             'network_interfaces': ['eth0', 'eth1'],
             'recommended_cluster_role': 'storage',  # Good for storage-heavy workloads
@@ -128,41 +136,14 @@ class ServerProfileConfig:
             'cpu_cores': 8,
             'memory_gb': 256,
             'boot_drives': ['nvme0n1'],
-            'boot_drive_size': '960GB',
-            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1'],
-            'data_drive_size': '3.2TB',
+            'boot_drive_size': '480GB',
+            'boot_device_model': 'Micron_7450_MTFD',
+            'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
+            'data_drive_size': '7.68TB',
             'data_drive_count': 4,
             'network_interfaces': ['eth0', 'eth1'],
             'recommended_cluster_role': 'storage',
             'generation': 'gen3'
-        }
-    }
-    
-    # Storage configuration templates based on use case
-    STORAGE_TEMPLATES = {
-        'nutanix_default': {
-            'description': 'Default Nutanix configuration - all NVMe drives for storage pool',
-            'boot_device': '/dev/sda',           # First boot drive
-            'hypervisor_device': '/dev/sda',     # AHV shares boot device
-            'cvm_device': '/dev/sda',            # CVM shares boot device
-            'exclude_drives': 0,                 # Use all available data drives
-            'raid_config': 'nutanix_managed'     # Let Nutanix handle RAID
-        },
-        'nutanix_reserved': {
-            'description': 'Reserve last drive for future expansion',
-            'boot_device': '/dev/sda',
-            'hypervisor_device': '/dev/sda', 
-            'cvm_device': '/dev/sda',
-            'exclude_drives': 1,                 # Reserve last drive
-            'raid_config': 'nutanix_managed'
-        },
-        'nutanix_performance': {
-            'description': 'Optimize for performance - use subset of fastest drives',
-            'boot_device': '/dev/sda',
-            'hypervisor_device': '/dev/sda',
-            'cvm_device': '/dev/sda', 
-            'exclude_drives': 2,                 # Use 6 of 8 drives for better performance
-            'raid_config': 'nutanix_managed'
         }
     }
     
@@ -172,43 +153,32 @@ class ServerProfileConfig:
         return cls.SERVER_PROFILES.get(server_profile)
     
     @classmethod
-    def get_storage_config(cls, server_profile, template='nutanix_default'):
+    def get_storage_config(cls, server_profile):
         """
         Generate storage configuration for a server profile
         
         Args:
             server_profile: IBM Cloud server profile name
-            template: Storage template to use
             
         Returns:
             Dict with storage configuration
         """
         profile_config = cls.get_profile_config(server_profile)
-        storage_template = cls.STORAGE_TEMPLATES.get(template, cls.STORAGE_TEMPLATES['nutanix_default'])
         
         if not profile_config:
             raise ValueError(f"Unknown server profile: {server_profile}")
         
-        # Calculate which drives to use
-        available_drives = profile_config['data_drives']
-        exclude_count = storage_template['exclude_drives']
-        data_drives = available_drives[:-exclude_count] if exclude_count > 0 else available_drives
-        
         return {
             'server_profile': server_profile,
-            'template': template,
-            'boot_device': storage_template['boot_device'],
-            'hypervisor_device': storage_template['hypervisor_device'],
-            'cvm_device': storage_template['cvm_device'],
-            'data_drives': data_drives,
-            'total_drives': len(available_drives),
-            'drives_used': len(data_drives),
-            'drives_reserved': exclude_count,
-            'raid_config': storage_template['raid_config'],
+            'data_drives': profile_config['data_drives'],
+            'boot_drives': profile_config['boot_drives'],
+            'boot_drive_size': profile_config['boot_drive_size'],
+            'boot_device_model': profile_config['boot_device_model'],
             'drive_info': {
-                'boot_drive_size': profile_config['boot_drive_size'],
+                'total_drives': len(profile_config['data_drives']),
+                'drives_reserved': exclude_drives,
                 'data_drive_size': profile_config['data_drive_size'],
-                'total_storage_capacity': f"{len(data_drives) * 3.2:.1f}TB"
+                'total_storage_capacity': cls._calculate_total_capacity(data_drives, profile_config['data_drive_size'])
             }
         }
     
@@ -228,7 +198,7 @@ class ServerProfileConfig:
                 'display_name': config['display_name'],
                 'cpu_cores': config['cpu_cores'],
                 'memory_gb': config['memory_gb'],
-                'storage_capacity': f"{config['data_drive_count'] * 3.2:.1f}TB",
+                'storage_capacity': cls._calculate_total_capacity(config['data_drives'], config['data_drive_size']),
                 'recommended_role': config['recommended_cluster_role'],
                 'generation': config['generation']
             })
@@ -258,7 +228,7 @@ class ServerProfileConfig:
                 'boot_capacity': config['boot_drive_size'],
                 'data_drives': len(config['data_drives']),
                 'data_capacity_per_drive': config['data_drive_size'],
-                'total_data_capacity': f"{len(config['data_drives']) * 3.2:.1f}TB"
+                'total_data_capacity': cls._calculate_total_capacity(config['data_drives'], config['data_drive_size'])
             },
             'networking': {
                 'interfaces': len(config['network_interfaces'])
@@ -286,3 +256,10 @@ class ServerProfileConfig:
             suitability.append('Nutanix HCI clusters')
         
         return suitability if suitability else ['General purpose workloads']
+    
+    @classmethod
+    def _calculate_total_capacity(cls, drives, drive_size):
+        """Calculate total storage capacity based on drive count and size"""
+        # Extract numeric value from drive size string (e.g., '7.68TB' -> 7.68)
+        size_value = float(drive_size.replace('TB', ''))
+        return f"{len(drives) * size_value:.1f}TB"
