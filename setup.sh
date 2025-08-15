@@ -564,7 +564,7 @@ setup_boot_files() {
     
     cd "$INITRD_TMP_DIR"
 
-    build_initrd-vpc()
+    build_initrd-vpc
     
     cd /tmp
 
