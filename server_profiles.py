@@ -173,15 +173,14 @@ class ServerProfileConfig:
         
         return {
             'server_profile': server_profile,
-            'boot_device': '/dev/sda',
-            'hypervisor_device': '/dev/sda',
-            'cvm_device': '/dev/sda',
+            'boot_device': profile_config['boot_drives'],
+            'hypervisor_device': profile_config['boot_drives'],
+            'cvm_device': profile_config['boot_drives'],
             'data_drives': data_drives,
             'boot_drives': profile_config['boot_drives'],
             'boot_drive_size': profile_config['boot_drive_size'],
             'boot_device_model': profile_config['boot_device_model'],
             'total_drives': len(data_drives),
-            'raid_config': 'nutanix_managed',
             'drive_info': {
                 'boot_drive_size': profile_config['boot_drive_size'],
                 'data_drive_size': profile_config['data_drive_size'],
