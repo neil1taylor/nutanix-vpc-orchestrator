@@ -37,15 +37,90 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"
 }
 
+build_initrd-vpc() {
+    local work_dir="/tmp/nutanix-build-$(date +%s)"
+    local output_dir="/var/www/pxe/images"
+    
+    log "Building initrd-vpc..."
+    
+    # Create working directory
+    mkdir -p "$work_dir"
+    cd "$work_dir"
+    
+    # Extract original initrd
+    log "Extracting original initrd..."
+    gunzip -c "$output_dir/initrd.img" | cpio -i -d -H newc --no-absolute-filenames
+    
+    # Find and add ionic driver
+    log "Locating ionic driver..."
+    local ionic_driver=""
+    for path in \
+        "/lib/modules/$(uname -r)/kernel/drivers/net/ethernet/pensando/ionic/ionic.ko" \
+        "/lib/modules/$(uname -r)/extra/ionic.ko" \
+        "/lib/modules/$(uname -r)/updates/ionic.ko"; do
+        if [ -f "$path" ]; then
+            ionic_driver="$path"
+            break
+        fi
+    done
+    
+    if [ -z "$ionic_driver" ]; then
+        log "ERROR: Ionic driver not found on host system"
+        exit 1
+    fi
+    
+    log "Found ionic driver: $ionic_driver"
+    
+    # Add ionic driver to initrd
+    local kernel_ver=$(uname -r)
+    mkdir -p "./lib/modules/$kernel_ver/kernel/drivers/net/ethernet/pensando/ionic"
+    cp "$ionic_driver" "./lib/modules/$kernel_ver/kernel/drivers/net/ethernet/pensando/ionic/"
+    
+    # Update modules.dep
+    echo "kernel/drivers/net/ethernet/pensando/ionic/ionic.ko:" >> "./lib/modules/$kernel_ver/modules.dep"
+    
+    # Copy the vpc_init script to the $work_dir
+    log "Copying vpc_init script..."
+    cp $PROJECT_DIR/vpc_init vpc_init
+    chmod +x vpc_init
+
+    # Copy the vpc_ce_installation.py script to the $work_dir
+    log "Copying automated_installation script.py script..."
+    cp $PROJECT_DIR/vpc_ce_installation.py phoenix/vpc_ce_installation.py
+    chmod +x phoenix/vpc_ce_installation.py
+
+    # Repack initrd
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_file="$output_dir/initrd-ionic-$timestamp.img"
+    
+    log "Repacking initrd..."
+    find . | cpio -o -H newc | gzip > "$output_file"
+    
+    # Create symlink
+    cd "$output_dir"
+    ln -sf "initrd-ionic-$timestamp.img" "initrd-ionic.img"
+    
+    # Verify integrity
+    if gzip -t "$output_file"; then
+        log "Ionic-enabled initrd created successfully: $(basename "$output_file")"
+    else
+        log "ERROR: Failed to create valid initrd"
+        exit 1
+    fi
+    
+    # Cleanup
+    rm -rf "$work_dir"
+}
+
 test_result() {
     local test_name="$1" result="$2" message="$3" duration="${4:-0}"
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
     
     case "$result" in
-        "PASS") echo -e "${GREEN}✓ PASS${NC} $test_name (${duration}s): $message" ;;
-        "FAIL") echo -e "${RED}✗ FAIL${NC} $test_name (${duration}s): $message"; FAILED_TESTS=$((FAILED_TESTS + 1)) ;;
-        "WARN") echo -e "${YELLOW}⚠ WARN${NC} $test_name (${duration}s): $message" ;;
-        *) echo -e "${BLUE}ℹ INFO${NC} $test_name (${duration}s): $message" ;;
+        "PASS") echo -e "${GREEN}PASS${NC} $test_name (${duration}s): $message" ;;
+        "FAIL") echo -e "${RED}FAIL${NC} $test_name (${duration}s): $message"; FAILED_TESTS=$((FAILED_TESTS + 1)) ;;
+        "WARN") echo -e "${YELLOW}WARN${NC} $test_name (${duration}s): $message" ;;
+        *) echo -e "${BLUE}INFO${NC} $test_name (${duration}s): $message" ;;
     esac | tee -a "${TEST_LOG}"
 }
 

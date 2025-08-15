@@ -28,21 +28,9 @@ class BootService:
             logger.warning(f"Found @ in IP: {mgmt_ip}, cleaning up")
             mgmt_ip = mgmt_ip.split('@')[0]
             
-        boot_type = request_args.get('type')
-        
-        type_info = f" (Type: {boot_type})" if boot_type else ""
-        logger.info(f"iPXE boot request from {mgmt_ip}{type_info}")
-        
-        # Check if this is a default boot request
-        if boot_type == 'default':
-            logger.info(f"Generating default boot script for {mgmt_ip}")
-            return self.generate_default_boot_script(mgmt_ip)
-        
-        # Check if this is an ISO boot request
-        if boot_type == 'iso':
-            logger.info(f"Generating ISO boot script for {mgmt_ip}")
-            return self.generate_iso_boot_script(mgmt_ip)
-        
+        # Removed boot_type check and calls to generate_iso_boot_script and generate_default_boot_script
+        # All requests will now use the general generate_boot_script
+
         # Start monitoring for this IP address immediately, even before database lookup
         if mgmt_ip:
             try:
@@ -69,12 +57,14 @@ class BootService:
             node = self.db.get_node_by_management_ip(mgmt_ip)
         else:
             logger.warning("No mgmt_ip provided in iPXE boot request")
+            # Use generate_error_boot_script as a fallback if mgmt_ip is missing
             return self.generate_error_boot_script(
                 "No mgmt_ip provided in iPXE boot request"
             )
         
         if not node:
             logger.warning(f"Server {mgmt_ip} not found in configuration database")
+            # Use generate_error_boot_script if node is not found
             return self.generate_error_boot_script(
                 f"Server {mgmt_ip} not found in configuration database"
             )
@@ -166,51 +156,39 @@ class BootService:
         
         # Define URLs for boot files
         base_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/images"
-        squashfs_url = f"{base_url}/squashfs.img"
-        arizona_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/server/{network_info['ip']}"
         
-        # kernel ${{base-url}}/kernel init=/installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 PXEBOOT=true FOUND_IP={self.config.PXE_SERVER_IP} LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true
-
-
         template = f"""#!ipxe
 echo ===============================================
-echo Nutanix CE Automated Deployment
+echo Nutanix CE Direct Installation
+echo IBM Cloud VPC + Ionic Driver
 echo ===============================================
 echo Node ID: {node['node_name']}
 echo Management IP: {node['management_ip']}
 echo AHV IP: {node['nutanix_config']['ahv_ip']}
 echo CVM IP: {node['nutanix_config']['cvm_ip']}
 echo ===============================================
-echo Starting Nutanix CE installer...
 
 :retry_dhcp
 dhcp || goto retry_dhcp
 sleep 2
-ntp time.adn.networklayer.com
-set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
-set pxe_server {Config.PXE_SERVER_DNS}
 
-# Boot CE installer with parameters for HTTP-based installation
-# This implements the two-stage approach:
-# 1. Minimal kernel parameters for boot with LIVEFS_URL for HTTP download
-# 2. Full JSON configuration retrieved via AZ_CONF_URL
-#
-# Kernel parameters optimized for NVMe-based bare metal server:
-# - intel_iommu=on, iommu=pt: Essential for device passthrough
-# - kvm-intel.ept=1: Improves virtualization performance
-# - kvm.ignore_msrs=1: Helps with VM compatibility
-# - LIVEFS_URL: Points to squashfs.img for HTTP download
-# - AZ_CONF_URL: Points to Arizona configuration for automation
-kernel ${{base-url}}/kernel init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs console=tty0 console=ttyS0,115200 PXEBOOT=true debug loglevel=7 rd.shell LIVEFS_URL={squashfs_url} AZ_CONF_URL={arizona_url} PHOENIX_IP={node['management_ip']} MASK={network_info['netmask']} GATEWAY={network_info['gateway']} NAMESERVER={network_info['dns']} ce_eula_accepted=true ce_eula_viewed=true
-initrd ${{base-url}}/initrd-modified.img
+# Set PXE server URL
+set base-url http://{Config.PXE_SERVER_DNS}:8080
+
+# Direct kernel boot with optimized parameters
+kernel ${{base-url}}/boot/images/kernel init=/vpc_init config_server=${{base-url}} console=tty1 console=ttyS1,115200n8 intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 IMG=squashfs PXEBOOT=true LIVEFS_URL=${{base-url}}/squashfs.img AUTOMATED_INSTALL=true
+
+# Use VPC initrd
+initrd ${{base-url}}/boot/images/initrd-vpc.img
+
 boot || goto error
 
 :error
-echo Boot failed - dropping to shell
+echo Boot failed
 shell
 """
         # Log the generated boot script for debugging
-        logger.info("Generated iPXE boot script with HTTP-based squashfs download")
+        logger.info("Generated iPXE boot script for VPC with Ionic driver")
         return template
     
     def generate_error_boot_script(self, error_message):
@@ -231,123 +209,9 @@ shell
 """
         return template
         
-    def generate_iso_boot_script(self, management_ip):
-        """Generate iPXE boot script for ISO booting"""
-        # Try to get node information if available
-        node = self.db.get_node_by_management_ip(management_ip)
-        node_name = node['node_name'] if node else f"Unknown-{management_ip}"
-        
-        # Log ISO boot request
-        logger.info(f"Generating ISO boot script for {node_name} ({management_ip})")
-        
-        # If we have a node, log the deployment event
-        if node:
-            self.db.log_deployment_event(
-                node['id'],
-                'iso_boot',
-                'in_progress',
-                f"ISO boot initiated for {node_name} ({management_ip})"
-            )
-            
-            # Start server status monitoring if not already running
-            try:
-                from node_provisioner import NodeProvisioner
-                node_provisioner = NodeProvisioner()
-                logger.info(f"Starting server status monitoring for node {node['id']} from ISO boot request")
-                node_provisioner.start_deployment_monitoring(node['id'])
-            except Exception as e:
-                logger.error(f"Failed to start monitoring from ISO boot request: {str(e)}")
-                # Log full traceback for debugging
-                import traceback
-                logger.error(f"Full traceback: {traceback.format_exc()}")
-        
-        # Generate the ISO boot script
-        template = f"""#!ipxe
-echo ===============================================
-echo Nutanix CE Node Creation
-echo ===============================================
-echo Node ID: {node_name}
-echo Management IP: {management_ip}
-echo ===============================================
-echo Starting Nutanix CE installer...
+# Removed generate_iso_boot_script method
 
-:retry_dhcp
-dhcp || goto retry_dhcp
-sleep 2
-ntp time.adn.networklayer.com
-set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
-sanboot ${{base-url}}/nutanix-ce.iso
-"""
-        
-        # Log the boot script content with a clear separator for better readability
-        logger.info(f"Generated ISO boot script for {management_ip}:")
-        logger.info("--- BEGIN ISO BOOT SCRIPT ---")
-        for line in template.splitlines():
-            logger.info(f"ISO BOOT: {line}")
-        logger.info("--- END ISO BOOT SCRIPT ---")
-        
-        return template
-
-    def generate_default_boot_script(self, management_ip):
-        """Generate iPXE boot script for default booting"""
-        # Try to get node information if available
-        node = self.db.get_node_by_management_ip(management_ip)
-        node_name = node['node_name'] if node else f"Unknown-{management_ip}"
-        
-        # Log ISO boot request
-        logger.info(f"Generating default boot script for {node_name} ({management_ip})")
-        
-        # If we have a node, log the deployment event
-        if node:
-            self.db.log_deployment_event(
-                node['id'],
-                'default_boot',
-                'in_progress',
-                f"Default boot initiated for {node_name} ({management_ip})"
-            )
-            
-            # Start server status monitoring if not already running
-            try:
-                from node_provisioner import NodeProvisioner
-                node_provisioner = NodeProvisioner()
-                logger.info(f"Starting server status monitoring for node {node['id']} from default boot request")
-                node_provisioner.start_deployment_monitoring(node['id'])
-            except Exception as e:
-                logger.error(f"Failed to start monitoring from default boot request: {str(e)}")
-                # Log full traceback for debugging
-                import traceback
-                logger.error(f"Full traceback: {traceback.format_exc()}")
-        
-        # Generate the ISO boot script
-        template = f"""#!ipxe
-echo ===============================================
-echo Nutanix CE Node Creation - Default
-echo ===============================================
-echo Starting Nutanix CE installer...
-
-:retry_dhcp
-dhcp || goto retry_dhcp
-sleep 2
-ntp time.adn.networklayer.com
-set base-url http://{Config.PXE_SERVER_DNS}:8080/boot/images
-
-kernel ${{base-url}}/kernel init=/bin/sh console=tty1 console=ttyS1,115200n8
-initrd ${{base-url}}/initrd-debug.img
-boot || goto error
-
-:error
-echo Boot failed - dropping to shell
-shell
-"""
-        
-        # Log the boot script content with a clear separator for better readability
-        logger.info(f"Generated default boot script for {management_ip}:")
-        logger.info("--- BEGIN DEFAULT BOOT SCRIPT ---")
-        for line in template.splitlines():
-            logger.info(f"DEFAULT BOOT: {line}")
-        logger.info("--- END DEFAULT BOOT SCRIPT ---")
-        
-        return template
+    # generate_default_boot_script method removed as per requirements
     
     def get_server_config(self, server_ip):
         """Get detailed server configuration for CE installer automation (Arizona configuration)"""
@@ -424,32 +288,78 @@ shell
                 server_profiles = ServerProfileConfig()
                 profile = node.get('server_profile', 'bx2d-metal-48x192')
                 logger.info(f"Getting storage config for profile: {profile}")
-                storage_config = server_profiles.get_storage_config(profile)
-                
-                # Verify storage config has required keys
-                if not storage_config:
+                storage_config_from_profile = server_profiles.get_storage_config(profile)
+
+                if not storage_config_from_profile:
                     logger.error(f"Empty storage configuration returned for profile {profile}")
-                    storage_config = {
-                        'boot_device': '/dev/sda',  # Default boot device
-                        'data_drives': ['/dev/sdb']  # Default data drive
+                    # Use default storage config if profile is unknown or empty
+                    storage_config_for_installer = {
+                        'boot_device': '/dev/sda',
+                        'hypervisor_device': '/dev/sda',
+                        'cvm_device': '/dev/sda',
+                        'data_drives': ['/dev/sdb'],
+                        'exclude_drives': 0,
+                        'raid_config': 'nutanix_managed'
                     }
-                    logger.info(f"Using default storage configuration: {storage_config}")
-                elif 'boot_device' not in storage_config or 'data_drives' not in storage_config:
-                    logger.error(f"Incomplete storage configuration: {storage_config}")
-                    # Add missing keys with defaults
-                    if 'boot_device' not in storage_config:
-                        storage_config['boot_device'] = '/dev/sda'
-                    if 'data_drives' not in storage_config:
-                        storage_config['data_drives'] = ['/dev/sdb']
-                    logger.info(f"Completed storage configuration: {storage_config}")
+                    logger.info(f"Using default storage configuration: {storage_config_for_installer}")
+                else:
+                    # Map to installer's expected JSON structure
+                    storage_config_for_installer = {
+                        'boot_device': storage_config_from_profile.get('boot_drives', ['/dev/sda'])[0], # Use first boot drive
+                        'hypervisor_device': storage_config_from_profile.get('boot_drives', ['/dev/sda'])[0], # Hypervisor uses boot device
+                        'cvm_device': storage_config_from_profile.get('boot_drives', ['/dev/sda'])[0], # CVM also uses boot device for its OS install
+                        'data_drives': storage_config_from_profile.get('data_drives', ['/dev/sdb']),
+                        'exclude_drives': storage_config_from_profile.get('exclude_drives', 0),
+                        'raid_config': storage_config_from_profile.get('raid_config', 'nutanix_managed')
+                    }
+                    logger.info(f"Mapped storage configuration: {storage_config_for_installer}")
+
             except Exception as e:
                 logger.error(f"Failed to get storage configuration: {str(e)}")
-                # Use default storage configuration
-                storage_config = {
-                    'boot_device': '/dev/sda',  # Default boot device
-                    'data_drives': ['/dev/sdb']  # Default data drive
+                # Use fallback storage configuration
+                storage_config_for_installer = {
+                    'boot_device': '/dev/sda',
+                    'hypervisor_device': '/dev/sda',
+                    'cvm_device': '/dev/sda',
+                    'data_drives': ['/dev/sdb'],
+                    'exclude_drives': 0,
+                    'raid_config': 'nutanix_managed'
                 }
-                logger.info(f"Using fallback storage configuration due to error: {storage_config}")
+                logger.info(f"Using fallback storage configuration due to error: {storage_config_for_installer}")
+
+            # Helper to convert size string (e.g., '960GB') to GB integer
+            def convert_size_to_gb(size_str):
+                if not size_str: return 0
+                size_str = size_str.upper()
+                if size_str.endswith('GB'):
+                    return int(size_str[:-2])
+                elif size_str.endswith('TB'):
+                    return int(float(size_str[:-2]) * 1024)
+                return 0 # Default to 0 if format is unexpected
+
+            # Construct the final installer configuration JSON
+            installer_config = {
+                "hardware": {
+                    "model": "CommunityEdition", # Placeholder, can be derived from profile if needed
+                    "boot_disk": storage_config_for_installer['boot_device'],
+                    "boot_disk_model": "Micron_7450_MTFD", # Hardcoded as per example, or derive if possible
+                    "boot_disk_size_gb": convert_size_to_gb(storage_config_from_profile.get('boot_drive_size', '960GB')), # Convert size to GB
+                    "cvm_data_disks": storage_config_for_installer['data_drives'],
+                    "cvm_boot_disks": [storage_config_for_installer['boot_device']], # Using boot_device as per common practice, example in doc might be wrong
+                    "hypervisor_boot_disk": storage_config_for_installer['hypervisor_device']
+                },
+                "resources": {
+                    "cvm_memory_gb": node.get('nutanix_config', {}).get('cvm_memory_gb', 32), # Get from node config or use default
+                    "cvm_vcpus": node.get('nutanix_config', {}).get('cvm_vcpus', 16)      # Get from node config or use default
+                },
+                "network": {
+                    "cvm_ip": ip_allocation['cvm']['ip_address'],
+                    "cvm_netmask": network_info['netmask'],
+                    "cvm_gateway": network_info['gateway'],
+                    "dns_servers": network_info['dns'].split(',') # Split comma-separated string
+                }
+            }
+            # ... rest of the function, ensuring installer_config is returned or used ...
             
             # Define URLs for installer packages
             base_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/images"

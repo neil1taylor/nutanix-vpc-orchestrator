@@ -1,0 +1,575 @@
+#!/usr/bin/env python3
+# vpc_ce_installation.py
+
+import sys
+import os
+import time
+import subprocess
+import json
+import socket
+import hashlib
+import uuid
+import glob
+from random import randint
+
+def log(message):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}")
+
+def get_node_identifier():
+    """Get IP address of first interface as node identifier, in the form of x-x-x-x"""
+    
+    try:
+        # Get first non-loopback interface
+        interfaces = [iface for iface in os.listdir('/sys/class/net/') if iface != 'lo']
+        if interfaces:
+            first_interface = interfaces[0]
+            
+            # Get IP address using ip command
+            result = subprocess.run([
+                'ip', 'addr', 'show', first_interface
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                # Parse IP address from output
+                for line in result.stdout.split('\n'):
+                    if 'inet ' in line and 'scope global' in line:
+                        ip = line.strip().split()[1].split('/')[0]
+                        log(f"Node identifier (IP): {ip}")
+                        return ip
+                        
+    except Exception as e:
+        log(f"Could not get IP address: {e}")
+    
+    # Fallback to original logic
+    log("Using default node identifier")
+    return 'default'
+
+def get_config_server_from_cmdline():
+    """Extract config server from kernel command line"""
+    try:
+        with open('/proc/cmdline', 'r') as f:
+            cmdline = f.read().strip()
+        
+        # Look for config_server= parameter
+        for param in cmdline.split():
+            if param.startswith('config_server='):
+                server = param.split('=', 1)[1]
+                log(f"Config server from cmdline: {server}")
+                return server
+    except Exception as e:
+        log(f"Error reading cmdline: {e}")
+
+def download_node_config(config_server, node_id):
+    """Download node-specific configuration"""
+    log(f"Downloading configuration for node: {node_id}")
+
+    url = f"{config_server}/boot/server/{node_id}.json"
+    
+    try:
+        log(f"Trying config URL: {url}")
+        
+        result = subprocess.run([
+            'curl', '-s', '--connect-timeout', '10', 
+            '--max-time', '30', url
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0 and result.stdout.strip():
+            try:
+                config = json.loads(result.stdout)
+                log(f"Configuration downloaded from: {url}")
+                return config
+            except json.JSONDecodeError as e:
+                log(f"Invalid JSON from {url}: {e}")
+
+        else:
+            log(f"Failed to download from {url}")
+            
+    except Exception as e:
+        log(f"Error downloading from {url}: {e}")
+    
+    log("Could not download any configuration")
+    return None
+
+def validate_config(config):
+    """Validate configuration completeness"""
+    log("Validating configuration...")
+    
+    required_sections = ['hardware', 'resources', 'network']
+    
+    for section in required_sections:
+        if section not in config:
+            log(f"Missing required config section: {section}")
+            return False
+    
+    # Validate critical fields
+    critical_fields = [
+        ('hardware', 'boot_disk'),
+        ('hardware', 'cvm_data_disks'),
+        ('resources', 'cvm_memory_gb'),
+        ('network', 'vm_ip'),
+        ('network', 'vm_netmask'),
+        ('network', 'vm_gateway'),
+        ('network', 'dns_servers')
+    ]
+    
+    for section, field in critical_fields:
+        if field not in config[section]:
+            log(f"Missing required field: {section}.{field}")
+            return False
+    
+    log("Configuration validation passed")
+    return True
+
+def test_connectivity():
+    """Test network connectivity"""
+    try:
+        # Try to connect to Google DNS
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(10)
+        result = sock.connect_ex(('8.8.8.8', 53))
+        sock.close()
+        return result == 0
+    except:
+        return False
+
+def download_packages(config_server):
+   """Download required installation packages"""
+   log("Downloading installation packages...")
+   
+   # Ensure we have network connectivity
+   if not test_connectivity():
+       log("No network connectivity for package download")
+       return False
+   
+   # Define required packages
+   package_downloads = [
+       (f"{config_server}/nutanix_installer_package.tar.gz", 
+        '/tmp/nutanix_installer_package.tar.gz'),
+       (f"{config_server}/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso",
+        '/tmp/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso')
+   ]
+   
+   for url, local_path in package_downloads:
+       log(f"Downloading {os.path.basename(local_path)}...")
+       
+       # Create directory if needed
+       os.makedirs(os.path.dirname(local_path), exist_ok=True)
+       
+       result = subprocess.run([
+           'curl', '-L', '--progress-bar', '--connect-timeout', '30',
+           '--max-time', '1200', '-o', local_path, url
+       ])
+       
+       if result.returncode == 0 and os.path.exists(local_path):
+           # Verify file size is reasonable
+           file_size = os.path.getsize(local_path)
+           if file_size > 1024:  # At least 1KB
+               log(f"Downloaded {os.path.basename(local_path)} ({file_size:,} bytes)")
+           else:
+               log(f"Downloaded file too small: {os.path.basename(local_path)}")
+               return False
+       else:
+           log(f"Failed to download {os.path.basename(local_path)}")
+           return False
+   
+   return True
+
+def install_hypervisor(config):
+   """Install AHV hypervisor to boot disk"""
+   log("Installing AHV hypervisor...")
+   
+   boot_disk = config['hardware']['boot_disk']
+   boot_device = f"/dev/{boot_disk}"
+   
+   try:
+       # Create hypervisor partitions
+       log("Creating hypervisor partitions...")
+       fdisk_commands = "n\np\n1\n\n+1M\nn\np\n2\n\n+20G\nn\np\n3\n\n\nt\n1\nef\nw\n"
+       
+       result = subprocess.run(['fdisk', boot_device], 
+                             input=fdisk_commands, text=True, 
+                             capture_output=True)
+       
+       if result.returncode != 0:
+           log(f"Failed to create partitions: {result.stderr}")
+           return False
+       
+       # Wait for partitions to be recognized
+       time.sleep(3)
+       subprocess.run(['partprobe', boot_device])
+       time.sleep(2)
+       
+       # Format partitions
+       log("Formatting partitions...")
+       
+       # EFI partition
+       result = subprocess.run(['mkfs.vfat', f'{boot_device}p1'], capture_output=True)
+       if result.returncode != 0:
+           log(f"Failed to format EFI partition: {result.stderr}")
+           return False
+       
+       # Hypervisor partition
+       result = subprocess.run(['mkfs.ext4', '-F', f'{boot_device}p2'], capture_output=True)
+       if result.returncode != 0:
+           log(f"Failed to format hypervisor partition: {result.stderr}")
+           return False
+       
+       log("Partitions created and formatted")
+       
+       # Mount and install AHV hypervisor
+       log("Mounting and installing AHV hypervisor...")
+       
+       # Create mount points
+       os.makedirs('/mnt/stage', exist_ok=True)
+       os.makedirs('/mnt/ahv', exist_ok=True)
+       os.makedirs('/mnt/install', exist_ok=True)
+       
+       # Mount hypervisor partition
+       result = subprocess.run(['mount', f'{boot_device}p2', '/mnt/stage'])
+       if result.returncode != 0:
+           log("Failed to mount hypervisor partition")
+           return False
+       
+       # Mount AHV ISO
+       ahv_iso_path = '/tmp/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso'
+       result = subprocess.run(['mount', '-o', 'loop', ahv_iso_path, '/mnt/ahv'])
+       if result.returncode != 0:
+           log("Failed to mount AHV ISO")
+           cleanup_mounts()
+           return False
+       
+       # Mount and extract AHV filesystem
+       result = subprocess.run(['mount', '-o', 'loop', '/mnt/ahv/images/install.img', '/mnt/install'])
+       if result.returncode != 0:
+           log("Failed to mount AHV install image")
+           cleanup_mounts()
+           return False
+       
+       # Copy AHV filesystem to hypervisor partition
+       log("Copying AHV filesystem...")
+       result = subprocess.run(['cp', '-a', '/mnt/install/.', '/mnt/stage/'])
+       if result.returncode != 0:
+           log("Failed to copy AHV filesystem")
+           cleanup_mounts()
+           return False
+       
+       # Set up EFI boot
+       log("Setting up EFI boot...")
+       os.makedirs('/mnt/stage/boot/efi', exist_ok=True)
+       
+       result = subprocess.run(['mount', f'{boot_device}p1', '/mnt/stage/boot/efi/'])
+       if result.returncode != 0:
+           log("Failed to mount EFI partition")
+           cleanup_mounts()
+           return False
+       
+       # Copy EFI files
+       result = subprocess.run(['cp', '-r', '/mnt/ahv/EFI/.', '/mnt/stage/boot/efi/'])
+       if result.returncode != 0:
+           log("Failed to copy EFI files")
+           cleanup_mounts()
+           return False
+       
+       # Create GRUB configurations
+       log("Creating GRUB configurations...")
+       
+       # GRUB2 configuration
+       os.makedirs('/mnt/stage/boot/grub2', exist_ok=True)
+       grub2_config = f"""set default=0
+set timeout=10
+
+menuentry 'Nutanix AHV' {{
+   linux /boot/vmlinuz-5.10.194-5.20230302.0.991650.el8.x86_64 root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0
+}}
+"""
+       
+       with open('/mnt/stage/boot/grub2/grub.cfg', 'w') as f:
+           f.write(grub2_config)
+       
+       # Legacy GRUB configuration
+       os.makedirs('/mnt/stage/boot/grub', exist_ok=True)
+       grub_config = f"""default=0
+timeout=10
+title Nutanix AHV
+   root (hd0,1)
+   kernel /boot/vmlinuz-5.10.194-5.20230302.0.991650.el8.x86_64 root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0
+"""
+       
+       with open('/mnt/stage/boot/grub/grub.conf', 'w') as f:
+           f.write(grub_config)
+       
+       log("GRUB configurations created")
+       
+       # Cleanup - unmount everything
+       cleanup_mounts()
+       
+       log("AHV hypervisor installation completed")
+       return True
+       
+   except Exception as e:
+       log(f"Hypervisor installation error: {e}")
+       cleanup_mounts()
+       return False
+
+def cleanup_mounts():
+   """Clean up all mount points"""
+   mount_points = [
+       '/mnt/stage/boot/efi',
+       '/mnt/stage', 
+       '/mnt/install',
+       '/mnt/ahv'
+   ]
+   
+   for mount_point in mount_points:
+       try:
+           subprocess.run(['umount', mount_point], capture_output=True)
+       except:
+           pass
+
+def setup_environment(config):
+    """Set up installation environment"""
+    log("Setting up installation environment...")
+    
+    # Set environment variables
+    os.environ['COMMUNITY_EDITION'] = 'true'
+    os.environ['AUTOMATED_INSTALL'] = 'true'
+    
+    # Set up Python path
+    sys.path.insert(0, '/root/phoenix')
+    sys.path.insert(0, '/root/.local/lib/python3.9/site-packages')
+    
+    # Mock /proc/cmdline with config values
+    def mock_cmdline():
+        node_config = config['node']
+        return f"block_id={node_config['block_id']} node_position={node_config['node_position']} node_serial={node_config['node_serial']} cluster_id={node_config['cluster_id']} model={config['hardware']['model']} hyp_type=kvm installer_path=/tmp/nutanix_installer_package.tar.gz"
+    
+    original_open = open
+    def patched_open(filename, *args, **kwargs):
+        if filename == '/proc/cmdline':
+            from io import StringIO
+            return StringIO(mock_cmdline())
+        return original_open(filename, *args, **kwargs)
+    
+    import builtins
+    builtins.open = patched_open
+    
+    log("Environment setup complete")
+
+def generate_cluster_id():
+    # cluster ID generation spec (16 bits random + MAC addr)
+    log("Generating cluster_id")
+    randomizer_hex = hex(randint(1, int('7FFF', 16)))[2:] # Remove '0x' prefix
+    mac_addrs = []
+    pcibase = "/sys/devices/pci"
+    for net in glob.glob("/sys/class/net/*"):
+      if not os.path.realpath(net).startswith(pcibase):
+        continue
+      try:
+          with open("%s/address" % net, 'r') as f:
+              mac_addrs.append(f.read().strip())
+      except IOError:
+          log(f"Could not read MAC address for {net}")
+    mac_addrs.sort()
+    cluster_id = int(randomizer_hex + mac_addrs[0].replace(':', ''), 16)
+    return cluster_id
+
+def create_installation_params(config):
+    """Create Nutanix installation parameters from config"""
+    log("Creating installation parameters from configuration...")
+    
+    try:
+        import param_list
+        
+        params = param_list.ParamList()
+        
+        # Node configuration
+        node_config = config['node']
+        params.block_id = (str(uuid4()).split('-')[0])
+        params.node_position = "A"
+        params.node_serial = str(uuid4())
+        params.cluster_id = generate_cluster_id()
+        
+        # Hardware configuration
+        hw_config = config['hardware']
+        params.model = hw_config['model']
+        params.model_string = hw_config['model']
+        params.boot_disk = hw_config['boot_disk']
+        params.boot_disk_model = hw_config.get('boot_disk_model', 'Generic')
+        params.boot_disk_sz_GB = hw_config['boot_disk_size_gb']
+        params.hw_layout = None
+        
+        # Installation type
+        params.hyp_type = 'kvm'
+        params.hyp_install_type = 'clean'
+        params.svm_install_type = 'clean'
+        params.installer_path = '/tmp/nutanix_installer_package.tar.gz'
+        
+        # Resource configuration
+        resources = config['resources']
+        params.svm_gb_ram = resources['cvm_memory_gb']
+        params.svm_num_vcpus = resources['cvm_vcpus']
+        
+        # Disk layout
+        params.ce_cvm_data_disks = hw_config['cvm_data_disks']
+        params.ce_cvm_boot_disks = hw_config['cvm_boot_disks']
+        params.ce_hyp_boot_disk = hw_config['hypervisor_boot_disk']
+        params.ce_disks = [hw_config['boot_disk']] + hw_config['cvm_data_disks']
+        
+        # Community Edition settings
+        params.ce_eula_accepted = True
+        params.ce_eula_viewed = True
+        params.create_1node_cluster = False
+        
+        # Version information
+        params.nos_version = '6.8.0'
+        params.svm_version = '6.8.0'
+        params.hyp_version = 'el8.nutanix.20230302.101026'
+        params.phoenix_version = '4.6'
+        params.foundation_version = '4.6'
+        
+        log("Installation parameters created")
+        return params
+        
+    except Exception as e:
+        log(f"Error creating installation parameters: {e}")
+        return None
+
+def cleanup_previous_attempts():
+    """Clean up any previous installation attempts"""
+    log("Cleaning up previous installation attempts...")
+    
+    cleanup_paths = [
+        '/tmp/svm_install_chroot',
+        '/tmp/svm_marker'
+    ]
+    
+    try:
+        for path in cleanup_paths:
+            if os.path.isdir(path):
+                subprocess.run(['rm', '-rf', path], check=True)
+                log(f"Removed directory: {path}")
+            elif os.path.isfile(path):
+                os.remove(path)
+                log(f"Removed file: {path}")
+        
+        log("Cleanup completed")
+        return True
+        
+    except Exception as e:
+        log(f"Cleanup failed: {e}")
+        return False
+
+def run_nutanix_installation(params, config):
+    """Run the actual Nutanix installation"""
+    log("Starting Nutanix CE installation...")
+    
+    try:
+        # Import installation modules
+        import imagingUtil
+        import sysUtil
+        import shell
+        
+        # Patch shell commands to protect partitions
+        original_shell_cmd = shell.shell_cmd
+        
+        def protected_shell_cmd(cmd_list, *args, **kwargs):
+            cmd_str = ' '.join(cmd_list) if isinstance(cmd_list, list) else str(cmd_list)
+            if 'wipefs' in cmd_str and params.boot_disk in cmd_str:
+                log(f'BLOCKED: {cmd_str}')
+                return '', ''
+            return original_shell_cmd(cmd_list, *args, **kwargs)
+        
+        shell.shell_cmd = protected_shell_cmd
+        sysUtil.shell_cmd = protected_shell_cmd
+        
+        # Bypass hardware detection
+        try:
+            import layout.layout_tools
+            def mock_get_hyp_raid_info_from_layout(layout):
+                return None, None
+            layout.layout_tools.get_hyp_raid_info_from_layout = mock_get_hyp_raid_info_from_layout
+        except ImportError:
+            pass
+        
+        # Bypass hardware detection functions
+        def bypass_populate_host_boot_disk_param(param_list):
+            log('Bypassing host boot disk parameter population')
+            pass
+        sysUtil.populate_host_boot_disk_param = bypass_populate_host_boot_disk_param
+        
+        # Log installation summary
+        log("Installation Summary:")
+        log(f"  Node: {config['node']['node_serial']}")
+        log(f"  Hypervisor: KVM on {params.ce_hyp_boot_disk}")
+        log(f"  CVM: {params.svm_gb_ram}GB RAM, {params.svm_num_vcpus} vCPUs")
+        log(f"  Storage: {len(params.ce_cvm_data_disks)} data drives")
+        log(f"  Management IP: {config['network'].get('management_ip', 'DHCP')}")
+        
+        # Start installation
+        log("Starting installation process...")
+        imagingUtil.image_node(params)
+        
+        log("Installation completed successfully!")
+        return True
+        
+    except Exception as e:
+        log(f"Installation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def main():
+    """Main installation function"""
+    log("=== Nutanix CE Node-Agnostic Installation ===")
+    log("Platform: IBM Cloud VPC with Ionic Driver")
+    
+    # Phase 1: Get node identifier and download config
+    node_id = get_node_identifier()
+    config_server = get_config_server_from_cmdline()
+    
+    config = download_node_config(config_server, node_id)
+    if not config:
+        log("Unable to get configuration")
+        return 1
+    
+    if not validate_config(config):
+        log("Configuration validation failed")
+        return 1
+    
+    log(f"Configuration loaded for cluster: {config['cluster']['name']}")
+    
+    # Phase 2: Download packages
+    if not download_packages(config_server):
+        log("Package download failed")
+        return 1
+    
+    # Phase 3: Install hypervisor
+    if not install_hypervisor(config):
+        log("Hypervisor installation failed")
+        return 1
+    
+    # Phase 4: Setup environment
+    setup_environment(config)
+    
+    # Phase 5: Create installation parameters
+    params = create_installation_params(config)
+    if not params:
+        log("Failed to create installation parameters")
+        return 1
+    
+    # Phase 6: Clean previous and run Nutanix installation (CVM)
+    if not cleanup_previous_attempts():
+        log("Cleanup of previous attempts failed")
+        return 1
+    if not run_nutanix_installation(params, config):
+        log("Installation failed")
+        return 1
+    
+    log("Node-agnostic installation completed successfully!")
+    log(f"Management IP: {config['network'].get('management_ip', 'Check DHCP assignment')}")
+    
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())

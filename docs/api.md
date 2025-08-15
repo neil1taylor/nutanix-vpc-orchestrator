@@ -35,9 +35,7 @@ curl "http://localhost:8080/boot/config?mgmt_ip=10.240.0.10"
 **Purpose:** Serve boot images (kernel, initrd, ISO files)
 **Allowed Files:**
 - `kernel` - kernel
-- `initrd-modified.img` - initial ramdisk
-- `nutanix-ce.iso` - Nutanix CE installer ISO
-
+- `initrd.img` - initial ramd
 **Example:**
 ```bash
 curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images/kernel"

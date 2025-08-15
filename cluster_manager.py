@@ -1,12 +1,12 @@
 """
 Cluster management service for Nutanix PXE/Config Server
-Handles cluster creation and configuration after node deployment
+Handles cluster creation and configuration after node deployment using SSH
 """
 import logging
 import json
 import time
-import requests
-from requests.exceptions import RequestException
+import subprocess
+import paramiko
 from database import Database
 from config import Config
 
@@ -19,6 +19,8 @@ class ClusterManager:
     def __init__(self):
         self.db = Database()
         self.config = Config
+        self.default_ssh_user = 'nutanix'
+        self.default_ssh_password = 'nutanix/4u'
     
     def create_cluster(self, cluster_request):
         """Create a new Nutanix cluster from deployed nodes"""
@@ -55,7 +57,6 @@ class ClusterManager:
         
         # Get CVM IPs for cluster creation
         cvm_ips = [node['nutanix_config']['cvm_ip'] for node in nodes]
-        cvm_ip_list = ','.join(cvm_ips)
         
         # Determine redundancy factor based on node count and cluster type
         if cluster_type == 'single_node':
@@ -69,24 +70,21 @@ class ClusterManager:
         
         # Get DNS servers from first node or use defaults
         dns_servers = nodes[0]['nutanix_config'].get('dns_servers', ['8.8.8.8'])
-        dns_server_list = ','.join(dns_servers)
         
-        # Create cluster using post-install script approach
+        # Create cluster using SSH approach
         cluster_name = cluster_config.get('cluster_name', f'cluster-{len(nodes)}-node')
         
-        # For single node cluster, we'll trigger the post-install script
-        # For multi-node cluster, we'll need to coordinate with Foundation
         if cluster_type == 'single_node':
-            return self._create_single_node_cluster(nodes[0], redundancy_factor, dns_server_list, cluster_name)
+            return self._create_single_node_cluster_ssh(nodes[0], redundancy_factor, dns_servers, cluster_name)
         else:
-            return self._create_standard_cluster(nodes, redundancy_factor, dns_server_list, cluster_name)
+            return self._create_standard_cluster_ssh(nodes, redundancy_factor, dns_servers, cluster_name)
     
-    def _create_single_node_cluster(self, node, redundancy_factor, dns_servers, cluster_name):
-        """Create a single node cluster by triggering post-install script"""
-        logger.info(f"Creating single-node cluster '{cluster_name}' with node {node['id']}")
+    def _create_single_node_cluster_ssh(self, node, redundancy_factor, dns_servers, cluster_name):
+        """Create a single node cluster using SSH to CVM"""
+        logger.info(f"Creating single-node cluster '{cluster_name}' with node {node['id']} using SSH")
         logger.debug(f"Single-node cluster configuration: RF={redundancy_factor}, DNS={dns_servers}")
         
-        # Get CVM IP for API calls
+        # Get CVM IP for SSH connection
         cvm_ip = node['nutanix_config']['cvm_ip']
         
         # First register the cluster in the database
@@ -107,26 +105,15 @@ class ClusterManager:
         logger.info(f"Single node cluster {cluster_name} registered (ID: {cluster_id})")
         logger.debug(f"Single node cluster details: {cluster_config}")
         
-        # Now attempt to create the actual cluster via Prism API
+        # Now create the actual cluster via SSH
         try:
-            # Prepare cluster creation payload for Prism API
-            prism_cluster_config = {
-                "name": cluster_name,
-                "external_ip": cluster_config['cluster_ip'],
-                "redundancy_factor": redundancy_factor,
-                "cluster_functions": ["AOS"],
-                "timezone": "UTC",
-                "dns_servers": dns_servers.split(',')
-            }
+            logger.info(f"Connecting to CVM {cvm_ip} via SSH to create single-node cluster")
             
-            # Make API call to create cluster
-            logger.debug(f"Calling Prism API to create single-node cluster on CVM {cvm_ip}")
-            response = self._call_prism_api(cvm_ip, prism_cluster_config)
+            # Create the cluster using SSH command
+            ssh_result = self._execute_cluster_create_ssh(cvm_ip, [cvm_ip], cluster_name)
             
-            if response:
-                logger.info(f"Successfully initiated cluster creation via Prism API")
-                # Start monitoring cluster creation in background (in a real implementation)
-                # For now, we'll just update the status
+            if ssh_result['success']:
+                logger.info(f"Successfully initiated single-node cluster creation via SSH")
                 self._update_cluster_status(cluster_id, 'creating')
                 
                 return {
@@ -134,35 +121,27 @@ class ClusterManager:
                     'cluster_name': cluster_name,
                     'cluster_ip': cluster_config['cluster_ip'],
                     'status': 'creating',
-                    'message': 'Single node cluster creation initiated via Prism API.'
+                    'message': f'Single node cluster creation initiated via SSH. Output: {ssh_result["output"]}'
                 }
             else:
-                logger.warning(f"Failed to initiate cluster creation via Prism API, falling back to post-install script")
-                return {
-                    'cluster_id': cluster_id,
-                    'cluster_name': cluster_name,
-                    'cluster_ip': cluster_config['cluster_ip'],
-                    'status': 'creating',
-                    'message': 'Single node cluster registered. Post-install script will create the cluster.'
-                }
+                logger.error(f"Failed to create cluster via SSH: {ssh_result['error']}")
+                self._update_cluster_status(cluster_id, 'error')
+                raise Exception(f"SSH cluster creation failed: {ssh_result['error']}")
+                
         except Exception as e:
-            logger.error(f"Error creating cluster via Prism API: {str(e)}")
-            logger.info("Falling back to post-install script method")
-            return {
-                'cluster_id': cluster_id,
-                'cluster_name': cluster_name,
-                'cluster_ip': cluster_config['cluster_ip'],
-                'status': 'creating',
-                'message': 'Single node cluster registered. Post-install script will create the cluster.'
-            }
+            logger.error(f"Error creating single-node cluster via SSH: {str(e)}")
+            self._update_cluster_status(cluster_id, 'error')
+            raise Exception(f"Failed to create single-node cluster: {str(e)}")
     
-    def _create_standard_cluster(self, nodes, redundancy_factor, dns_servers, cluster_name):
-        """Create a standard multi-node cluster"""
-        logger.info(f"Creating standard cluster '{cluster_name}' with {len(nodes)} nodes")
+    def _create_standard_cluster_ssh(self, nodes, redundancy_factor, dns_servers, cluster_name):
+        """Create a standard multi-node cluster using SSH to CVM"""
+        logger.info(f"Creating standard cluster '{cluster_name}' with {len(nodes)} nodes using SSH")
         logger.debug(f"Standard cluster configuration: RF={redundancy_factor}, DNS={dns_servers}")
         
-        # Get CVM IP for API calls (using first node)
-        cvm_ip = nodes[0]['nutanix_config']['cvm_ip']
+        # Get CVM IPs for SSH connection (use first node for SSH, but include all in cluster create)
+        primary_cvm_ip = nodes[0]['nutanix_config']['cvm_ip']
+        cvm_ips = [node['nutanix_config']['cvm_ip'] for node in nodes]
+        
         cluster_config = {
             'cluster_name': cluster_name,
             'cluster_ip': nodes[0]['nutanix_config']['cluster_ip'],
@@ -181,26 +160,15 @@ class ClusterManager:
         logger.info(f"Standard cluster {cluster_name} registered (ID: {cluster_id})")
         logger.debug(f"Standard cluster details: {cluster_config}")
         
-        # Now attempt to create the actual cluster via Prism API
+        # Now create the actual cluster via SSH
         try:
-            # Prepare cluster creation payload for Prism API
-            prism_cluster_config = {
-                "name": cluster_name,
-                "external_ip": cluster_config['cluster_ip'],
-                "redundancy_factor": redundancy_factor,
-                "cluster_functions": ["AOS"],
-                "timezone": "UTC",
-                "dns_servers": dns_servers.split(',')
-            }
+            logger.info(f"Connecting to primary CVM {primary_cvm_ip} via SSH to create standard cluster")
             
-            # Make API call to create cluster
-            logger.debug(f"Calling Prism API to create standard cluster on CVM {cvm_ip}")
-            response = self._call_prism_api(cvm_ip, prism_cluster_config)
+            # Create the cluster using SSH command with all CVM IPs
+            ssh_result = self._execute_cluster_create_ssh(primary_cvm_ip, cvm_ips, cluster_name)
             
-            if response:
-                logger.info(f"Successfully initiated cluster creation via Prism API")
-                # Start monitoring cluster creation in background (in a real implementation)
-                # For now, we'll just update the status
+            if ssh_result['success']:
+                logger.info(f"Successfully initiated standard cluster creation via SSH")
                 self._update_cluster_status(cluster_id, 'creating')
                 
                 return {
@@ -208,26 +176,100 @@ class ClusterManager:
                     'cluster_name': cluster_name,
                     'cluster_ip': cluster_config['cluster_ip'],
                     'status': 'creating',
-                    'message': 'Standard cluster creation initiated via Prism API.'
+                    'message': f'Standard cluster creation initiated via SSH. Output: {ssh_result["output"]}'
                 }
             else:
-                logger.warning(f"Failed to initiate cluster creation via Prism API, falling back to Foundation")
-                return {
-                    'cluster_id': cluster_id,
-                    'cluster_name': cluster_name,
-                    'cluster_ip': cluster_config['cluster_ip'],
-                    'status': 'creating',
-                    'message': 'Standard cluster registered. Foundation will create the cluster during node deployment.'
-                }
+                logger.error(f"Failed to create cluster via SSH: {ssh_result['error']}")
+                self._update_cluster_status(cluster_id, 'error')
+                raise Exception(f"SSH cluster creation failed: {ssh_result['error']}")
+                
         except Exception as e:
-            logger.error(f"Error creating cluster via Prism API: {str(e)}")
-            logger.info("Falling back to Foundation method")
+            logger.error(f"Error creating standard cluster via SSH: {str(e)}")
+            self._update_cluster_status(cluster_id, 'error')
+            raise Exception(f"Failed to create standard cluster: {str(e)}")
+    
+    def _execute_cluster_create_ssh(self, primary_cvm_ip, cvm_ips, cluster_name=None):
+        """Execute cluster create command via SSH"""
+        try:
+            # Create SSH client
+            ssh_client = paramiko.SSHClient()
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            
+            logger.debug(f"Connecting to CVM {primary_cvm_ip} via SSH")
+            
+            # Connect to the primary CVM
+            ssh_client.connect(
+                hostname=primary_cvm_ip,
+                username=self.default_ssh_user,
+                password=self.default_ssh_password,
+                timeout=30,
+                allow_agent=False,
+                look_for_keys=False
+            )
+            
+            # Construct the cluster create command
+            if len(cvm_ips) == 1:
+                # Single node cluster
+                cluster_cmd = f"cluster -s {cvm_ips[0]} create"
+            else:
+                # Multi-node cluster
+                cvm_ip_list = ','.join(cvm_ips)
+                cluster_cmd = f"cluster -s {cvm_ip_list} create"
+            
+            if cluster_name:
+                cluster_cmd += f" --cluster-name {cluster_name}"
+            
+            logger.info(f"Executing cluster creation command: {cluster_cmd}")
+            
+            # Execute the command
+            stdin, stdout, stderr = ssh_client.exec_command(cluster_cmd, timeout=300)
+            
+            # Get command output
+            output = stdout.read().decode('utf-8').strip()
+            error = stderr.read().decode('utf-8').strip()
+            exit_code = stdout.channel.recv_exit_status()
+            
+            logger.debug(f"SSH command exit code: {exit_code}")
+            logger.debug(f"SSH command output: {output}")
+            if error:
+                logger.debug(f"SSH command stderr: {error}")
+            
+            # Close SSH connection
+            ssh_client.close()
+            
+            if exit_code == 0:
+                return {
+                    'success': True,
+                    'output': output,
+                    'error': error
+                }
+            else:
+                return {
+                    'success': False,
+                    'output': output,
+                    'error': error or f"Command failed with exit code {exit_code}"
+                }
+                
+        except paramiko.AuthenticationException as e:
+            logger.error(f"SSH authentication failed: {str(e)}")
             return {
-                'cluster_id': cluster_id,
-                'cluster_name': cluster_name,
-                'cluster_ip': cluster_config['cluster_ip'],
-                'status': 'creating',
-                'message': 'Standard cluster registered. Foundation will create the cluster during node deployment.'
+                'success': False,
+                'output': '',
+                'error': f"SSH authentication failed: {str(e)}"
+            }
+        except paramiko.SSHException as e:
+            logger.error(f"SSH connection error: {str(e)}")
+            return {
+                'success': False,
+                'output': '',
+                'error': f"SSH connection error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error during SSH cluster creation: {str(e)}")
+            return {
+                'success': False,
+                'output': '',
+                'error': f"Unexpected error: {str(e)}"
             }
     
     def _update_node_with_cluster_info(self, node_id, cluster_id, cluster_config):
@@ -282,44 +324,6 @@ class ClusterManager:
         except Exception as e:
             logger.error(f"Failed to delete cluster {cluster_id}: {str(e)}")
             raise
-            
-    def _call_prism_api(self, cvm_ip, cluster_config, timeout=30):
-        """Call Prism API to create a cluster"""
-        try:
-            prism_url = f"https://{cvm_ip}:9440"
-            
-            logger.debug(f"Making API call to {prism_url} with config: {json.dumps(cluster_config)}")
-            
-            # In a real implementation, this would make an actual API call
-            # For now, we'll simulate a successful response
-            logger.debug("Simulating successful API response (in real implementation, this would call the actual API)")
-            
-            # Uncomment the following code to make the actual API call
-            """
-            response = requests.post(
-                f"{prism_url}/PrismGateway/services/rest/v2.0/clusters",
-                json=cluster_config,
-                auth=('admin', 'admin'),  # Default Prism credentials
-                verify=False,
-                timeout=timeout
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"API call failed with status {response.status_code}: {response.text}")
-                return None
-            """
-            
-            # Simulated successful response
-            return {"status": "accepted"}
-            
-        except RequestException as e:
-            logger.error(f"API request failed: {str(e)}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error in API call: {str(e)}")
-            return None
     
     def _update_cluster_status(self, cluster_id, status):
         """Update cluster status in database"""
@@ -335,7 +339,7 @@ class ClusterManager:
             return False
     
     def monitor_cluster_creation(self, cluster_id, timeout_minutes=30):
-        """Monitor cluster creation progress"""
+        """Monitor cluster creation progress via SSH status checks"""
         logger.info(f"Starting to monitor creation progress for cluster {cluster_id}")
         
         try:
@@ -344,12 +348,11 @@ class ClusterManager:
             if not cluster:
                 raise Exception(f"Cluster {cluster_id} not found")
             
-            # Get a node from the cluster to access its CVM
-            # In a real implementation, we would query the database to get a node
-            # For now, we'll assume we have a node with a CVM IP
-            cvm_ip = cluster.get('cluster_ip')  # Using cluster IP as a fallback
+            # Get the primary CVM IP for status checks
+            # In a real implementation, we would get this from the cluster's nodes
+            primary_cvm_ip = cluster.get('cluster_ip')  # Using cluster IP as fallback
             
-            if not cvm_ip:
+            if not primary_cvm_ip:
                 logger.error(f"No CVM IP found for cluster {cluster_id}")
                 return False
             
@@ -359,44 +362,29 @@ class ClusterManager:
             
             while (time.time() - start_time) < timeout_seconds:
                 try:
-                    # In a real implementation, this would make an API call to check cluster status
-                    # For now, we'll simulate a successful response after a delay
-                    logger.debug(f"Checking cluster {cluster_id} status via Prism API")
+                    logger.debug(f"Checking cluster {cluster_id} status via SSH")
                     
-                    # Simulate API call delay
-                    time.sleep(2)
+                    # Check cluster status via SSH
+                    status_result = self._check_cluster_status_ssh(primary_cvm_ip)
                     
-                    # Uncomment the following code to make the actual API call
-                    """
-                    response = requests.get(
-                        f"https://{cvm_ip}:9440/PrismGateway/services/rest/v2.0/cluster",
-                        auth=('admin', 'admin'),
-                        verify=False,
-                        timeout=10
-                    )
-                    
-                    if response.status_code == 200:
-                        cluster_status = response.json()
-                        if cluster_status.get('cluster_status') == 'UP':
+                    if status_result['success']:
+                        cluster_status = status_result.get('status', '').upper()
+                        if 'UP' in cluster_status or 'NORMAL' in cluster_status:
                             logger.info(f"Cluster {cluster_id} is UP and running")
                             self._update_cluster_status(cluster_id, 'created')
                             return True
                         else:
-                            logger.debug(f"Cluster status: {cluster_status.get('cluster_status')}")
-                    """
-                    
-                    # Simulate successful cluster creation
-                    logger.info(f"Cluster {cluster_id} is UP and running (simulated)")
-                    self._update_cluster_status(cluster_id, 'created')
-                    return True
+                            logger.debug(f"Cluster status: {cluster_status}")
+                    else:
+                        logger.debug(f"Status check failed: {status_result.get('error', 'Unknown error')}")
                     
                 except Exception as e:
                     logger.warning(f"Error checking cluster status: {str(e)}")
                 
                 logger.debug(f"Waiting for cluster {cluster_id} formation...")
-                time.sleep(10)
+                time.sleep(30)  # Wait 30 seconds between checks
             
-            logger.error(f"Cluster creation timed out after {timeout_minutes} minutes")
+            logger.error(f"Cluster creation monitoring timed out after {timeout_minutes} minutes")
             self._update_cluster_status(cluster_id, 'error')
             return False
             
@@ -404,3 +392,55 @@ class ClusterManager:
             logger.error(f"Failed to monitor cluster {cluster_id} creation: {str(e)}")
             self._update_cluster_status(cluster_id, 'error')
             return False
+    
+    def _check_cluster_status_ssh(self, cvm_ip):
+        """Check cluster status via SSH"""
+        try:
+            # Create SSH client
+            ssh_client = paramiko.SSHClient()
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            
+            # Connect to the CVM
+            ssh_client.connect(
+                hostname=cvm_ip,
+                username=self.default_ssh_user,
+                password=self.default_ssh_password,
+                timeout=30,
+                allow_agent=False,
+                look_for_keys=False
+            )
+            
+            # Execute cluster status command
+            status_cmd = "cluster status"
+            logger.debug(f"Executing status check command: {status_cmd}")
+            
+            stdin, stdout, stderr = ssh_client.exec_command(status_cmd, timeout=60)
+            
+            # Get command output
+            output = stdout.read().decode('utf-8').strip()
+            error = stderr.read().decode('utf-8').strip()
+            exit_code = stdout.channel.recv_exit_status()
+            
+            # Close SSH connection
+            ssh_client.close()
+            
+            if exit_code == 0:
+                return {
+                    'success': True,
+                    'status': output,
+                    'error': error
+                }
+            else:
+                return {
+                    'success': False,
+                    'status': output,
+                    'error': error or f"Status check failed with exit code {exit_code}"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error checking cluster status via SSH: {str(e)}")
+            return {
+                'success': False,
+                'status': '',
+                'error': f"SSH status check error: {str(e)}"
+            }

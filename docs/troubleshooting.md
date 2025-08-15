@@ -58,10 +58,45 @@ to test the response:
 `curl http://localhost:8080/boot/config?mgmt_ip=10.240.0.10`
 `curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10`
 
-## Arizona config for server
+## config for server
 
-`curl http://localhost:8080/boot/server/10.240.0.10 | jq`
-`curl http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10 | jq`
+
+# Create a cluster
+
+To test build a single node cluster:
+
+1. Ensure you have a node in the database with `deployment_status='deployed'` and proper `nutanix_config` values
+2. Make a POST request to `/api/config/clusters` with the following payload:
+   ```json
+   {
+     "cluster_config": {
+       "cluster_type": "single_node",
+       "cluster_name": "test-single-cluster",
+       "nodes": ["your-node-name"]
+     }
+   }
+   ```
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+     "cluster_config": {
+       "cluster_type": "single_node",
+       "cluster_name": "test-single-cluster",
+       "nodes": ["your-node-name"]
+     }
+   }' \
+  "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters"
+```
+
+3. Check the cluster creation status by making a GET request to `/api/config/clusters/{cluster_id}`
+
+```bash
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters/{cluster_id}"
+```
+
+Where `{cluster_id}` is the ID returned in the creation response.
 
 
 ## To boot from the iso (livecd files not found)

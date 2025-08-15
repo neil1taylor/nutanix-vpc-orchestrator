@@ -1,0 +1,90 @@
+#!/bin/sh
+# vpc_init - Complete driver loading and network setup
+
+echo "=== Nutanix CE Direct Boot with Ionic ==="
+
+# Essential filesystem mounts
+mount -t proc proc /proc 2>/dev/null || true
+mount -t sysfs sysfs /sys 2>/dev/null || true
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+
+# Set environment
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/root/phoenix
+export TERM=linux
+export AUTOMATED_INSTALL=true
+
+# Load ionic driver immediately
+echo "Loading ionic driver for IBM Cloud VPC..."
+if modprobe ionic 2>/dev/null; then
+    echo "Ionic driver loaded successfully"
+    sleep 3  # Give driver time to initialize
+    
+    # Show available interfaces
+    echo "Network interfaces after ionic load:"
+    ls /sys/class/net/ 2>/dev/null | grep -v lo | while read iface; do
+        echo "  - $iface"
+    done
+else
+    echo "Ionic driver not available"
+fi
+
+# Configure network directly
+echo "Configuring network..."
+configure_network_direct
+
+# Launch installation
+echo "Starting automated installation..."
+if [ -f "/root/phoenix/vpc_ce_installation.py" ]; then
+    cd /root/phoenix
+    exec python3 vpc_ce_installation.py
+else
+    echo "Installation script not found"
+    exec /bin/sh
+fi
+
+# Network configuration function
+configure_network_direct() {
+    echo "=== Direct Network Configuration ==="
+    
+    # Wait for interfaces to appear
+    local count=0
+    while [ $count -lt 30 ]; do
+        local interfaces=$(ls /sys/class/net/ 2>/dev/null | grep -v lo)
+        if [ -n "$interfaces" ]; then
+            echo "Network interfaces found: $interfaces"
+            break
+        fi
+        echo "Waiting for network interfaces... ($count/30)"
+        sleep 2
+        count=$((count + 1))
+    done
+    
+    # Configure first available interface
+    for iface in $(ls /sys/class/net/ 2>/dev/null | grep -v lo | head -1); do
+        echo "Configuring interface: $iface"
+        
+        # Bring interface up
+        ip link set "$iface" up
+        sleep 2
+        
+        # Try DHCP
+        echo "Requesting DHCP on $iface..."
+        if timeout 30 dhclient -v "$iface" 2>/dev/null; then
+            echo "DHCP successful on $iface"
+            
+            # Test connectivity
+            if ping -c 3 -W 5 8.8.8.8 >/dev/null 2>&1; then
+                echo "Network connectivity verified"
+                export CONFIGURED_INTERFACE="$iface"
+                return 0
+            else
+                echo "DHCP succeeded but no internet connectivity"
+            fi
+        else
+            echo "DHCP failed on $iface"
+        fi
+    done
+    
+    echo "Network configuration failed"
+    return 1
+}
