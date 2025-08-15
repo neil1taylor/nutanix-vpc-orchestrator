@@ -261,7 +261,6 @@ shell
             # Construct the final installer configuration JSON
             installer_config = {
                 "hardware": {
-                    "model": "CommunityEdition", # Placeholder, can be derived from profile if needed
                     "boot_disk": storage_config_for_installer['boot_device'],
                     "boot_disk_model": "Micron_7450_MTFD", # Hardcoded as per example, or derive if possible
                     "boot_disk_size_gb": convert_size_to_gb(storage_config_from_profile.get('boot_drive_size', '960GB')), # Convert size to GB
