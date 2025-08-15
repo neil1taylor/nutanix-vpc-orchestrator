@@ -44,9 +44,6 @@ cat /var/log/nutanix-pxe/pxe-server.log
 Tests:
 
 curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10"
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10&type=default"
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=10.240.0.10&type=iso"
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config"
 
 ## iPXE URL for bare metal server
 
@@ -60,6 +57,8 @@ to test the response:
 
 ## config for server
 
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10"
+{"error":"Failed to generate server configuration"}
 
 # Create a cluster
 

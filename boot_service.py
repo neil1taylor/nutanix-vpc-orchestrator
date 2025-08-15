@@ -353,7 +353,7 @@ shell
                     "cvm_vcpus": node.get('nutanix_config', {}).get('cvm_vcpus', 16)      # Get from node config or use default
                 },
                 "network": {
-                    "cvm_ip": ip_allocation['cvm']['ip_address'],
+                    "cvm_ip": node.get('nutanix_config', {}).get('cvm_ip', node['management_ip']),
                     "cvm_netmask": network_info['netmask'],
                     "cvm_gateway": network_info['gateway'],
                     "dns_servers": network_info['dns'].split(',') # Split comma-separated string
