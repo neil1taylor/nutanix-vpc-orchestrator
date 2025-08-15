@@ -51,48 +51,8 @@ class ProxyAwareFormatter(logging.Formatter):
         return super().format(record)
 
 # Add logging for server startup
-if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler()
-    formatter = ProxyAwareFormatter('%(asctime)s - %(real_ip)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.info("Server is starting up")
-    app = Flask(__name__)
-    CORS(app)
-    config = Config()
-    db = Database()
-    node_provisioner = NodeProvisioner(db, config)
-    boot_service = BootService(db, config)
-    status_monitor = StatusMonitor()
-    ibm_cloud_client = IBMCloudClient(config)
-    cluster_manager = ClusterManager(db, config, node_provisioner, boot_service, status_monitor, ibm_cloud_client)
-    register_web_routes(app, db, node_provisioner, boot_service, status_monitor, ibm_cloud_client, cluster_manager)
-    add_database_viewer_routes(app, db)
-    app.run(host=config.server_host, port=config.server_port, debug=config.debug_mode)
 
 # Add logging for server startup
-if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler()
-    formatter = ProxyAwareFormatter('%(asctime)s - %(real_ip)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.info("Server is starting up")
-    app = Flask(__name__)
-    CORS(app)
-    config = Config()
-    db = Database()
-    node_provisioner = NodeProvisioner(db, config)
-    boot_service = BootService(db, config)
-    status_monitor = StatusMonitor()
-    ibm_cloud_client = IBMCloudClient(config)
-    cluster_manager = ClusterManager(db, config, node_provisioner, boot_service, status_monitor, ibm_cloud_client)
-    register_web_routes(app, db, node_provisioner, boot_service, status_monitor, ibm_cloud_client, cluster_manager)
-    add_database_viewer_routes(app, db)
-    app.run(host=config.server_host, port=config.server_port, debug=config.debug_mode)
 
 # Add logging for server startup
 if __name__ == '__main__':

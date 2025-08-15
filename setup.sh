@@ -98,7 +98,7 @@ build_initrd-vpc() {
     
     # Create symlink
     cd "$output_dir"
-    ln -sf "initrd-ionic-$timestamp.img" "initrd-ionic.img"
+    ln -sf "initrd-ionic-$timestamp.img" "initrd-vpc.img"
     
     # Verify integrity
     if gzip -t "$output_file"; then
@@ -293,7 +293,6 @@ test_static_files() {
     local required_files=(
         "/var/www/pxe/images/kernel"
         "/var/www/pxe/images/initrd-modified.img"
-        "/var/www/pxe/images/nutanix-ce.iso"
         "/var/www/pxe/images/squashfs.img"
         "/var/www/pxe/images/nutanix_installer_package.tar.gz"
         "/var/www/pxe/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
@@ -565,102 +564,7 @@ setup_boot_files() {
     
     cd "$INITRD_TMP_DIR"
 
-    # Extract initrd contents
-    log "Extracting the contents of initrd to ${INITRD_TMP_DIR}"
-    gunzip -c /mnt/boot/initrd | cpio -idm
-    
-    # Check if livecd.sh exists in the extracted files
-    if [ ! -f "livecd.sh" ]; then
-        log "Error: livecd.sh not found in extracted initrd"
-        ls -la
-        return 1
-    else
-        log "Found livecd.sh in extracted initrd"
-    fi
-
-    # Modify the find_squashfs_in_iso_ce function in the existing livecd.sh file
-    log "Modifying the 'find_squashfs_in_iso_ce' function in the existing 'livecd.sh' file"
-    if [ -f livecd.sh ]; then
-        # Create backup of original file
-        cp livecd.sh livecd.sh.orig
-        
-        # Use sed to replace the function
-        # First, find the start and end of the existing function
-        START_LINE=$(grep -n "find_squashfs_in_iso_ce[[:space:]]*(" livecd.sh | cut -d: -f1)
-        if [ -z "$START_LINE" ]; then
-            log "Error: Could not find find_squashfs_in_iso_ce function in livecd.sh"
-            return 1
-        fi
-        
-        # Find the end of the function (next function or EOF)
-        END_LINE=$(tail -n +$((START_LINE+1)) livecd.sh | grep -n "[a-zA-Z0-9_][a-zA-Z0-9_]*[[:space:]]*(" | head -1 | cut -d: -f1)
-        if [ -z "$END_LINE" ]; then
-            # If no next function, use end of file
-            END_LINE=$(wc -l livecd.sh | awk '{print $1}')
-        else
-            # Adjust for the offset from tail command
-            END_LINE=$((START_LINE + END_LINE - 1))
-        fi
-        
-        log "Found function from line $START_LINE to $END_LINE"
-        
-        # Create a temporary file with the new function
-        cat > /tmp/new_function.sh << 'EOF'
-find_squashfs_in_iso_ce ()
-{
-  # This function has been replaced to enable usage with IBM Cloud VPC Bare Metal Servers
-  # Ultra-simple network boot for IBM Cloud VPC
-  echo "Downloading squashfs.img from $LIVEFS_URL"
-  wget "$LIVEFS_URL" -O /root/squashfs.img
-  
-  if [ $? -eq 0 -a -f /root/squashfs.img ]; then
-    echo "squashfs.img downloaded successfully"
-    return 0
-  else
-    echo "Failed to download squashfs.img"
-    return 1
-  fi
-}
-EOF
-
-        # Replace the function with our modified version
-        sed -i "${START_LINE},${END_LINE}d" livecd.sh  # Delete the old function
-        sed -i "${START_LINE}r /tmp/new_function.sh" livecd.sh  # Insert the new function
-        rm -f /tmp/new_function.sh  # Clean up
-        
-        # Verify the function was replaced successfully
-        if grep -q "This function has been replaced to enable usage with IBM Cloud VPC Bare Metal Servers" livecd.sh; then
-            log "Successfully modified 'find_squashfs_in_iso_ce' function in 'livecd.sh'"
-        else
-            log "Error: Function replacement verification failed"
-            return 1
-        fi
-    else
-        log "Error: livecd.sh not found in extracted initrd"
-        return 1
-    fi
-
-    # Repack the initrd
-    log "Repacking the initrd with the modified livecd.sh and saving to /var/www/pxe/images/initrd-modified.img"
-    
-    # Ensure the target directory exists
-    mkdir -p /var/www/pxe/images
-    
-    # Repack from the extraction directory
-    cd "$INITRD_TMP_DIR"
-    log "Creating new initrd from directory: $(pwd)"
-    
-    # Use a more reliable repacking method
-    find . -print | cpio -o -H newc 2>/dev/null | gzip > /var/www/pxe/images/initrd-modified.img
-    
-    # Check if the repacking was successful
-    if [ -f "/var/www/pxe/images/initrd-modified.img" ]; then
-        INITRD_SIZE=$(du -h /var/www/pxe/images/initrd-modified.img | cut -f1)
-        log "Successfully created initrd-modified.img (Size: $INITRD_SIZE)"
-    else
-        log "Error: Failed to create initrd-modified.img"
-        return 1
-    fi
+    build_initrd-vpc()
     
     cd /tmp
 
@@ -675,18 +579,6 @@ EOF
             cp /mnt/boot/kernel /var/www/pxe/images
         else
             log "Skipping file copy, kernel is already in /var/www/pxe/images "
-        fi
-        if [[ ! -f "/var/www/pxe/images/initrd.img" ]]; then
-            log "Copying the original initrd to /var/www/pxe/images/initrd.img..."
-            cp /mnt/boot/initrd /var/www/pxe/images/initrd.img
-        else
-            log "Skipping file copy, initrd.img is already in /var/www/pxe/images "
-        fi
-        if [[ ! -f "/var/www/pxe/images/nutanix-ce.iso" ]]; then
-           log "Copying the file nutanix-ce.iso to /var/www/pxe/images..."
-           cp /tmp/nutanix-ce.iso /var/www/pxe/images
-        else
-            log "Skipping file copy, nutanix-ce.iso is already in /var/www/pxe/images "
         fi
         if [[ ! -f "/var/www/pxe/images/squashfs.img" ]]; then
             log "Copying the file squashfs.img to /var/www/pxe/images..."
@@ -738,13 +630,6 @@ EOF
         INITRD_MODIFIED_MD5=$(md5sum /var/www/pxe/images/initrd-modified.img | cut -d ' ' -f 1)
         echo "  \"initrd-modified.img\": \"$INITRD_MODIFIED_MD5\"," >> "$CHECKSUMS_FILE"
         log "Modified Initrd MD5: $INITRD_MODIFIED_MD5"
-    fi
-    
-    # Calculate MD5 for original initrd
-    if [[ -f "/var/www/pxe/images/initrd.img" ]]; then
-        INITRD_ORIGINAL_MD5=$(md5sum /var/www/pxe/images/initrd.img | cut -d ' ' -f 1)
-        echo "  \"initrd.img\": \"$INITRD_ORIGINAL_MD5\"," >> "$CHECKSUMS_FILE"
-        log "Original Initrd MD5: $INITRD_ORIGINAL_MD5"
     fi
     
     # Calculate MD5 for squashfs
