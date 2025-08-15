@@ -258,15 +258,18 @@ shell
                     return int(float(size_str[:-2]) * 1024)
                 return 0 # Default to 0 if format is unexpected
 
-            # Construct the final installer configuration JSON
+            # Get storage configuration for installer
+            storage_config = self.storage_config_for_installer(node)
+            
             installer_config = {
                 "hardware": {
-                    "boot_disk": storage_config_for_installer['boot_device'],
-                    "boot_disk_model": "Micron_7450_MTFD", # Hardcoded as per example, or derive if possible
-                    "boot_disk_size_gb": convert_size_to_gb(storage_config_from_profile.get('boot_drive_size', '960GB')), # Convert size to GB
-                    "cvm_data_disks": storage_config_for_installer['data_drives'],
-                    "cvm_boot_disks": [storage_config_for_installer['boot_device']], # Using boot_device as per common practice, example in doc might be wrong
-                    "hypervisor_boot_disk": storage_config_for_installer['hypervisor_device']
+                    "model": "CommunityEdition",
+                    "boot_disk": storage_config['boot_device'],
+                    "boot_disk_model": storage_config['boot_device_model'],
+                    "boot_disk_size_gb": convert_size_to_gb(storage_config['boot_drive_size']), # Convert size to GB
+                    "cvm_data_disks": storage_config['data_drives'],
+                    "cvm_boot_disks": [storage_config['boot_device']], # Using boot_device as per common practice, example in doc might be wrong
+                    "hypervisor_boot_disk": storage_config['hypervisor_device']
                 },
                 "resources": {
                     "cvm_memory_gb": node.get('nutanix_config', {}).get('cvm_memory_gb', 32), # Get from node config or use default
@@ -274,9 +277,9 @@ shell
                 },
                 "network": {
                     "cvm_ip": node.get('nutanix_config', {}).get('cvm_ip', node['management_ip']),
-                    "cvm_netmask": network_info['netmask'],
-                    "cvm_gateway": network_info['gateway'],
-                    "dns_servers": network_info['dns'].split(',') # Split comma-separated string
+                    "cvm_netmask": network_info.get('netmask', '255.255.0.0'),
+                    "cvm_gateway": network_info.get('gateway', ''),
+                    "dns_servers": network_info.get('dns', '8.8.8.8').split(',') # Split comma-separated string
                 }
             }
             # ... rest of the function, ensuring installer_config is returned or used ...
@@ -344,64 +347,6 @@ shell
                 logger.warning(f"Failed to determine if this is the first node: {str(e)}")
                 is_first_node = True  # Default to creating a cluster
             
-            # Format response according to Arizona configuration format
-            response = {
-                # Basic node information
-                'hyp_type': 'kvm',  # AHV is based on KVM
-                'node_position': 'A',  # All nodes use position A as requested
-                
-                # URLs for installer packages with MD5 checksums
-                'svm_installer_url': {
-                    'url': svm_installer_url,
-                    'md5sum': svm_installer_md5
-                },
-                'hypervisor_iso_url': {
-                    'url': hypervisor_iso_url,
-                    'md5sum': hypervisor_iso_md5
-                },
-                'squashfs_url': {
-                    'url': squashfs_url,
-                    'md5sum': squashfs_md5
-                },
-                
-                # Node configuration array (single node in our case)
-                'nodes': [
-                    {
-                        'node_position': 'A',  # All nodes use position A
-                        'hyp_ip': str(node['management_ip']),
-                        'hyp_netmask': netmask,
-                        'hyp_gateway': gateway,
-                        'svm_ip': node.get('nutanix_config', {}).get('cvm_ip', str(node['management_ip'])),
-                        'svm_netmask': netmask,
-                        'svm_gateway': gateway,
-                        'disk_layout': {
-                            # For NVMe-based servers, use /dev/nvme0n1 as boot and CVM disk
-                            'boot_disk': '/dev/nvme0n1' if 'nvme' in str(storage_config.get('data_drives', [])) else storage_config.get('boot_device', '/dev/sda'),
-                            'cvm_disk': '/dev/nvme0n1' if 'nvme' in str(storage_config.get('data_drives', [])) else storage_config.get('boot_device', '/dev/sda'),
-                            # Add /dev/ prefix to all data drives if not already present
-                            'storage_pool_disks': [f"/dev/{drive}" if not drive.startswith('/dev/') else drive for drive in storage_config.get('data_drives', ['/dev/sdb'])]
-                        }
-                    }
-                ],
-                
-                # Network configuration
-                'dns_servers': dns_server_list,
-                'ntp_servers': 'time.adn.networklayer.com',
-                
-                # Installation flags
-                'skip_hypervisor': False,
-                'install_cvm': True,
-                
-                # CE-specific flags
-                'create_1node_cluster': is_first_node,  # Only create cluster if this is the first node
-                'ce_eula_accepted': True,
-                'ce_eula_viewed': True,
-                
-                # Additional metadata
-                'cluster_name': 'ce-cluster',
-                'node_name': node['node_name']
-            }
-            
             # Log the full configuration for debugging
             logger.info(f"Generated Arizona configuration for {node.get('node_name', 'unknown')}")
             logger.info(f"Configuration details: nodes={len(response['nodes'])}, dns={response['dns_servers']}")
@@ -462,55 +407,59 @@ shell
             return "md5_calculation_failed"
     
     
-    
-    def generate_documented_storage_config(self, node):
-        """Generate storage configuration in the documented format"""
+    def storage_config_for_installer(self, node):
+        """
+        Generate storage configuration for the Nutanix CE installer
+        
+        Args:
+            node: Node configuration dictionary
+            
+        Returns:
+            Dict with storage configuration formatted for the installer
+        """
         try:
+            # Get server profile from node configuration
+            profile = node.get('server_profile')
+            
             # Get storage configuration from server profiles
             server_profiles = ServerProfileConfig()
+            storage_config = server_profiles.get_storage_config(profile)
             
-            # Safely get server profile with fallback
-            profile = node.get('server_profile', 'bx2d-metal-48x192')
-            logger.info(f"Getting documented storage config for profile: {profile}")
+            # Extract drive information from profile config
+            profile_config = server_profiles.get_profile_config(profile)
             
-            # Get storage configuration with error handling
-            try:
-                storage_config = server_profiles.get_storage_config(profile)
-            except Exception as e:
-                logger.error(f"Failed to get storage config for {profile}: {str(e)}")
-                # Use default values
-                storage_config = {
-                    'boot_device': '/dev/sda',
-                    'data_drives': ['/dev/sdb']
-                }
-                logger.info(f"Using default storage configuration: {storage_config}")
+            # Determine if we're using NVMe or SATA drives
+            is_nvme = 'nvme' in storage_config.get('boot_device', '')
             
-            # Safely extract drive names with error handling
-            try:
-                # Extract just the drive names without the /dev/ prefix
-                data_drives = [drive.replace('/dev/', '') for drive in storage_config.get('data_drives', ['/dev/sdb'])]
-                boot_drives = [drive.replace('/dev/', '') for drive in [storage_config.get('boot_device', '/dev/sda')]]
+            # Prepare boot device model based on drive type
+            if is_nvme:
+                boot_device_model = "NVMe SSD"
+            else:
+                boot_device_model = "SATA SSD"
                 
-                logger.info(f"Documented storage config: boot={boot_drives}, data={data_drives}")
-                
-                return {
-                    'data_drives': data_drives,
-                    'boot_drives': boot_drives
-                }
-            except Exception as e:
-                logger.error(f"Error formatting drive names: {str(e)}")
-                # Return default values
-                return {
-                    'data_drives': ['sdb'],
-                    'boot_drives': ['sda']
-                }
-                
+            # Format data drives with /dev/ prefix if not already present
+            data_drives = []
+            for drive in storage_config.get('data_drives', []):
+                if not drive.startswith('/dev/'):
+                    data_drives.append(f"/dev/{drive}")
+                else:
+                    data_drives.append(drive)
+            
+            # Create storage configuration for installer
+            installer_storage_config = {
+                'boot_device': storage_config.get('boot_device'),
+                'boot_device_model': boot_device_model,
+                'boot_drive_size': profile_config.get('boot_drive_size'),
+                'data_drives': data_drives,
+                'hypervisor_device': storage_config.get('hypervisor_device')
+            }
+            
+            return installer_storage_config
+            
         except Exception as e:
-            logger.error(f"Failed to generate documented storage config: {str(e)}")
+            # Log error and return default configuration
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to generate storage config for installer: {str(e)}")
             import traceback
             logger.error(f"Storage config traceback: {traceback.format_exc()}")
-            # Return default values
-            return {
-                'data_drives': ['sdb'],
-                'boot_drives': ['sda']
-            }

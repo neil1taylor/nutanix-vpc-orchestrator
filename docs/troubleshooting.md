@@ -58,7 +58,6 @@ to test the response:
 ## config for server
 
 curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10"
-{"error":"Failed to generate server configuration"}
 
 # Create a cluster
 
