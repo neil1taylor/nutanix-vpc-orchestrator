@@ -168,15 +168,22 @@ class ServerProfileConfig:
         if not profile_config:
             raise ValueError(f"Unknown server profile: {server_profile}")
         
+        # Use all available drives
+        data_drives = profile_config['data_drives']
+        
         return {
             'server_profile': server_profile,
-            'data_drives': profile_config['data_drives'],
+            'boot_device': '/dev/sda',
+            'hypervisor_device': '/dev/sda',
+            'cvm_device': '/dev/sda',
+            'data_drives': data_drives,
             'boot_drives': profile_config['boot_drives'],
             'boot_drive_size': profile_config['boot_drive_size'],
             'boot_device_model': profile_config['boot_device_model'],
+            'total_drives': len(data_drives),
+            'raid_config': 'nutanix_managed',
             'drive_info': {
-                'total_drives': len(profile_config['data_drives']),
-                'drives_reserved': exclude_drives,
+                'boot_drive_size': profile_config['boot_drive_size'],
                 'data_drive_size': profile_config['data_drive_size'],
                 'total_storage_capacity': cls._calculate_total_capacity(data_drives, profile_config['data_drive_size'])
             }

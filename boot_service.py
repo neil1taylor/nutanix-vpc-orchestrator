@@ -396,9 +396,9 @@ shell
             
             # Log the full configuration for debugging
             logger.info(f"Generated Arizona configuration for {node.get('node_name', 'unknown')}")
-            logger.info(f"Configuration details: nodes={len(response['nodes'])}, dns={response['dns_servers']}")
-            logger.info(f"Disk layout: boot={response['nodes'][0]['disk_layout']['boot_disk']}, data={response['nodes'][0]['disk_layout']['storage_pool_disks']}")
-            return response
+            logger.info(f"Configuration details: hardware={installer_config['hardware']}, network={installer_config['network']}")
+            logger.info(f"Disk layout: boot={installer_config['hardware']['boot_disk']}, data={installer_config['hardware']['cvm_data_disks']}")
+            return installer_config
             
         except Exception as e:
             logger.error(f"Failed to generate server configuration for {server_ip}: {str(e)}")
