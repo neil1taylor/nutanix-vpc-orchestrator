@@ -97,28 +97,7 @@ class StatusMonitor:
         else:
             # This case should ideally not happen if get_deployment_status is robust
             return {'error': f'Could not retrieve status for node ID {node_id}'}
-    def get_node_status(self, node_id):
-        """Get status for a specific node by ID"""
-        node = self.db.get_node(node_id)
-        if not node:
-            logger.error(f"Status requested for unknown node ID: {node_id}")
-            return {'error': f'Node with ID {node_id} not found'}
-        
-        server_ip = node.get('management_ip')
-        if not server_ip:
-            logger.error(f"Management IP not found for node ID: {node_id}")
-            return {'error': f'Management IP not found for node ID {node_id}'}
-        
-        # Use the existing get_deployment_status method
-        status_data = self.get_deployment_status(server_ip)
-        
-        if status_data:
-            # Add node_id to the response for clarity
-            status_data['node_id'] = node_id
-            return status_data
-        else:
-            # This case should ideally not happen if get_deployment_status is robust
-            return {'error': f'Could not retrieve status for node ID {node_id}'}
+    # Removed duplicate method - already defined above
     
     def update_deployment_phase(self, data):
         """Receive phase updates from deploying servers"""
@@ -398,93 +377,6 @@ class StatusMonitor:
         
         return min(100, max(0, int(total_progress)))
     
-def get_deployment_history(self, server_ip):
-    """Get complete deployment history for a server"""
-    node = self.db.get_node_by_management_ip(server_ip)
-    
-    if not node:
-        return None
-    
-    history = self.db.get_deployment_history(node['id'])
-    
-    return {
-        'server_ip': server_ip,
-        'node_name': node['node_name'],
-        'deployment_history': [
-            {
-                'phase': event['phase'],
-                'status': event['status'],
-                'message': event['message'],
-                'timestamp': event['timestamp'].isoformat()
-            }
-            for event in history
-        ]
-    }
-    
-def handle_deployment_failure(self, node_id, failure_data):
-    """Handle deployment failure"""
-    try:
-        node = self.db.get_node(node_id)
-        
-        logger.error(f"Deployment failed for {node['node_name']}: {failure_data['message']}")
-        
-        # Update node status
-        self.db.update_node_status(node_id, 'failed')
-        
-        # Log detailed failure information
-        self.db.log_deployment_event(
-            node_id,
-            'deployment_failed',
-            'failed',
-            f"Deployment failed in phase {failure_data['phase']}: {failure_data['message']}"
-        )
-        
-        # Trigger cleanup
-        logger.warning(f"Initiating cleanup for failed deployment: {node['node_name']}")
-        cleanup_result = self.cleanup_service.cleanup_failed_provisioning(node['node_name'])
-        
-        if cleanup_result.get('success'):
-            logger.info(f"Cleanup completed successfully for {node['node_name']}")
-            logger.info(f"Cleanup summary: {cleanup_result.get('successful_operations', 0)}/{cleanup_result.get('total_operations', 0)} operations successful")
-        else:
-            logger.error(f"Cleanup failed for {node['node_name']}: {cleanup_result.get('error', 'Unknown error')}")
-    except Exception as e:
-        logger.error(f"Error handling deployment failure for {node_id}: {str(e)}")
-        logger.error(f"Failed to update node status or log deployment event: {str(e)}")
-        logger.error(f"Failed to trigger cleanup for {node['node_name']}: {str(e)}")
-    
-def handle_cluster_formation_complete(self, node_id, completion_data):
-    """Handle deployment failure"""
-    try:
-        node = self.db.get_node(node_id)
-        
-        logger.error(f"Deployment failed for {node['node_name']}: {failure_data['message']}")
-        
-        # Update node status
-        self.db.update_node_status(node_id, 'failed')
-        
-        # Log detailed failure information
-        self.db.log_deployment_event(
-            node_id,
-            'deployment_failed',
-            'failed',
-            f"Deployment failed in phase {failure_data['phase']}: {failure_data['message']}"
-        )
-        
-        # Trigger cleanup
-        logger.warning(f"Initiating cleanup for failed deployment: {node['node_name']}")
-        cleanup_result = self.cleanup_service.cleanup_failed_provisioning(node['node_name'])
-        
-        if cleanup_result.get('success'):
-            logger.info(f"Cleanup completed successfully for {node['node_name']}")
-            logger.info(f"Cleanup summary: {cleanup_result.get('successful_operations', 0)}/{cleanup_result.get('total_operations', 0)} operations successful")
-        else:
-            logger.error(f"Cleanup failed for {node['node_name']}: {cleanup_result.get('error', 'Unknown error')}")
-    except Exception as e:
-        logger.error(f"Error handling deployment failure for {node_id}: {str(e)}")
-        logger.error(f"Failed to update node status or log deployment event: {str(e)}")
-        logger.error(f"Failed to trigger cleanup for {node['node_name']}: {str(e)}")
-    
     def get_deployment_history(self, server_ip):
         """Get complete deployment history for a server"""
         node = self.db.get_node_by_management_ip(server_ip)
@@ -498,6 +390,132 @@ def handle_cluster_formation_complete(self, node_id, completion_data):
             'server_ip': server_ip,
             'node_name': node['node_name'],
             'deployment_history': [
+                {
+                    'phase': event['phase'],
+                    'status': event['status'],
+                    'message': event['message'],
+                    'timestamp': event['timestamp'].isoformat()
+                }
+                for event in history
+            ]
+        }
+    
+    def handle_deployment_failure(self, node_id, failure_data):
+        """Handle deployment failure"""
+        try:
+            node = self.db.get_node(node_id)
+            
+            logger.error(f"Deployment failed for {node['node_name']}: {failure_data['message']}")
+            
+            # Update node status
+            self.db.update_node_status(node_id, 'failed')
+            
+            # Log detailed failure information
+            self.db.log_deployment_event(
+                node_id,
+                'deployment_failed',
+                'failed',
+                f"Deployment failed in phase {failure_data['phase']}: {failure_data['message']}"
+            )
+            
+            # Trigger cleanup
+            logger.warning(f"Initiating cleanup for failed deployment: {node['node_name']}")
+            cleanup_result = self.cleanup_service.cleanup_failed_provisioning(node['node_name'])
+            
+            if cleanup_result.get('success'):
+                logger.info(f"Cleanup completed successfully for {node['node_name']}")
+                logger.info(f"Cleanup summary: {cleanup_result.get('successful_operations', 0)}/{cleanup_result.get('total_operations', 0)} operations successful")
+            else:
+                logger.error(f"Cleanup failed for {node['node_name']}: {cleanup_result.get('error', 'Unknown error')}")
+        except Exception as e:
+            logger.error(f"Error handling deployment failure for {node_id}: {str(e)}")
+            logger.error(f"Failed to update node status or log deployment event: {str(e)}")
+            logger.error(f"Failed to trigger cleanup for {node['node_name']}: {str(e)}")
+    
+    def handle_cluster_formation_complete(self, node_id, completion_data):
+        """Handle cluster formation completion"""
+        try:
+            node = self.db.get_node(node_id)
+            
+            logger.info(f"Cluster formation completed for {node['node_name']}: {completion_data['message']}")
+            
+            # Update node status
+            self.db.update_node_status(node_id, 'running')
+            
+            # Log detailed completion information
+            self.db.log_deployment_event(
+                node_id,
+                'cluster_formation',
+                'success',
+                f"Cluster formation completed: {completion_data['message']}"
+            )
+            
+            # Update cluster status if applicable
+            if 'cluster_id' in completion_data:
+                logger.info(f"Updating cluster {completion_data['cluster_id']} status to 'running'")
+                # Implement cluster status update logic here
+            
+        except Exception as e:
+            logger.error(f"Error handling cluster formation completion for {node_id}: {str(e)}")
+            logger.error(f"Failed to update node status or log deployment event: {str(e)}")
+    
+    def get_overall_deployment_summary(self):
+        """Get overall deployment summary for all nodes"""
+        try:
+            # Get all nodes
+            nodes = self.db.get_all_nodes()
+            
+            # Count nodes by status
+            status_counts = {}
+            for node in nodes:
+                status = node.get('deployment_status', 'unknown')
+                status_counts[status] = status_counts.get(status, 0) + 1
+            
+            # Get active deployments
+            active_deployments = []
+            for node in nodes:
+                if node.get('deployment_status') not in ['deployed', 'failed', 'cleanup_completed']:
+                    # Get latest status
+                    latest_status = self.db.get_latest_deployment_status(node['id'])
+                    if latest_status:
+                        active_deployments.append({
+                            'node_id': node['id'],
+                            'node_name': node['node_name'],
+                            'current_phase': latest_status['phase'],
+                            'status': latest_status['status'],
+                            'message': latest_status['message'],
+                            'timestamp': latest_status['timestamp'].isoformat()
+                        })
+            
+            # Get recent deployments (last 5)
+            recent_deployments = []
+            recent_nodes = sorted(nodes, key=lambda x: x.get('created_at', datetime.now()), reverse=True)[:5]
+            for node in recent_nodes:
+                # Get latest status
+                latest_status = self.db.get_latest_deployment_status(node['id'])
+                if latest_status:
+                    recent_deployments.append({
+                            'node_id': node['id'],
+                            'node_name': node['node_name'],
+                            'current_phase': latest_status['phase'],
+                            'status': latest_status['status'],
+                            'message': latest_status['message'],
+                            'timestamp': latest_status['timestamp'].isoformat()
+                    })
+            
+            return {
+                'total_nodes': len(nodes),
+                'status_summary': status_counts,
+                'active_deployments': active_deployments,
+                'recent_deployments': recent_deployments,
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error getting overall deployment summary: {str(e)}")
+            # Log full traceback for debugging
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return None
                 {
                     'phase': event['phase'],
                     'status': event['status'],
