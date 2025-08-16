@@ -95,52 +95,78 @@ else
 fi
 
 # Network configuration function
-configure_network() {
-    echo "=== Network Configuration ==="
+configure_network_direct() {
+    echo "=== Direct Network Configuration ==="
 
     # Find the first non-loopback interface
-    iface=$(ls /sys/class/net/ 2>/dev/null | grep -v lo | head -n1)
+    iface=$(ls /sys/class/net/ | grep -v lo | head -n1)
     if [ -z "$iface" ]; then
-        drop_to_shell "No network interfaces found after loading ionic driver"
+        drop_to_shell "No network interfaces found"
     fi
 
-    echo "Configuring interface: $iface"
-    
-    # Bring interface up
+    echo "Configuring $iface..."
     if ! ip link set "$iface" up; then
         drop_to_shell "Failed to bring up interface $iface"
     fi
-    
-    echo "Waiting for interface to come up..."
-    sleep 2
+    sleep 1
 
-    # Try DHCP with udhcpc
-    echo "Requesting DHCP lease on $iface..."
-    if udhcpc -i "$iface" -n -q; then
-        echo "DHCP configuration successful"
-        
-        # Show network status
-        echo "--- Network Status ---"
-        ip addr show "$iface"
-        echo "--- Routing Table ---"
-        ip route show
-        echo "--- DNS Configuration ---"
-        cat /etc/resolv.conf 2>/dev/null || echo "No DNS config found"
-        echo "--- End Network Status ---"
-        
-        # Test connectivity
-        echo "Testing network connectivity..."
-        if ping -c 2 -W 5 8.8.8.8 >/dev/null 2>&1; then
-            echo "Internet connectivity verified"
-            send_status_update "Network configured successfully with internet access" "network_success"
-            return 0
-        else
-            echo "Warning: No internet connectivity"
-            send_status_update "Network configured but no internet access" "network_partial"
-            return 0  # Continue anyway - might be local network only
+    # Write a temporary udhcpc handler
+    cat >/tmp/udhcpc-handler.sh <<'EOF'
+#!/bin/sh
+case "$1" in
+    deconfig)
+        ip addr flush dev $interface
+        ;;
+    bound|renew)
+        ip addr flush dev $interface
+        ip addr add $ip/$subnet dev $interface
+        ip link set $interface up
+
+        if [ -n "$router" ]; then
+            echo "Setting default route via $router"
+            ip route replace default via $router dev $interface
         fi
+
+        if [ -n "$dns" ]; then
+            echo -n > /etc/resolv.conf
+            for ns in $dns; do
+                echo "nameserver $ns" >> /etc/resolv.conf
+            done
+        fi
+        ;;
+esac
+EOF
+    chmod +x /tmp/udhcpc-handler.sh
+
+    # Run udhcpc with the handler
+    if udhcpc -i "$iface" -n -q -s /tmp/udhcpc-handler.sh; then
+        echo "Network configuration successful on $iface"
+        echo "---"
+        ip a show dev "$iface"
+        ip route show
+        echo "DNS:"
+        cat /etc/resolv.conf
+        echo "---"
+
+        # Send status update
+        send_status_update "VPC init script started and IP assigned" "boot"
+
+        return 0
     else
-        drop_to_shell "DHCP configuration failed on $iface"
+        drop_to_shell "Network configuration failed on $iface"
+    fi
+
+        
+    # Test connectivity
+    echo "Testing network connectivity..."
+    if ping -c 2 -W 5 8.8.8.8 >/dev/null 2>&1; then
+        echo "Internet connectivity verified"
+        send_status_update "Network configured successfully with internet access" "network_success"
+        return 0
+    else
+        echo "Warning: No internet connectivity"
+        send_status_update "Network configured but no internet access" "network_partial"
+        return 0  # Continue anyway - might be local network only
     fi
 }
 
