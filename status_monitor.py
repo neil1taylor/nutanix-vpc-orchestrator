@@ -81,15 +81,15 @@ class StatusMonitor:
         if not node:
             logger.error(f"Status requested for unknown node ID: {node_id}")
             return {'error': f'Node with ID {node_id} not found'}
-
+        
         server_ip = node.get('management_ip')
         if not server_ip:
             logger.error(f"Management IP not found for node ID: {node_id}")
             return {'error': f'Management IP not found for node ID {node_id}'}
-
+        
         # Use the existing get_deployment_status method
         status_data = self.get_deployment_status(server_ip)
-
+        
         if status_data:
             # Add node_id to the response for clarity
             status_data['node_id'] = node_id
@@ -103,15 +103,15 @@ class StatusMonitor:
         if not node:
             logger.error(f"Status requested for unknown node ID: {node_id}")
             return {'error': f'Node with ID {node_id} not found'}
-
+        
         server_ip = node.get('management_ip')
         if not server_ip:
             logger.error(f"Management IP not found for node ID: {node_id}")
             return {'error': f'Management IP not found for node ID {node_id}'}
-
+        
         # Use the existing get_deployment_status method
         status_data = self.get_deployment_status(server_ip)
-
+        
         if status_data:
             # Add node_id to the response for clarity
             status_data['node_id'] = node_id
@@ -158,7 +158,7 @@ class StatusMonitor:
                 logger.info(f"Server {node['node_name']} status changed to: STARTING")
             elif data['phase'] == 'foundation_start' and data['status'] == 'in_progress':
                 logger.info(f"Server {node['node_name']} status changed to: INSTALLING")
-
+        
         # Log detailed status information
         if data['status'] == 'failed':
             logger.info(f"Deployment failed for {node['node_name']}: {data['message']}")
@@ -169,7 +169,7 @@ class StatusMonitor:
             
         # Log all status changes with details
         logger.info(f"Server {node['node_name']} status update: phase={data['phase']}, status={data['status']}, new_state={new_status}")
-
+        
         logger.info(f"Phase update for {node['node_name']}: {data['phase']} - {data['status']}")
         
         # Check if this is a bare metal server status update
@@ -227,7 +227,7 @@ class StatusMonitor:
                 )
         
         return {'message': 'Status updated successfully'}
-
+    
     def collect_and_store_health_metrics(self, node_id):
         """Collect and store health metrics for a node"""
         try:
@@ -253,7 +253,7 @@ class StatusMonitor:
             custom_metrics = self.get_custom_metrics(node_id, cvm_ip)
             
             logger.info(f"Health metrics collected for {node['node_name']}: CPU={cpu_usage}%, Memory={memory_usage}%, Disk={disk_space}%, Network={network_latency}ms")
-
+            
             # Store health metrics in the database
             self.db.insert_node_health(
                 node_id,
@@ -287,7 +287,7 @@ class StatusMonitor:
                 'error': str(e),
                 'timestamp': datetime.now().isoformat()
             }
-
+    
     def get_cpu_usage(self, node_id, cvm_ip):
         """Get real CPU usage via SSH or API call"""
         try:
@@ -301,7 +301,7 @@ class StatusMonitor:
         except Exception as e:
             logger.warning(f"Failed to get CPU usage for node {node_id}: {str(e)}")
             return 0.0
-
+    
     def get_memory_usage(self, node_id, cvm_ip):
         """Get real memory usage via SSH or API call"""
         try:
@@ -315,7 +315,7 @@ class StatusMonitor:
         except Exception as e:
             logger.warning(f"Failed to get memory usage for node {node_id}: {str(e)}")
             return 0.0
-
+    
     def get_disk_space(self, node_id, cvm_ip):
         """Get real disk space usage via SSH or API call"""
         try:
@@ -329,7 +329,7 @@ class StatusMonitor:
         except Exception as e:
             logger.warning(f"Failed to get disk space for node {node_id}: {str(e)}")
             return 0.0
-
+    
     def get_network_latency(self, node_id, cvm_ip):
         """Get real network latency via ping or API call"""
         try:
@@ -342,7 +342,7 @@ class StatusMonitor:
         except Exception as e:
             logger.warning(f"Failed to get network latency for node {node_id}: {str(e)}")
             return 0.0
-
+    
     def get_custom_metrics(self, node_id, cvm_ip):
         """Get custom metrics via API call"""
         try:
@@ -360,6 +360,13 @@ class StatusMonitor:
         except Exception as e:
             logger.warning(f"Failed to get custom metrics for node {node_id}: {str(e)}")
             return {}
+    
+    def get_deployment_start_time(self, node_id):
+        """Get deployment start time for a node"""
+        history = self.db.get_deployment_history(node_id)
+        if history:
+            return history[0]['timestamp']
+        return datetime.now()
     
 def get_deployment_history(self, server_ip):
     """Get complete deployment history for a server"""
@@ -383,7 +390,7 @@ def get_deployment_history(self, server_ip):
             for event in history
         ]
     }
-
+    
 def calculate_progress_percentage(self, current_phase, elapsed_time):
     """Calculate deployment progress as percentage"""
     if current_phase not in self.deployment_phases:
@@ -413,14 +420,7 @@ def calculate_progress_percentage(self, current_phase, elapsed_time):
     total_progress = completed_progress + current_phase_contribution
     
     return min(100, max(0, int(total_progress)))
-
-    def get_deployment_start_time(self, node_id):
-        """Get deployment start time for a node"""
-        history = self.db.get_deployment_history(node_id)
-        if history:
-            return history[0]['timestamp']
-        return datetime.now()
-
+    
 def handle_deployment_failure(self, node_id, failure_data):
     """Handle deployment failure"""
     try:
@@ -452,7 +452,7 @@ def handle_deployment_failure(self, node_id, failure_data):
         logger.error(f"Error handling deployment failure for {node_id}: {str(e)}")
         logger.error(f"Failed to update node status or log deployment event: {str(e)}")
         logger.error(f"Failed to trigger cleanup for {node['node_name']}: {str(e)}")
-
+    
 def handle_cluster_formation_complete(self, node_id, completion_data):
     """Handle deployment failure"""
     try:
@@ -484,7 +484,7 @@ def handle_cluster_formation_complete(self, node_id, completion_data):
         logger.error(f"Error handling deployment failure for {node_id}: {str(e)}")
         logger.error(f"Failed to update node status or log deployment event: {str(e)}")
         logger.error(f"Failed to trigger cleanup for {node['node_name']}: {str(e)}")
-
+    
     def get_deployment_history(self, server_ip):
         """Get complete deployment history for a server"""
         node = self.db.get_node_by_management_ip(server_ip)
@@ -507,124 +507,3 @@ def handle_cluster_formation_complete(self, node_id, completion_data):
                 for event in history
             ]
         }
-
-    def handle_cluster_formation_complete(self, node_id, completion_data):
-        """Handle cluster formation completion"""
-        node = self.db.get_node(node_id)
-        
-        # Check if this is the first node (cluster creation)
-        if self.db.is_first_node() or not self.db.get_cluster_info():
-            self.register_new_cluster(node_id, completion_data)
-        else:
-            self.handle_node_addition_complete(node_id, completion_data)
-
-    def register_new_cluster(self, node_id, completion_data):
-        """Register a new cluster in the database"""
-        node = self.db.get_node(node_id)
-        
-        cluster_config = {
-            'cluster_name': completion_data.get('cluster_name', 'cluster01'),
-            'cluster_ip': node['nutanix_config']['cluster_ip'],
-            'cluster_dns': node['nutanix_config']['cluster_dns'],
-            'created_by_node': node_id,
-            'node_count': 1,
-            'status': 'active'
-        }
-        
-        cluster_id = self.db.register_cluster(cluster_config)
-        
-        self.db.log_deployment_event(
-            node_id,
-            'cluster_registered',
-            'success',
-            f"New cluster {cluster_config['cluster_name']} registered with ID {cluster_id}"
-        )
-        
-        logger.info(f"New cluster {cluster_config['cluster_name']} registered for node {node['node_name']}")
-
-    def handle_node_addition_complete(self, node_id, completion_data):
-        """Handle completion of node addition to existing cluster"""
-        node = self.db.get_node(node_id)
-        cluster_info = self.db.get_cluster_info()
-        
-        if cluster_info:
-            # Increment cluster node count
-            # Note: This would require adding the method to Database class
-            # self.db.increment_cluster_node_count(cluster_info['id'])
-            
-            self.db.log_deployment_event(
-                node_id,
-                'node_added_to_cluster',
-                'success',
-                f"Node {node['node_name']} added to cluster {cluster_info['cluster_name']}"
-            )
-            
-            logger.info(f"Node {node['node_name']} added to cluster {cluster_info['cluster_name']}")
-
-    def handle_deployment_complete(self, node_id, completion_data):
-        """Handle successful deployment completion"""
-        node = self.db.get_node(node_id)
-        
-        # Final status update
-        self.db.update_node_status(node_id, 'deployed')
-        
-        self.db.log_deployment_event(
-            node_id,
-            'deployment_complete',
-            'success',
-            f"Deployment completed successfully for {node['node_name']}"
-        )
-        
-        # Send completion notification (this could trigger external systems)
-        self.send_completion_notification(node_id)
-        
-        logger.info(f"Deployment completed successfully for {node['node_name']}")
-
-    def send_completion_notification(self, node_id):
-        """Send deployment completion notification"""
-        node = self.db.get_node(node_id)
-        cluster_info = self.db.get_cluster_info()
-        
-        notification_data = {
-            'event': 'deployment_complete',
-            'node_id': node_id,
-            'node_name': node['node_name'],
-            'cluster_name': cluster_info['cluster_name'] if cluster_info else 'unknown',
-            'cluster_ip': cluster_info['cluster_ip'] if cluster_info else node['nutanix_config']['cluster_ip'],
-            'prism_url': f"https://{cluster_info['cluster_ip'] if cluster_info else node['nutanix_config']['cluster_ip']}:9440",
-            'completion_time': datetime.now().isoformat()
-        }
-        
-        logger.info(f"Deployment notification: {notification_data}")
-        # Here you could send to external monitoring systems, webhooks, etc.
-
-    def get_overall_deployment_summary(self):
-        """Get summary of all deployments"""
-        try:
-            # Get all nodes
-            with self.db.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        SELECT
-                            deployment_status,
-                            COUNT(*) as count
-                        FROM nodes
-                        GROUP BY deployment_status
-                    """)
-                    status_counts = dict(cur.fetchall())
-            
-            # Get cluster info
-            cluster_info = self.db.get_cluster_info()
-            
-            summary = {
-                'total_nodes': sum(status_counts.values()),
-                'status_breakdown': status_counts,
-                'cluster_info': cluster_info,
-                'last_updated': datetime.now().isoformat()
-            }
-            
-            return summary
-            
-        except Exception as e:
-            logger.error(f"Failed to get deployment summary: {str(e)}")
-            return None
