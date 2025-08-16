@@ -495,9 +495,9 @@ class StatusMonitor:
                 latest_status = self.db.get_latest_deployment_status(node['id'])
                 if latest_status:
                     recent_deployments.append({
-                            'node_id': node['id'],
-                            'node_name': node['node_name'],
-                            'current_phase': latest_status['phase'],
+                        'node_id': node['id'],
+                        'node_name': node['node_name'],
+                        'current_phase': latest_status['phase'],
                             'status': latest_status['status'],
                             'message': latest_status['message'],
                             'timestamp': latest_status['timestamp'].isoformat()
@@ -516,12 +516,3 @@ class StatusMonitor:
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
-                {
-                    'phase': event['phase'],
-                    'status': event['status'],
-                    'message': event['message'],
-                    'timestamp': event['timestamp'].isoformat()
-                }
-                for event in history
-            ]
-        }
