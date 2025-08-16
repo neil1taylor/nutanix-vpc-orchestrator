@@ -2,7 +2,7 @@
 Main Flask application for Nutanix PXE/Config Server
 """
 from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_from_directory, jsonify
-from web_routes import register_web_routes, add_database_viewer_routes
+from web_routes import register_web_routes, add_database_viewer_routes, register_additional_routes
 from flask_cors import CORS
 import logging
 import os
