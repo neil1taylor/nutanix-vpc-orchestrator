@@ -13,37 +13,63 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/root/phoenix
 export TERM=linux
 export AUTOMATED_INSTALL=true
 
-# Load ionic driver immediately
-echo "Loading ionic driver for IBM Cloud VPC..."
-if modprobe ionic 2>/dev/null; then
-    echo "Ionic driver loaded successfully"
-    sleep 3  # Give driver time to initialize
-    
-    # Show available interfaces
-    echo "Network interfaces after ionic load:"
-    ls /sys/class/net/ 2>/dev/null | grep -v lo | while read iface; do
-        echo "  - $iface"
+# Function to get config server from kernel command line
+get_config_server() {
+    if [ -f "/proc/cmdline" ]; then
+        for param in $(cat /proc/cmdline); do
+            case $param in
+                config_server=*)
+                    echo "${param#config_server=}"
+                    return 0
+                    ;;
+            esac
+        done
+    fi
+    # Default fallback if not found
+    echo "http://pxe-server:8080"
+}
+
+# Function to get node identifier (IP address)
+get_node_id() {
+    # Try to get IP address of first interface
+    for iface in $(ls /sys/class/net/ 2>/dev/null | grep -v lo | head -1); do
+        ip=$(ip -4 addr show $iface | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+        if [ -n "$ip" ]; then
+            echo "$ip"
+            return 0
+        fi
     done
-else
-    echo "Ionic driver not available"
-fi
+    # Fallback to hostname or a default
+    hostname 2>/dev/null || echo "unknown-node"
+}
 
-# Configure network directly
-echo "Configuring network..."
-configure_network_direct
+# Function to send status updates to PXE server
+send_status_update() {
+    local message="$1"
+    local phase="$2"
+    local config_server=$(get_config_server)
+    local node_id=$(get_node_id)
+    
+    echo "[STATUS] $message"
+    
+    # Only try to send if we have curl
+    if command -v curl >/dev/null 2>&1; then
+        # Construct JSON payload
+        local json="{\"node_id\":\"$node_id\",\"phase\":\"$phase\",\"message\":\"$message\"}"
+        
+        # Send status update to server
+        curl -s -X POST -H "Content-Type: application/json" \
+             -d "$json" \
+             "${config_server}/api/installation/status" >/dev/null 2>&1 || true
+    fi
+}
 
-# Launch installation
-echo "Starting automated installation..."
-if [ -f "/root/phoenix/vpc_ce_installation.py" ]; then
-    cd /root/phoenix
-    exec python3 vpc_ce_installation.py
-else
-    echo "Installation script not found"
-    exec /bin/sh
-fi
+# Initial status update
+send_status_update "VPC init script started" "boot"
 
 # Network configuration function
 configure_network_direct() {
+    send_status_update "Starting network configuration" "network"
     echo "=== Direct Network Configuration ==="
     
     # Wait for interfaces to appear
@@ -76,6 +102,7 @@ configure_network_direct() {
             if ping -c 3 -W 5 8.8.8.8 >/dev/null 2>&1; then
                 echo "Network connectivity verified"
                 export CONFIGURED_INTERFACE="$iface"
+                send_status_update "Network configured successfully on $iface" "network_success"
                 return 0
             else
                 echo "DHCP succeeded but no internet connectivity"
@@ -86,5 +113,95 @@ configure_network_direct() {
     done
     
     echo "Network configuration failed"
+    send_status_update "Network configuration failed" "network_failed"
     return 1
 }
+
+# Load ionic driver immediately
+echo "Loading ionic driver for IBM Cloud VPC..."
+send_status_update "Loading ionic driver" "driver_load"
+if modprobe ionic 2>/dev/null; then
+    echo "Ionic driver loaded successfully"
+    send_status_update "Ionic driver loaded successfully" "driver_success"
+    sleep 3  # Give driver time to initialize
+    
+    # Show available interfaces
+    echo "Network interfaces after ionic load:"
+    ls /sys/class/net/ 2>/dev/null | grep -v lo | while read iface; do
+        echo "  - $iface"
+    done
+else
+    echo "Ionic driver not available"
+    send_status_update "Ionic driver not available" "driver_failed"
+fi
+
+# Configure network directly
+echo "Configuring network..."
+configure_network_direct
+
+# Check and install Python if needed
+install_python() {
+    echo "Checking for Python..."
+    if command -v python >/dev/null 2>&1; then
+        echo "Python is already installed"
+        return 0
+    fi
+    
+    echo "Python not found, attempting to install..."
+    
+    # Try to detect package manager
+    if command -v apt-get >/dev/null 2>&1; then
+        echo "Detected apt package manager"
+        apt-get update
+        apt-get install -y python
+    elif command -v yum >/dev/null 2>&1; then
+        echo "Detected yum package manager"
+        yum install -y python
+    elif command -v dnf >/dev/null 2>&1; then
+        echo "Detected dnf package manager"
+        dnf install -y python
+    elif command -v apk >/dev/null 2>&1; then
+        echo "Detected apk package manager"
+        apk add python
+    else
+        echo "No supported package manager found"
+        return 1
+    fi
+    
+    # Check if installation was successful
+    if command -v python >/dev/null 2>&1; then
+        echo "Python installed successfully"
+        return 0
+    else
+        echo "Failed to install Python"
+        return 1
+    fi
+}
+
+# Launch installation
+echo "Starting automated installation..."
+send_status_update "Starting automated installation" "install_start"
+if [ -f "/phoenix/vpc_ce_installation.py" ]; then
+    cd /phoenix
+    
+    # Try to install Python if not available
+    if ! command -v python >/dev/null 2>&1; then
+        echo "Python not found, attempting to install..."
+        send_status_update "Python not found, attempting to install" "python_install"
+        if install_python; then
+            echo "Python installed, proceeding with installation"
+            send_status_update "Python installed successfully" "python_success"
+        else
+            echo "Could not install Python, dropping to shell"
+            send_status_update "Failed to install Python" "python_failed"
+            exec /bin/sh
+        fi
+    fi
+    
+    # Execute the Python script
+    send_status_update "Executing Python installation script" "python_exec"
+    exec python vpc_ce_installation.py
+else
+    echo "Installation script not found"
+    exec /bin/sh
+fi
