@@ -192,7 +192,7 @@ curl http://localhost:8080/api/status/history/1
 curl http://localhost:8080/api/status/summary
 ```
 
-### `/api/status` (GET)
+### `/api/status` (POST)
 
 **Description:** Updates the installation status. This endpoint is likely called by nodes to report their overall installation progress.
 
