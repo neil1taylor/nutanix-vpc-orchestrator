@@ -123,6 +123,7 @@ cluster_manager = ClusterManager()
 # Register web UI routes
 register_web_routes(app, db, node_provisioner, status_monitor)
 add_database_viewer_routes(app, db)
+register_additional_routes(app, db, node_provisioner, status_monitor)
 
 # ============================================================================
 # BOOT SERVER ENDPOINTS
