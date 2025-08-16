@@ -80,12 +80,12 @@ build_initrd-vpc() {
     echo "kernel/drivers/net/ethernet/pensando/ionic/ionic.ko:" >> "./lib/modules/$kernel_ver/modules.dep"
     
     # Copy the vpc_init script to the $work_dir
-    log "Copying vpc_init script..."
+    log "Copying vpc_init script to ${work_dir}..."
     cp $PROJECT_DIR/vpc_init vpc_init
     chmod +x vpc_init
 
     # Copy the vpc_ce_installation.py script to the $work_dir
-    log "Copying automated_installation script.py script..."
+    log "Copying vpc_ce_installation.py script to ${work_dir}..."
     cp $PROJECT_DIR/vpc_ce_installation.py phoenix/vpc_ce_installation.py
     chmod +x phoenix/vpc_ce_installation.py
 

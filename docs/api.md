@@ -156,7 +156,7 @@ curl http://localhost:8080/api/status/nodes/1
 
 **Example `curl` command:**
 ```bash
-curl http://localhost:8080/api/status/deployment/<server-ip-address>
+curl http://localhost:8080/api/status/deployment/10.240.0.10
 ```
 
 ### `/api/status/phase` (POST)

@@ -414,12 +414,12 @@ def calculate_progress_percentage(self, current_phase, elapsed_time):
     
     return min(100, max(0, int(total_progress)))
 
-def get_deployment_start_time(self, node_id):
-    """Get deployment start time for a node"""
-    history = self.db.get_deployment_history(node_id)
-    if history:
-        return history[0]['timestamp']
-    return datetime.now()
+    def get_deployment_start_time(self, node_id):
+        """Get deployment start time for a node"""
+        history = self.db.get_deployment_history(node_id)
+        if history:
+            return history[0]['timestamp']
+        return datetime.now()
 
 def handle_deployment_failure(self, node_id, failure_data):
     """Handle deployment failure"""
