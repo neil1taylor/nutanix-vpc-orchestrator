@@ -391,35 +391,35 @@ def get_deployment_history(self, server_ip):
         ]
     }
     
-def calculate_progress_percentage(self, current_phase, elapsed_time):
-    """Calculate deployment progress as percentage"""
-    if current_phase not in self.deployment_phases:
-        return 0
-    
-    # Calculate total expected time
-    total_expected_time = sum(Config.DEPLOYMENT_TIMEOUTS.values())
-    
-    # Calculate time for completed phases
-    current_phase_index = self.deployment_phases.index(current_phase)
-    completed_phases_time = sum(
-        Config.DEPLOYMENT_TIMEOUTS[self.deployment_phases[i]]
-        for i in range(current_phase_index)
-    )
-    
-    # Add progress within current phase (estimate based on elapsed time)
-    current_phase_timeout = Config.DEPLOYMENT_TIMEOUTS[current_phase]
-    phase_start_time = completed_phases_time
-    current_phase_elapsed = max(0, elapsed_time - phase_start_time)
-    current_phase_progress = min(100, (current_phase_elapsed / current_phase_timeout) * 100)
-    
-    # Calculate overall progress
-    completed_progress = (completed_phases_time / total_expected_time) * 100
-    current_phase_weight = (current_phase_timeout / total_expected_time) * 100
-    current_phase_contribution = (current_phase_progress / 100) * current_phase_weight
-    
-    total_progress = completed_progress + current_phase_contribution
-    
-    return min(100, max(0, int(total_progress)))
+    def calculate_progress_percentage(self, current_phase, elapsed_time):
+        """Calculate deployment progress as percentage"""
+        if current_phase not in self.deployment_phases:
+            return 0
+        
+        # Calculate total expected time
+        total_expected_time = sum(Config.DEPLOYMENT_TIMEOUTS.values())
+        
+        # Calculate time for completed phases
+        current_phase_index = self.deployment_phases.index(current_phase)
+        completed_phases_time = sum(
+            Config.DEPLOYMENT_TIMEOUTS[self.deployment_phases[i]]
+            for i in range(current_phase_index)
+        )
+        
+        # Add progress within current phase (estimate based on elapsed time)
+        current_phase_timeout = Config.DEPLOYMENT_TIMEOUTS[current_phase]
+        phase_start_time = completed_phases_time
+        current_phase_elapsed = max(0, elapsed_time - phase_start_time)
+        current_phase_progress = min(100, (current_phase_elapsed / current_phase_timeout) * 100)
+        
+        # Calculate overall progress
+        completed_progress = (completed_phases_time / total_expected_time) * 100
+        current_phase_weight = (current_phase_timeout / total_expected_time) * 100
+        current_phase_contribution = (current_phase_progress / 100) * current_phase_weight
+        
+        total_progress = completed_progress + current_phase_contribution
+        
+        return min(100, max(0, int(total_progress)))
     
 def handle_deployment_failure(self, node_id, failure_data):
     """Handle deployment failure"""
