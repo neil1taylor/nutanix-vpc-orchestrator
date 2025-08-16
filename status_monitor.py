@@ -75,6 +75,29 @@ class StatusMonitor:
         
         return response
     
+    def get_node_status(self, node_id):
+        """Get status for a specific node by ID"""
+        node = self.db.get_node(node_id)
+        if not node:
+            logger.error(f"Status requested for unknown node ID: {node_id}")
+            return {'error': f'Node with ID {node_id} not found'}
+
+        server_ip = node.get('management_ip')
+        if not server_ip:
+            logger.error(f"Management IP not found for node ID: {node_id}")
+            return {'error': f'Management IP not found for node ID {node_id}'}
+
+        # Use the existing get_deployment_status method
+        status_data = self.get_deployment_status(server_ip)
+
+        if status_data:
+            # Add node_id to the response for clarity
+            status_data['node_id'] = node_id
+            return status_data
+        else:
+            # This case should ideally not happen if get_deployment_status is robust
+            return {'error': f'Could not retrieve status for node ID {node_id}'}
+    
     def update_deployment_phase(self, data):
         """Receive phase updates from deploying servers"""
         required_fields = ['server_ip', 'phase', 'status', 'message']
