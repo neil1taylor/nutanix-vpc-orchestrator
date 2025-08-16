@@ -1,27 +1,17 @@
 #!/bin/sh
-# vpc_init - Complete driver loading and network setup
+# vpc_init - Complete driver loading and network setup with error handling
 
 echo "=== Nutanix CE Direct Boot with Ionic ==="
 
-echo "Downloading squashfs image from $LIVEFS_URL..."
-curl -o /squashfs.img "$LIVEFS_URL"
-
-# Mount squashfs
-mkdir -p /mnt/squashfs
-mount -t squashfs /squashfs.img /mnt/squashfs
-
-# Add squashfs binaries to PATH
-export PATH=/mnt/squashfs/usr/bin:$PATH
-
-# Essential filesystem mounts
-mount -t proc proc /proc 2>/dev/null || true
-mount -t sysfs sysfs /sys 2>/dev/null || true
-mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
-
-# Set environment
-export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/phoenix:/mnt/squashfs/usr/bin:$PATH
-export TERM=linux
-export AUTOMATED_INSTALL=true
+# Function to drop to shell on error
+drop_to_shell() {
+    local error_msg="$1"
+    echo "ERROR: $error_msg"
+    send_status_update "ERROR: $error_msg - Dropping to shell" "error"
+    echo "Dropping to interactive shell for debugging..."
+    echo "You can now connect via serial console"
+    exec /bin/sh
+}
 
 # Function to get config server from kernel command line
 get_config_server() {
@@ -80,12 +70,13 @@ configure_network_direct() {
     # Find the first non-loopback interface
     iface=$(ls /sys/class/net/ | grep -v lo | head -n1)
     if [ -z "$iface" ]; then
-        echo "No network interfaces found"
-        return 1
+        drop_to_shell "No network interfaces found"
     fi
 
     echo "Configuring $iface..."
-    ip link set "$iface" up
+    if ! ip link set "$iface" up; then
+        drop_to_shell "Failed to bring up interface $iface"
+    fi
     sleep 1
 
     # Write a temporary udhcpc handler
@@ -131,17 +122,53 @@ EOF
 
         return 0
     else
-        echo "Network configuration failed on $iface"
-        return 1
+        drop_to_shell "Network configuration failed on $iface"
     fi
 }
 
+# Check for required environment variable
+if [ -z "$LIVEFS_URL" ]; then
+    drop_to_shell "LIVEFS_URL environment variable not set"
+fi
+
+echo "Downloading squashfs image from $LIVEFS_URL..."
+if ! curl -o /squashfs.img "$LIVEFS_URL"; then
+    drop_to_shell "Failed to download squashfs image from $LIVEFS_URL"
+fi
+
+# Verify the downloaded file exists and has content
+if [ ! -s /squashfs.img ]; then
+    drop_to_shell "Downloaded squashfs image is empty or doesn't exist"
+fi
+
+# Mount squashfs
+mkdir -p /mnt/squashfs
+if ! mount -t squashfs /squashfs.img /mnt/squashfs; then
+    drop_to_shell "Failed to mount squashfs image"
+fi
+
+# Verify squashfs mount was successful
+if [ ! -d /mnt/squashfs/usr/bin ]; then
+    drop_to_shell "Squashfs mount appears unsuccessful - /mnt/squashfs/usr/bin not found"
+fi
+
+# Add squashfs binaries to PATH
+export PATH=/mnt/squashfs/usr/bin:$PATH
+
+# Essential filesystem mounts
+mount -t proc proc /proc 2>/dev/null || true
+mount -t sysfs sysfs /sys 2>/dev/null || true
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+
+# Set environment
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/phoenix:/mnt/squashfs/usr/bin:$PATH
+export TERM=linux
+export AUTOMATED_INSTALL=true
+
 # Load ionic driver immediately
 echo "Loading ionic driver for IBM Cloud VPC..."
-send_status_update "Loading ionic driver" "driver_load"
 if modprobe ionic 2>/dev/null; then
     echo "Ionic driver loaded successfully"
-    send_status_update "Ionic driver loaded successfully" "driver_success"
     sleep 3  # Give driver time to initialize
     
     # Show available interfaces
@@ -150,25 +177,53 @@ if modprobe ionic 2>/dev/null; then
         echo "  - $iface"
     done
 else
-    echo "Ionic driver not available"
-    send_status_update "Ionic driver not available" "driver_failed"
+    echo "Ionic driver not available - continuing anyway"
 fi
 
 # Configure network directly
 echo "Configuring network..."
 configure_network_direct
 
+# Verify we can reach the internet (optional test)
+echo "Testing network connectivity..."
+if ! ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
+    echo "Warning: No internet connectivity detected"
+    send_status_update "Warning: No internet connectivity" "network_warning"
+    # Don't fail here - continue with installation attempt
+fi
+
 # Launch installation
 echo "Starting automated installation..."
 send_status_update "Starting automated installation" "install_start"
-if [ -f "/phoenix/vpc_ce_installation.py" ]; then
-    cd /phoenix
-    
-    # Execute the Python script
-    send_status_update "Executing Python installation script" "python_exec"
-    exec python vpc_ce_installation.py
-else
-    echo "Installation script not found at /phoenix/vpc_ce_installation.py"
-    send_status_update "Installation script not found at /phoenix/vpc_ce_installation.py" "python_exec"
-    exec /bin/sh
+
+# Check if installation script exists
+if [ ! -f "/phoenix/vpc_ce_installation.py" ]; then
+    drop_to_shell "Installation script not found at /phoenix/vpc_ce_installation.py"
 fi
+
+# Verify Python is available
+if ! command -v python >/dev/null 2>&1; then
+    drop_to_shell "Python interpreter not found"
+fi
+
+# Change to the correct directory
+if ! cd /phoenix; then
+    drop_to_shell "Failed to change to /phoenix directory"
+fi
+
+# Execute the Python script with error handling
+send_status_update "Executing Python installation script" "python_exec"
+echo "Executing installation script..."
+
+# Run the Python script and capture its exit code
+if python vpc_ce_installation.py; then
+    echo "Installation completed successfully"
+    send_status_update "Installation completed successfully" "install_complete"
+else
+    drop_to_shell "Python installation script failed with exit code $?"
+fi
+
+# If we reach here, installation was successful but we can still provide shell access
+echo "Installation completed. Dropping to shell for any post-install tasks..."
+send_status_update "Installation completed - shell available" "install_complete_shell"
+exec /bin/sh
