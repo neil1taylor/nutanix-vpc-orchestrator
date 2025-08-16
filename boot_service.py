@@ -164,7 +164,7 @@ echo IBM Cloud VPC + Ionic Driver
 echo ===============================================
 echo Node ID: {node['node_name']}
 echo Management IP: {node['management_ip']}
-echo AHV IP: {node['nutanix_config']['ahv_ip']}
+echo AHV IP: {node['management_ip']}
 echo CVM IP: {node['nutanix_config']['cvm_ip']}
 echo ===============================================
 
