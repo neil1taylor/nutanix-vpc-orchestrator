@@ -300,6 +300,9 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
         
 def add_database_viewer_routes(app, db):
     """Add database viewer routes to the Flask application"""
+
+    def add_database_viewer_routes(app, db):
+        """Add database viewer routes to the Flask application"""
     
     @app.route('/database')
     def database_viewer():

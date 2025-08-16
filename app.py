@@ -72,7 +72,7 @@ if __name__ == '__main__':
     status_monitor = StatusMonitor()
     ibm_cloud_client = IBMCloudClient(config)
     cluster_manager = ClusterManager(db, config, node_provisioner, boot_service, status_monitor, ibm_cloud_client)
-    register_web_routes(app, db, node_provisioner, boot_service, status_monitor, ibm_cloud_client, cluster_manager)
+    register_web_routes(app, db, node_provisioner, status_monitor)
     add_database_viewer_routes(app, db)
     app.run(host=config.server_host, port=config.server_port, debug=config.debug_mode)
 
@@ -213,12 +213,8 @@ def api_serve_boot_image(filename):
         # Log the request with high visibility
         if filename == 'kernel':
             logger.info(f"Client {client_ip} is downloading kernel file")
-        elif filename == 'initrd-modified.img':
+        elif filename == 'initrd-vpc.img':
             logger.info(f"Client {client_ip} is downloading modified initrd file")
-        elif filename == 'initrd.img':
-            logger.info(f"Client {client_ip} is downloading original initrd file")
-        elif filename == 'initrd-debug.img':
-            logger.info(f"Client {client_ip} is downloading debug initrd file")
         else:
             logger.info(f"Client {client_ip} is downloading {filename}")
             
@@ -228,10 +224,7 @@ def api_serve_boot_image(filename):
         # Security check - only allow approved files
         allowed_files = [
             'kernel',
-            'initrd-debug.img',
-            'initrd-modified.img',
-            'initrd.img',  # Original initrd file
-            'nutanix-ce.iso',
+            'initrd-vpc.img',
             'squashfs.img',
             'nutanix_installer_package.tar.gz',
             'AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso'
@@ -571,6 +564,73 @@ def api_get_deployment_summary():
 
 # New endpoint for overall deployment status
 @app.route('/api/status', methods=['GET'])
+@app.route('/api/installation/status', methods=['POST'])
+def api_update_installation_status():
+    """
+    Receive status and log updates from the vpc_ce_installation.py script.
+    Updates the server status in the database and logs the message.
+    """
+    try:
+        data = request.get_json()
+        logger.info(f"Received status update: {data}")
+
+        if not data:
+            return jsonify({'error': 'No JSON data received'}), 400
+
+        node_id = data.get('node_id')
+        phase = data.get('phase')
+        message = data.get('message')
+
+        if node_id is None or phase is None or message is None:
+            return jsonify({'error': 'Missing required fields: node_id, phase, message'}), 400
+
+        # Log the message to the server log file
+        log_message = f"Node {node_id} - Phase {phase}: {message}"
+        logger.info(log_message) # This will use the configured logger which writes to file and console
+
+        # Update the server status in the database
+        # Assuming 'nodes' table and updating 'deployment_status' and 'updated_at'
+        status_map = {
+            -1: 'LOG', # For log messages
+            1: 'INITIALIZING',
+            2: 'DOWNLOADING_CONFIG',
+            3: 'VALIDATING_CONFIG',
+            4: 'DOWNLOADING_PACKAGES',
+            5: 'INSTALLING_HYPERVISOR',
+            6: 'RUNNING_NUX_INSTALL',
+            7: 'REBOOTING'
+        }
+        deployment_status = status_map.get(phase, 'UNKNOWN')
+        
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Update the 'nodes' table. Assuming 'node_id' is the primary key.
+                    # Update 'deployment_status' and 'updated_at'.
+                    update_query = """
+                        UPDATE nodes
+                        SET deployment_status = %s, updated_at = %s
+                        WHERE id = %s
+                    """
+                    current_time = datetime.utcnow()
+                    cur.execute(update_query, (deployment_status, current_time, node_id))
+                    conn.commit()
+                    logger.info(f"Database updated for node {node_id}: status set to {deployment_status}")
+
+        except Exception as db_e:
+            logger.error(f"Database update failed for node {node_id}: {str(db_e)}")
+            return jsonify({'error': f'Database update failed: {str(db_e)}'}), 500
+
+        return jsonify({'message': 'Status update received successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Error processing status update: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# END OF NEWLY ADDED ROUTE
+# ============================================================================
+
 def api_get_overall_status():
     """Get overall deployment status"""
     try:

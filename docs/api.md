@@ -1,627 +1,437 @@
-# Nutanix PXE/Config Server API Documentation
+# Nutanix VPC Orchestrator API Documentation
 
-This document provides comprehensive documentation for the Nutanix PXE/Config Server API endpoints, their purposes, and the proper execution order for automated Nutanix CE provisioning on IBM Cloud VPC.
+This document outlines the available API endpoints for the Nutanix VPC Orchestrator, their functionalities, and example `curl` commands for usage.
 
-## API Overview
+## Boot Server Endpoints
 
-The server provides five main service categories:
-- **Boot Services** (`/boot/*`) - iPXE boot handling and file serving
-- **Configuration API** (`/api/config/*`) - Node provisioning and management
-- **Status Monitoring** (`/api/status/*`) - Deployment progress tracking
-- **DNS Management** (`/api/dns/*`) - DNS record management
-- **Cleanup Services** (`/api/cleanup/*`) - Resource cleanup
+These endpoints are used for iPXE boot configuration and serving boot files.
 
-## 1. Boot Services (`/boot/*`)
+### `/boot/config` (GET)
 
-These endpoints handle the iPXE boot process and serve boot-related files.
+**Description:** Handles iPXE boot configuration requests. Returns a boot script tailored to the requesting client.
 
-### 1.1 Boot Configuration
-**Endpoint:** `GET /boot/config`
-**Purpose:** Handle iPXE boot configuration requests from provisioned servers
-**Usage:** Called automatically by iPXE during server boot
-
-**Parameters:**
-- `mgmt_ip` - Management IP address of the booting server
-
-**Returns:** iPXE boot script in plain text format
-
-**Example:**
+**Example `curl` command:**
 ```bash
-curl "http://localhost:8080/boot/config?mgmt_ip=10.240.0.10"
+curl http://localhost:8080/boot/config?mgmt_ip=10.240.0.10
 ```
 
-### 1.2 Boot Images
-**Endpoint:** `GET /boot/images/<filename>`
-**Purpose:** Serve boot images (kernel, initrd, ISO files)
-**Allowed Files:**
-- `kernel` - kernel
-- `initrd.img` - initial ramd
-**Example:**
+### `/boot/server/<server_ip>` (GET)
+
+**Description:** Retrieves detailed server configuration for a given server IP address. This is used by the provisioning process to configure newly provisioned nodes.
+
+**Example `curl` command:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images/kernel"
+curl http://localhost:8080/boot/server/10.240.0.10
 ```
 
-### 1.3 Boot Scripts
-**Endpoint:** `GET /boot/scripts/<script_name>`
-**Purpose:** Serve boot scripts and configuration files
-**Allowed Scripts:**
-- `foundation-init.sh` - Foundation initialization script
-- `network-config.sh` - Network configuration script
-- `post-install.sh` - Post-installation script
+### `/boot/images/<filename>` (GET)
 
-## 2. Configuration API (`/api/config/*`)
+**Description:** Serves boot images such as kernel, initrd, and ISO files required for node provisioning.
 
-These endpoints handle node provisioning and configuration management.
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/boot/images/kernel -o kernel
+curl http://localhost:8080/boot/images/initrd-vpc.img -o initrd-vpc.img
 
-### 2.1 Provision Node
-**Endpoint:** `POST /api/config/nodes`
-**Purpose:** Provision a new Nutanix node
-**Usage:** Primary endpoint for creating new cluster nodes
+curl -I http://localhost:8080/boot/images/kernel
+curl -I http://localhost:8080/boot/images/initrd-vpc.img
+```
 
-**Request Body:**
-```json
-{
+### `/boot/scripts/<script_name>` (GET)
+
+**Description:** Serves boot scripts and configuration files used during the node provisioning and setup process.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/boot/scripts/foundation-init.sh -o foundation-init.sh
+```
+
+## Configuration API Endpoints
+
+These endpoints are used for managing nodes, clusters, and related configurations.
+
+### `/api/config/nodes` (POST)
+
+**Description:** Provisions a new Nutanix node. Requires a JSON payload with `node_config` and optionally `cluster_config` and `network_config`.
+
+**Example `curl` command:**
+```bash
+curl -X POST http://localhost:8080/api/config/nodes \
+-H "Content-Type: application/json" \
+-d '{
   "node_config": {
-    "node_name": "nutanix-poc-bm-node-01",
-    "server_profile": "bx2d-metal-48x192",
-    "cluster_role": "compute",
-    "storage_config": {
-      "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1", "nvme5n1"]
-    }
+    "node_name": "node-01",
+    "server_profile": "default_profile",
+    "cluster_role": "worker",
+    "storage_template": "nutanix_default"
   },
   "network_config": {
     "management_subnet": "auto",
-    "workload_subnets": ["auto"],
-    "cluster_operation": "create_new"
+    "workload_subnets": ["subnet-1", "subnet-2"]
   },
   "cluster_config": {
-    "cluster_type": "single_node"
+    "cluster_type": "multi_node"
   }
-}
+}'
 ```
 
-**Additional Parameters:**
-- `cluster_config.cluster_type` (optional): Specify cluster type
-  - `"multi_node"` (default): Standard multi-node cluster (3+ nodes)
-  - `"single_node"`: Single node cluster requiring manual creation
-- `network_config.workload_subnets` (optional): Specify workload subnets
-  - Array of subnet IDs or "auto" for automatic selection
-  - Default: `["auto"]` (single workload subnet)
-  - Multiple subnets can be specified for multi-homed configurations
+### `/api/config/clusters` (POST)
 
-**Response:**
-```json
-{
-  "message": "Node provisioning initiated successfully",
-  "node_id": 1,
-  "deployment_id": "bare-metal-server-id",
-  "estimated_completion": "2025-08-01T14:30:00",
-  "monitoring_endpoint": "/api/status/nodes/1"
-}
-```
+**Description:** Creates a new Nutanix cluster from deployed nodes. Requires a JSON payload with `cluster_config` including a list of node IDs.
 
-**Examples:**
-
-Create First Node (Multi-Node Cluster - Default):
+**Example `curl` command:**
 ```bash
-curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes \
-  -H "Content-Type: application/json" \
-  -d '{
-    "node_config": {
-      "node_name": "nutanix-poc-bm-node-01",
-      "server_profile": "bx2d-metal-48x192",
-      "cluster_role": "compute",
-      "storage_config": {
-        "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1", "nvme5n1"]
-      }
-    },
-    "network_config": {
-      "management_subnet": "auto",
-      "workload_subnets": ["auto"],
-      "cluster_operation": "create_new"
-    }
-  }'
-```
-
-Create First Node (Single Node Cluster):
-```bash
-curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes \
-  -H "Content-Type: application/json" \
-  -d '{
-    "node_config": {
-      "node_name": "nutanix-poc-bm-node-01",
-      "server_profile": "bx2d-metal-48x192",
-      "cluster_role": "compute",
-      "storage_config": {
-        "data_drives": ["nvme2n1", "nvme3n1", "nvme4n1", "nvme5n1"]
-      }
-    },
-    "network_config": {
-      "management_subnet": "auto",
-      "workload_subnets": ["auto"],
-      "cluster_operation": "create_new"
-    },
-    "cluster_config": {
-      "cluster_type": "single_node"
-    }
-  }'
-```
-
-Add Node to Existing Cluster:
-```bash
-curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes \
-  -H "Content-Type: application/json" \
-  -d '{
-    "node_config": {
-      "node_name": "nutanix-poc-bm-node-02",
-      "server_profile": "bx2d-metal-48x192",
-      "cluster_role": "compute"
-    },
-    "network_config": {
-      "cluster_operation": "join_existing"
-    }
-  }'
-```
-
-### 2.2 Get Node Information
-**Endpoint:** `GET /api/config/nodes/<node_id>`
-**Purpose:** Retrieve detailed information about a specific node
-
-**Example:**
-```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes/1"
-```
-
-### 2.3 List All Nodes
-**Endpoint:** `GET /api/config/nodes`
-**Purpose:** List all provisioned nodes
-
-**Example:**
-```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/nodes"
-```
-
-## 3. Status Monitoring (`/api/status/*`)
-
-These endpoints provide deployment progress tracking and monitoring.
-
-### 3.1 Node Status
-
-## 4. Cluster Management API (`/api/config/clusters`)
-
-These endpoints handle cluster creation and configuration after node deployment.
-
-### 4.1 Create Cluster
-**Endpoint:** `POST /api/config/clusters`
-**Purpose:** Create a new Nutanix cluster from deployed nodes
-**Usage:** Create either single node or multi-node clusters after nodes are deployed
-
-**Request Body:**
-```json
-{
+curl -X POST http://localhost:8080/api/config/clusters \
+-H "Content-Type: application/json" \
+-d '{
   "cluster_config": {
-    "cluster_operation": "create_new",
     "cluster_name": "my-cluster",
-    "cluster_type": "single_node",
-    "nodes": ["nutanix-poc-bm-node-01"]
+    "cluster_type": "multi_node",
+    "nodes": [1, 2, 3]
   }
-}
+}'
 ```
 
-**Response:**
-```json
-{
-  "message": "Cluster creation initiated successfully",
-  "cluster_id": 1,
-  "cluster_name": "my-cluster",
-  "cluster_ip": "10.240.0.200",
-  "status": "creating",
-  "message": "Single node cluster registered. Use cluster manager to create the cluster."
-}
-```
+### `/api/config/clusters/<int:cluster_id>` (GET)
 
-**Examples:**
+**Description:** Retrieves information about a specific cluster.
 
-Create Single Node Cluster:
+**Example `curl` command:**
 ```bash
-curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters \
-  -H "Content-Type: application/json" \
-  -d '{
-    "cluster_config": {
-      "cluster_operation": "create_new",
-      "cluster_name": "single-node-cluster",
-      "cluster_type": "single_node",
-      "nodes": ["nutanix-poc-bm-node-01"]
-    }
-  }'
+curl http://localhost:8080/api/config/clusters/1
 ```
 
-Create Multi-Node Cluster:
+### `/api/config/clusters` (GET)
+
+**Description:** Lists all configured clusters.
+
+**Example `curl` command:**
 ```bash
-curl -X POST http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters \
-  -H "Content-Type: application/json" \
-  -d '{
-    "cluster_config": {
-      "cluster_operation": "create_new",
-      "cluster_name": "multi-node-cluster",
-      "cluster_type": "multi_node",
-      "nodes": ["nutanix-poc-bm-node-01", "nutanix-poc-bm-node-02", "nutanix-poc-bm-node-03"]
-    }
-  }'
+curl http://localhost:8080/api/config/clusters
 ```
 
-### 4.2 Get Cluster Information
-**Endpoint:** `GET /api/config/clusters/<cluster_id>`
-**Purpose:** Retrieve detailed information about a specific cluster
+### `/api/config/clusters/<int:cluster_id>` (DELETE)
 
-**Example:**
+**Description:** Deletes information for a specific cluster.
+
+**Example `curl` command:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters/1"
+curl -X DELETE http://localhost:8080/api/config/clusters/1
 ```
 
-### 4.3 List All Clusters
-**Endpoint:** `GET /api/config/clusters`
-**Purpose:** List all provisioned clusters
+### `/api/config/nodes/<int:node_id>` (GET)
 
-**Example:**
+**Description:** Retrieves information about a specific node.
+
+**Example `curl` command:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters"
+curl http://localhost:8080/api/config/nodes/1
 ```
 
-### 4.4 Delete Cluster Information
-**Endpoint:** `DELETE /api/config/clusters/<cluster_id>`
-**Purpose:** Delete cluster information from database (does not delete actual cluster)
+### `/api/config/nodes` (GET)
 
-**Example:**
+**Description:** Lists all nodes managed by the orchestrator.
+
+**Example `curl` command:**
 ```bash
-curl -X DELETE "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters/1"
-```
-**Endpoint:** `GET /api/status/nodes/<node_id>`
-**Purpose:** Get deployment status for a specific node
-**Usage:** Monitor deployment progress by node ID
-
-**Response:**
-```json
-{
-  "server_ip": "10.240.0.10",
-  "server_name": "nutanix-poc-bm-node-01",
-  "node_id": 1,
-  "deployment_id": "bare-metal-server-id",
-  "current_phase": "installation",
-  "phase_status": "in_progress",
-  "progress_percent": 65,
-  "elapsed_time_seconds": 900,
-  "estimated_remaining_seconds": 600,
-  "timed_out": false,
-  "last_update": "2025-08-01T12:15:30",
-  "message": "Installing Nutanix CE software"
-}
+curl http://localhost:8080/api/config/nodes
 ```
 
-**Example:**
+## Status Monitoring Endpoints
+
+These endpoints are used for monitoring the status of nodes and deployments.
+
+### `/api/status/nodes/<int:node_id>` (GET)
+
+**Description:** Gets the deployment status for a specific node.
+
+**Example `curl` command:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/status/nodes/1"
+curl http://localhost:8080/api/status/nodes/1
 ```
 
-### 3.2 Deployment Status by IP
-**Endpoint:** `GET /api/status/deployment/<server_ip>`
-**Purpose:** Get deployment status by server IP (legacy endpoint)
+### `/api/status/deployment/<server_ip>` (GET)
 
-**Example:**
+**Description:** Gets deployment status by server IP address (legacy endpoint).
+
+**Example `curl` command:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/status/deployment/10.240.0.10"
+curl http://localhost:8080/api/status/deployment/<server-ip-address>
 ```
 
-### 3.3 Phase Update
-**Endpoint:** `POST /api/status/phase`
-**Purpose:** Receive phase updates from deploying servers
-**Usage:** Called by deploying servers to report progress
+### `/api/status/phase` (POST)
 
-**Request Body:**
-```json
-{
-  "server_ip": "10.240.0.10",
-  "phase": "installation",
-  "status": "success",
-  "message": "Nutanix CE installation completed"
-}
-```
+**Description:** Receives phase updates from deploying servers. Used by nodes during the deployment process to report their current stage.
 
-### 3.4 Deployment History
-**Endpoint:** `GET /api/status/history/<node_id>`
-**Purpose:** Get complete deployment history for a node
-
-**Example:**
+**Example `curl` command:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/status/history/1"
+curl -X POST http://localhost:8080/api/status/phase \
+-H "Content-Type: application/json" \
+-d '{
+  "server_ip": "<server-ip-address>",
+  "phase": "installing_os",
+  "status": "in_progress"
+}'
 ```
 
-### 3.5 Deployment Summary
-**Endpoint:** `GET /api/status/summary`
-**Purpose:** Get overall deployment summary across all nodes
+### `/api/status/history/<int:node_id>` (GET)
 
-**Example:**
+**Description:** Gets the deployment history for a specific node.
+
+**Example `curl` command:**
 ```bash
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/status/summary"
+curl http://localhost:8080/api/status/history/1
 ```
 
-## 4. DNS Management (`/api/dns/*`)
+### `/api/status/summary` (GET)
 
-These endpoints manage DNS record creation and deletion.
+**Description:** Gets an overall summary of all deployments.
 
-### 4.1 Create DNS Record
-**Endpoint:** `POST /api/dns/records`
-**Purpose:** Create a DNS record
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/status/summary
+```
 
-**Request Body:**
-```json
-{
+### `/api/status` (GET)
+
+**Description:** Updates the installation status. This endpoint is likely called by nodes to report their overall installation progress.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/status
+```
+
+## Database API Endpoints
+
+These endpoints provide access to the system's database for viewing and exporting data.
+
+### `/api/web/database-table` (GET)
+
+**Description:** Retrieves data from a specific database table.
+
+**Example `curl` command:**
+```bash
+curl "http://localhost:8080/api/web/database-table?table=nodes"
+```
+
+### `/api/web/database-schema` (GET)
+
+**Description:** Retrieves schema information for a specific database table.
+
+**Example `curl` command:**
+```bash
+curl "http://localhost:8080/api/web/database-schema?table=nodes"
+```
+
+### `/api/web/database-export` (GET)
+
+**Description:** Exports table data as a CSV file.
+
+**Example `curl` command:**
+```bash
+curl "http://localhost:8080/api/web/database-export?table=nodes" -o nodes.csv
+```
+
+### `/api/web/database-tables` (GET)
+
+**Description:** Retrieves a list of all available database tables.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/web/database-tables
+```
+
+## Server Profile and Storage Endpoints
+
+These endpoints provide information about server profiles and storage templates.
+
+### `/api/web/profile-storage-config` (GET)
+
+**Description:** Gets the storage configuration for a given server profile and storage template.
+
+**Example `curl` command:**
+```bash
+curl "http://localhost:8080/api/web/profile-storage-config?profile=default_profile&template=nutanix_default"
+```
+
+### `/api/web/profile-details` (GET)
+
+**Description:** Gets detailed information about a specific server profile.
+
+**Example `curl` command:**
+```bash
+curl "http://localhost:8080/api/web/profile-details?profile=default_profile"
+```
+
+### `/api/web/server-profiles` (GET)
+
+**Description:** Gets a list of all available server profiles.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/web/server-profiles
+```
+
+### `/api/web/storage-templates` (GET)
+
+**Description:** Gets a list of available storage templates.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/web/storage-templates
+```
+
+### `/api/web/validate-node-config` (POST)
+
+**Description:** Validates node configuration before provisioning. Expects a JSON payload with the node configuration.
+
+**Example `curl` command:**
+```bash
+curl -X POST http://localhost:8080/api/web/validate-node-config \
+-H "Content-Type: application/json" \
+-d '{
+  "node_config": {
+    "node_name": "node-02",
+    "server_profile": "high_memory_profile"
+  }
+}'
+```
+
+## DNS Management Endpoints
+
+These endpoints are for managing DNS records within the orchestrator.
+
+### `/api/dns/records` (POST)
+
+**Description:** Creates a new DNS record. Requires a JSON payload with the record details.
+
+**Example `curl` command:**
+```bash
+curl -X POST http://localhost:8080/api/dns/records \
+-H "Content-Type: application/json" \
+-d '{
+  "record_name": "my-server",
   "record_type": "A",
-  "name": "node01-mgmt",
-  "rdata": "10.240.0.10"
-}
+  "value": "192.168.1.100"
+}'
 ```
 
-### 4.2 Delete DNS Record
-**Endpoint:** `DELETE /api/dns/records/<record_name>`
-**Purpose:** Delete a DNS record
+### `/api/dns/records/<record_name>` (DELETE)
 
-## 5. Cleanup Services (`/api/cleanup/*`)
+**Description:** Deletes a specific DNS record.
 
-These endpoints handle resource cleanup for failed or completed deployments.
-
-### 5.1 Node Cleanup
-**Endpoint:** `POST /api/cleanup/node/<node_id>`
-**Purpose:** Clean up all resources for a specific node
-
-### 5.2 Deployment Cleanup
-**Endpoint:** `POST /api/cleanup/deployment/<deployment_id>`
-**Purpose:** Clean up all resources for an entire deployment
-
-### 5.3 Generate Cleanup Script
-**Endpoint:** `GET /api/cleanup/script/<deployment_id>`
-**Purpose:** Generate shell script for manual cleanup
-
-## 6. Health and Information
-
-### 6.1 Health Check
-**Endpoint:** `GET /health`
-**Purpose:** Basic health check endpoint
-**Usage:** Monitoring and load balancer health checks
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-08-01T12:00:00",
-  "version": "1.0.0"
-}
-```
-
-### 6.2 Server Information
-**Endpoint:** `GET /api/info`
-**Purpose:** Get PXE server information and available endpoints
-
-## Deployment Flow and API Call Order
-
-### Phase 1: Initial Provisioning (Human/API Initiated)
-
-1. **Provision First Node (Create Cluster)**
-   ```bash
-   POST /api/config/nodes
-   # Creates cluster, reserves IPs, creates VNIs, deploys bare metal
-   ```
-
-2. **Monitor Deployment Progress**
-   ```bash
-   GET /api/status/nodes/{node_id}
-   # Poll this endpoint to track deployment progress
-   ```
-
-### Phase 2: Automated Boot Process (Server Initiated)
-
-3. **iPXE Boot Request** (Server calls automatically)
-   ```bash
-   GET /boot/config?mgmt_ip=X.X.X.X
-   # Server requests iPXE boot script
-   ```
-
-4. **Download Boot Images** (iPXE calls automatically)
-   ```bash
-   GET /boot/images/kernel
-   GET /boot/images/initrd-modified.img
-   # iPXE downloads kernel and initrd
-   ```
-
-5. **Get Server Configuration** (Boot scripts call automatically)
-   ```bash
-   GET /boot/server/{server_ip}
-   # Arizona requests detailed configuration
-   ```
-
-6. **Download Boot Scripts** (Arizona calls automatically)
-   ```bash
-   GET /boot/scripts/foundation-init.sh
-   GET /boot/scripts/network-config.sh
-   GET /boot/scripts/post-install.sh
-   # Foundation downloads configuration scripts
-   ```
-
-### Phase 3: Progress Reporting (Server Reports Back)
-
-7. **Phase Updates** (Server reports automatically)
-   ```bash
-   POST /api/status/phase
-   # Server reports progress through deployment phases
-   ```
-
-### Phase 4: Additional Nodes (Repeat for Each Node)
-
-8. **Provision Additional Nodes**
-   ```bash
-   POST /api/config/nodes
-   # Use "join_existing" cluster_operation
-   ```
-
-9. **Repeat Boot Process** (Steps 3-7 for each new node)
-
-### Phase 5: Monitoring and Management
-
-10. **Check Overall Status**
-    ```bash
-    GET /api/status/summary
-    # Get cluster-wide deployment status
-    ```
-
-11. **View Deployment History**
-    ```bash
-    GET /api/status/history/{node_id}
-    # Get detailed deployment timeline
-    ```
-
-## Deployment Phases
-
-The system tracks these deployment phases:
-
-1. **ipxe_boot** - Server boots from iPXE
-2. **config_download** - Configuration files downloaded
-3. **foundation_start** - Foundation environment started
-4. **storage_discovery** - Storage devices detected
-5. **image_download** - Nutanix CE images downloaded
-6. **installation** - Nutanix CE installation
-7. **cluster_formation** - Cluster creation/joining
-8. **dns_registration** - DNS records updated
-9. **health_validation** - Final health checks
-
-## Typical Usage Patterns
-
-### Single Node Cluster
+**Example `curl` command:**
 ```bash
-# 1. Create cluster with first node
-curl -X POST .../api/config/nodes -d '{"node_config":{"cluster_operation":"create_new"},...}'
-
-# 2. Monitor progress
-curl .../api/status/nodes/1
-
-# 3. Check when complete
-curl .../api/status/summary
+curl -X DELETE http://localhost:8080/api/dns/records/my-server
 ```
 
-### Multi-Node Cluster
+### `/api/dns/records` (GET)
+
+**Description:** Lists all DNS records.
+
+**Example `curl` command:**
 ```bash
-# 1. Create first node (as above)
-# 2. Add second node
-curl -X POST .../api/config/nodes -d '{"node_config":{"cluster_operation":"join_existing"},...}'
-
-# 3. Monitor both nodes
-curl .../api/status/nodes/1
-curl .../api/status/nodes/2
-
-# 4. Check cluster status
-curl .../api/status/summary
+curl http://localhost:8080/api/dns/records
 ```
 
-### Cleanup Failed Deployment
+### `/api/dns/records/<record_name>` (GET)
+
+**Description:** Gets a specific DNS record.
+
+**Example `curl` command:**
 ```bash
-# 1. Generate cleanup script
-curl .../api/cleanup/script/deployment-id > cleanup.sh
-
-# 2. Or trigger automated cleanup
-curl -X POST .../api/cleanup/node/1
+curl http://localhost:8080/api/dns/records/my-server
 ```
 
-## Error Handling
+## Cleanup Endpoints
 
-All endpoints return standard HTTP status codes:
-- **200** - Success
-- **202** - Accepted (for async operations)
-- **400** - Bad Request (missing/invalid parameters)
-- **404** - Not Found (resource doesn't exist)
-- **500** - Internal Server Error
+These endpoints are used for cleaning up resources.
 
-Error responses include JSON with error details:
-```json
-{
-  "error": "Description of the error",
-  "timestamp": "2025-08-01T12:00:00"
-}
+### `/api/cleanup/node/<int:node_id>` (POST)
+
+**Description:** Cleans up resources associated with a specific node.
+
+**Example `curl` command:**
+```bash
+curl -X POST http://localhost:8080/api/cleanup/node/1
 ```
 
-## Security Considerations
+### `/api/cleanup/deployment/<deployment_id>` (POST)
 
-- All endpoints should be accessed over HTTPS in production
-- The server uses IBM Cloud Trusted Profile authentication
-- File serving endpoints have security restrictions on allowed files
-- Sensitive configuration data is stored in environment variables
+**Description:** Cleans up all resources for a given deployment.
 
-## Rate Limiting and Timeouts
-
-The system includes configurable timeouts for each deployment phase:
-- **iPXE Boot**: 300 seconds
-- **Config Download**: 120 seconds
-- **Foundation Start**: 180 seconds
-- **Storage Discovery**: 300 seconds
-- **Image Download**: 900 seconds
-- **Installation**: 1200 seconds
-- **Cluster Formation**: 600 seconds
-- **DNS Registration**: 120 seconds
-- **Health Validation**: 300 seconds
-
-## Web Interface Routes
-
-The system also provides a web interface for manual management:
-- `/` - Dashboard
-- `/nodes` - Node management
-- `/deployments` - Deployment history
-- `/monitoring` - System monitoring
-- `/provision` - Node provisioning form
-
-## Integration Examples
-
-### Terraform Integration
-```hcl
-resource "local_file" "provision_node" {
-  content = jsonencode({
-    node_config = {
-      node_name = "nutanix-node-${count.index + 1}"
-      server_profile = "bx2d-metal-48x192"
-      cluster_operation = count.index == 0 ? "create_new" : "join_existing"
-    }
-  })
-  
-  provisioner "local-exec" {
-    command = "curl -X POST ${var.pxe_server}/api/config/nodes -d @${self.filename}"
-  }
-}
+**Example `curl` command:**
+```bash
+curl -X POST http://localhost:8080/api/cleanup/deployment/<deployment-id>
 ```
 
-### Python Script Integration
-```python
-import requests
-import time
+### `/api/cleanup/script/<deployment_id>` (GET)
 
-def provision_cluster(nodes):
-    pxe_server = "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080"
-    
-    for i, node_config in enumerate(nodes):
-        # Set cluster operation
-        node_config["network_config"]["cluster_operation"] = (
-            "create_new" if i == 0 else "join_existing"
-        )
-        
-        # Provision node
-        response = requests.post(f"{pxe_server}/api/config/nodes", json=node_config)
-        node_data = response.json()
-        
-        # Monitor deployment
-        while True:
-            status_response = requests.get(f"{pxe_server}/api/status/nodes/{node_data['node_id']}")
-            status = status_response.json()
-            
-            if status["phase_status"] in ["completed", "failed"]:
-                break
-                
-            time.sleep(30)  # Wait 30 seconds before checking again
+**Description:** Generates a cleanup script for manual execution for a specific deployment.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/cleanup/script/<deployment-id> -o cleanup_script.sh
 ```
 
-This API structure provides complete automation for Nutanix CE cluster provisioning while maintaining flexibility for various deployment scenarios and comprehensive monitoring throughout the process.
+### `/api/cleanup/status` (GET)
+
+**Description:** Gets the overall cleanup status.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/cleanup/status
+```
+
+### `/api/cleanup/validate/<int:node_id>` (GET)
+
+**Description:** Validates the cleanup completion for a specific node.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/cleanup/validate/1
+```
+
+### `/api/cleanup/orphaned` (POST)
+
+**Description:** Cleans up orphaned resources that may have resulted from failed deployments.
+
+**Example `curl` command:**
+```bash
+curl -X POST http://localhost:8080/api/cleanup/orphaned
+```
+
+### `/api/cleanup/batch` (POST)
+
+**Description:** Performs batch cleanup operations. Expects a JSON payload specifying the cleanup targets.
+
+**Example `curl` command:**
+```bash
+curl -X POST http://localhost:8080/api/cleanup/batch \
+-H "Content-Type: application/json" \
+-d '{
+  "cleanup_targets": [
+    {"type": "node", "id": 1},
+    {"type": "deployment", "id": "deployment-abc"}
+  ]
+}'
+```
+
+## Health and Info Endpoints
+
+### `/health` (GET)
+
+**Description:** Health check endpoint. Returns a simple status indicating if the orchestrator is running.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/health
+```
+
+### `/api/info` (GET)
+
+**Description:** Retrieves general server information about the orchestrator.
+
+**Example `curl` command:**
+```bash
+curl http://localhost:8080/api/info

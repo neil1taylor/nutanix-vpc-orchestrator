@@ -82,7 +82,7 @@ curl -X POST \
      "cluster_config": {
        "cluster_type": "single_node",
        "cluster_name": "test-single-cluster",
-       "nodes": ["your-node-name"]
+       "nodes": ["nutanix-poc-bm-node-01"]
      }
    }' \
   "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/config/clusters"
@@ -131,7 +131,7 @@ set base-url http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images
 
 # Boot with explicit ISO location
 kernel ${base-url}/kernel iso-url=${base-url}/nutanix-ce.iso init=/ce_installer intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 mpt3sas.prot_mask=1 IMG=squashfs LIVEFS_URL=${base-url}/nutanix-ce.iso
-initrd ${base-url}/initrd-modified.img
+initrd ${base-url}/initrd-vpc.img
 boot
 ```
 

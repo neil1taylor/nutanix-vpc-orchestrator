@@ -11,9 +11,22 @@ import hashlib
 import uuid
 import glob
 from random import randint
+import requests
+
+# Global variables to store node_id and config_server
+node_id = None
+config_server = None
 
 def log(message):
+    """Logs a message to stdout and sends it to the status API."""
+    global node_id, config_server
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Send log message to API if node_id and config_server are available
+    if node_id and config_server:
+        # Use a specific phase for logs, e.g., -1 or a dedicated constant
+        send_status_update(node_id, -1, f"[{timestamp}] {message}")
+
     print(f"[{timestamp}] {message}")
 
 def get_node_identifier():
@@ -63,7 +76,7 @@ def get_config_server_from_cmdline():
 def download_node_config(config_server, node_id):
     """Download node-specific configuration"""
     log(f"Downloading configuration for node: {node_id}")
-
+    
     url = f"{config_server}/boot/server/{node_id}.json"
     
     try:
@@ -460,6 +473,30 @@ def cleanup_previous_attempts():
         log(f"Cleanup failed: {e}")
         return False
 
+def send_status_update(node_id, phase, message):
+    """Sends status and log messages to the PXE config server API."""
+    config_server = get_config_server_from_cmdline()
+    if not config_server:
+        log(f"Error: Config server URL not found. Cannot send status update.")
+        return
+
+    api_url = f"{config_server}/api/installation/status"
+    payload = {
+        "node_id": node_id,
+        "phase": phase,
+        "message": message
+    }
+
+    try:
+        log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}")
+        response = requests.post(api_url, json=payload, timeout=10)
+        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        log(f"Status update sent successfully. Response: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        log(f"Error sending status update to {api_url}: {e}")
+    except Exception as e:
+        log(f"An unexpected error occurred while sending status update: {e}")
+
 def run_nutanix_installation(params, config):
     """Run the actual Nutanix installation"""
     log("Starting Nutanix CE installation...")
@@ -521,55 +558,67 @@ def run_nutanix_installation(params, config):
 
 def main():
     """Main installation function"""
+    global node_id, config_server # Ensure globals are accessible
     log("=== Nutanix CE Node-Agnostic Installation ===")
     log("Platform: IBM Cloud VPC with Ionic Driver")
     
-    # Phase 1: Get node identifier and download config
+    # Phase 1: Initialization
     node_id = get_node_identifier()
     config_server = get_config_server_from_cmdline()
-    
+    send_status_update(node_id, 1, "Initialization complete")
+
+    # Phase 2: Download Node Configuration
+    send_status_update(node_id, 2, "Downloading node configuration")
     config = download_node_config(config_server, node_id)
     if not config:
         log("Unable to get configuration")
         return 1
     
+    # Phase 3: Validate Configuration
+    send_status_update(node_id, 3, "Validating configuration")
     if not validate_config(config):
         log("Configuration validation failed")
         return 1
     
     log(f"Configuration loaded for cluster: {config['cluster']['name']}")
     
-    # Phase 2: Download packages
+    # Phase 4: Download Packages
+    send_status_update(node_id, 4, "Downloading installation packages")
     if not download_packages(config_server):
         log("Package download failed")
         return 1
     
-    # Phase 3: Install hypervisor
+    # Phase 5: Install Hypervisor
+    send_status_update(node_id, 5, "Installing AHV hypervisor")
     if not install_hypervisor(config):
         log("Hypervisor installation failed")
         return 1
     
-    # Phase 4: Setup environment
+    # Setup environment (not a distinct phase for status reporting)
     setup_environment(config)
     
-    # Phase 5: Create installation parameters
+    # Create installation parameters
     params = create_installation_params(config)
     if not params:
         log("Failed to create installation parameters")
         return 1
     
-    # Phase 6: Clean previous and run Nutanix installation (CVM)
+    # Phase 6: Clean previous attempts and run Nutanix installation
     if not cleanup_previous_attempts():
         log("Cleanup of previous attempts failed")
         return 1
+    
+    send_status_update(node_id, 6, "Running Nutanix installation")
     if not run_nutanix_installation(params, config):
         log("Installation failed")
         return 1
     
-    log("Node-agnostic installation completed successfully!")
-    log(f"Management IP: {config['network'].get('management_ip', 'Check DHCP assignment')}")
+    # Phase 7: Reboot Server
+    send_status_update(node_id, 7, "Installation complete. Rebooting server.")
+    subprocess.run(['reboot'])
     
+    log("Node-agnostic installation completed successfully!")
     return 0
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

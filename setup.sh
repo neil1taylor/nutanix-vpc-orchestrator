@@ -292,7 +292,7 @@ test_static_files() {
     local missing_files=()
     local required_files=(
         "/var/www/pxe/images/kernel"
-        "/var/www/pxe/images/initrd-modified.img"
+        "/var/www/pxe/images/initrd-vpc.img"
         "/var/www/pxe/images/squashfs.img"
         "/var/www/pxe/images/nutanix_installer_package.tar.gz"
         "/var/www/pxe/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
@@ -626,9 +626,9 @@ setup_boot_files() {
     fi
     
     # Calculate MD5 for modified initrd
-    if [[ -f "/var/www/pxe/images/initrd-modified.img" ]]; then
-        INITRD_MODIFIED_MD5=$(md5sum /var/www/pxe/images/initrd-modified.img | cut -d ' ' -f 1)
-        echo "  \"initrd-modified.img\": \"$INITRD_MODIFIED_MD5\"," >> "$CHECKSUMS_FILE"
+    if [[ -f "/var/www/pxe/images/initrd-vpc.img" ]]; then
+        INITRD_MODIFIED_MD5=$(md5sum /var/www/pxe/images/initrd-vpc.img | cut -d ' ' -f 1)
+        echo "  \"initrd-vpc.img\": \"$INITRD_MODIFIED_MD5\"," >> "$CHECKSUMS_FILE"
         log "Modified Initrd MD5: $INITRD_MODIFIED_MD5"
     fi
     
