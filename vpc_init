@@ -1,5 +1,5 @@
 #!/bin/sh
-# vpc_init - Complete driver loading and network setup with error handling
+# vpc_init with correct order: driver -> network -> download
 
 echo "=== Nutanix CE Direct Boot with Ionic ==="
 
@@ -31,8 +31,7 @@ get_config_server() {
 get_node_id() {
     # Try to get IP address of first interface
     for iface in $(ls /sys/class/net/ 2>/dev/null | grep -v lo | head -1); do
-        # Use a more compatible approach without -P option
-        ip=$(ip -4 addr show $iface | grep -o "inet [0-9.]*" | cut -d' ' -f2 | head -1)
+        ip=$(ip -4 addr show $iface 2>/dev/null | grep -o "inet [0-9.]*" | cut -d' ' -f2 | head -1)
         if [ -n "$ip" ]; then
             echo "$ip"
             return 0
@@ -42,7 +41,7 @@ get_node_id() {
     hostname 2>/dev/null || echo "unknown-node"
 }
 
-# Function to send status updates to PXE server
+# Function to send status updates (works with wget)
 send_status_update() {
     local message="$1"
     local phase="$2"
@@ -51,89 +50,120 @@ send_status_update() {
     
     echo "[STATUS] $message"
     
-    # Only try to send if we have curl
-    if command -v curl >/dev/null 2>&1; then
-        # Construct JSON payload
+    # Only try to send if we have network connectivity
+    if command -v wget >/dev/null 2>&1 && ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+        # Create temp file with JSON payload
         local json="{\"node_id\":\"$node_id\",\"phase\":\"$phase\",\"message\":\"$message\"}"
+        echo "$json" > /tmp/status.json
         
-        # Send status update to server
-        curl -s -X POST -H "Content-Type: application/json" \
-             -d "$json" \
+        # Send status update using wget
+        wget -q -O- --post-file=/tmp/status.json \
+             --header="Content-Type: application/json" \
              "${config_server}/api/installation/status" >/dev/null 2>&1 || true
+        
+        rm -f /tmp/status.json
     fi
 }
 
+# Essential filesystem mounts first
+echo "Setting up essential filesystems..."
+mount -t proc proc /proc 2>/dev/null || true
+mount -t sysfs sysfs /sys 2>/dev/null || true
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+
+# Set basic environment
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/phoenix:$PATH
+export TERM=linux
+export AUTOMATED_INSTALL=true
+
+# Load ionic driver FIRST
+echo "Loading ionic driver for IBM Cloud VPC..."
+send_status_update "Loading ionic driver" "driver_load"
+
+if modprobe ionic 2>/dev/null; then
+    echo "Ionic driver loaded successfully"
+    send_status_update "Ionic driver loaded successfully" "driver_success"
+    sleep 3  # Give driver time to initialize
+    
+    # Show available interfaces after driver load
+    echo "Network interfaces after ionic load:"
+    for iface in $(ls /sys/class/net/ 2>/dev/null | grep -v lo); do
+        echo "  - $iface"
+    done
+else
+    drop_to_shell "Failed to load ionic driver - required for IBM Cloud VPC"
+fi
+
 # Network configuration function
-configure_network_direct() {
-    echo "=== Direct Network Configuration ==="
+configure_network() {
+    echo "=== Network Configuration ==="
 
     # Find the first non-loopback interface
-    iface=$(ls /sys/class/net/ | grep -v lo | head -n1)
+    iface=$(ls /sys/class/net/ 2>/dev/null | grep -v lo | head -n1)
     if [ -z "$iface" ]; then
-        drop_to_shell "No network interfaces found"
+        drop_to_shell "No network interfaces found after loading ionic driver"
     fi
 
-    echo "Configuring $iface..."
+    echo "Configuring interface: $iface"
+    
+    # Bring interface up
     if ! ip link set "$iface" up; then
         drop_to_shell "Failed to bring up interface $iface"
     fi
-    sleep 1
+    
+    echo "Waiting for interface to come up..."
+    sleep 2
 
-    # Write a temporary udhcpc handler
-    cat >/tmp/udhcpc-handler.sh <<'EOF'
-#!/bin/sh
-case "$1" in
-    deconfig)
-        ip addr flush dev $interface
-        ;;
-    bound|renew)
-        ip addr flush dev $interface
-        ip addr add $ip/$subnet dev $interface
-        ip link set $interface up
-
-        if [ -n "$router" ]; then
-            echo "Setting default route via $router"
-            ip route replace default via $router dev $interface
-        fi
-
-        if [ -n "$dns" ]; then
-            echo -n > /etc/resolv.conf
-            for ns in $dns; do
-                echo "nameserver $ns" >> /etc/resolv.conf
-            done
-        fi
-        ;;
-esac
-EOF
-    chmod +x /tmp/udhcpc-handler.sh
-
-    # Run udhcpc with the handler
-    if udhcpc -i "$iface" -n -q -s /tmp/udhcpc-handler.sh; then
-        echo "Network configuration successful on $iface"
-        echo "---"
-        ip a show dev "$iface"
+    # Try DHCP with udhcpc
+    echo "Requesting DHCP lease on $iface..."
+    if udhcpc -i "$iface" -n -q; then
+        echo "DHCP configuration successful"
+        
+        # Show network status
+        echo "--- Network Status ---"
+        ip addr show "$iface"
+        echo "--- Routing Table ---"
         ip route show
-        echo "DNS:"
-        cat /etc/resolv.conf
-        echo "---"
-
-        # Send status update
-        send_status_update "VPC init script started and IP assigned" "boot"
-
-        return 0
+        echo "--- DNS Configuration ---"
+        cat /etc/resolv.conf 2>/dev/null || echo "No DNS config found"
+        echo "--- End Network Status ---"
+        
+        # Test connectivity
+        echo "Testing network connectivity..."
+        if ping -c 2 -W 5 8.8.8.8 >/dev/null 2>&1; then
+            echo "Internet connectivity verified"
+            send_status_update "Network configured successfully with internet access" "network_success"
+            return 0
+        else
+            echo "Warning: No internet connectivity"
+            send_status_update "Network configured but no internet access" "network_partial"
+            return 0  # Continue anyway - might be local network only
+        fi
     else
-        drop_to_shell "Network configuration failed on $iface"
+        drop_to_shell "DHCP configuration failed on $iface"
     fi
 }
+
+# Configure network first
+configure_network
 
 # Check for required environment variable
 if [ -z "$LIVEFS_URL" ]; then
     drop_to_shell "LIVEFS_URL environment variable not set"
 fi
 
+# Now download squashfs image
 echo "Downloading squashfs image from $LIVEFS_URL..."
-if ! curl -o /squashfs.img "$LIVEFS_URL"; then
-    drop_to_shell "Failed to download squashfs image from $LIVEFS_URL"
+send_status_update "Downloading squashfs image" "download_start"
+
+if command -v wget >/dev/null 2>&1; then
+    if wget -O /squashfs.img "$LIVEFS_URL"; then
+        echo "Download successful using wget"
+    else
+        drop_to_shell "Failed to download squashfs image using wget"
+    fi
+else
+    drop_to_shell "No HTTP client available (wget not found)"
 fi
 
 # Verify the downloaded file exists and has content
@@ -141,7 +171,11 @@ if [ ! -s /squashfs.img ]; then
     drop_to_shell "Downloaded squashfs image is empty or doesn't exist"
 fi
 
+echo "Downloaded file size: $(ls -lh /squashfs.img | awk '{print $5}')"
+send_status_update "Squashfs image downloaded successfully" "download_complete"
+
 # Mount squashfs
+echo "Mounting squashfs image..."
 mkdir -p /mnt/squashfs
 if ! mount -t squashfs /squashfs.img /mnt/squashfs; then
     drop_to_shell "Failed to mount squashfs image"
@@ -152,45 +186,14 @@ if [ ! -d /mnt/squashfs/usr/bin ]; then
     drop_to_shell "Squashfs mount appears unsuccessful - /mnt/squashfs/usr/bin not found"
 fi
 
+echo "Squashfs mounted successfully"
+send_status_update "Squashfs mounted successfully" "mount_success"
+
 # Add squashfs binaries to PATH
 export PATH=/mnt/squashfs/usr/bin:$PATH
 
-# Essential filesystem mounts
-mount -t proc proc /proc 2>/dev/null || true
-mount -t sysfs sysfs /sys 2>/dev/null || true
-mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
-
-# Set environment
+# Update PATH with all required directories
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/phoenix:/mnt/squashfs/usr/bin:$PATH
-export TERM=linux
-export AUTOMATED_INSTALL=true
-
-# Load ionic driver immediately
-echo "Loading ionic driver for IBM Cloud VPC..."
-if modprobe ionic 2>/dev/null; then
-    echo "Ionic driver loaded successfully"
-    sleep 3  # Give driver time to initialize
-    
-    # Show available interfaces
-    echo "Network interfaces after ionic load:"
-    ls /sys/class/net/ 2>/dev/null | grep -v lo | while read iface; do
-        echo "  - $iface"
-    done
-else
-    echo "Ionic driver not available - continuing anyway"
-fi
-
-# Configure network directly
-echo "Configuring network..."
-configure_network_direct
-
-# Verify we can reach the internet (optional test)
-echo "Testing network connectivity..."
-if ! ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
-    echo "Warning: No internet connectivity detected"
-    send_status_update "Warning: No internet connectivity" "network_warning"
-    # Don't fail here - continue with installation attempt
-fi
 
 # Launch installation
 echo "Starting automated installation..."
@@ -201,9 +204,15 @@ if [ ! -f "/phoenix/vpc_ce_installation.py" ]; then
     drop_to_shell "Installation script not found at /phoenix/vpc_ce_installation.py"
 fi
 
-# Verify Python is available
+# Verify Python is available (might be in squashfs)
 if ! command -v python >/dev/null 2>&1; then
-    drop_to_shell "Python interpreter not found"
+    # Try python3
+    if ! command -v python3 >/dev/null 2>&1; then
+        drop_to_shell "Python interpreter not found (tried python and python3)"
+    else
+        echo "Using python3 interpreter"
+        alias python=python3
+    fi
 fi
 
 # Change to the correct directory
@@ -223,7 +232,10 @@ else
     drop_to_shell "Python installation script failed with exit code $?"
 fi
 
-# If we reach here, installation was successful but we can still provide shell access
-echo "Installation completed. Dropping to shell for any post-install tasks..."
-send_status_update "Installation completed - shell available" "install_complete_shell"
+# If we reach here, installation was successful
+echo "Installation completed successfully!"
+send_status_update "Installation completed - system ready" "install_complete"
+
+# Provide shell access for any post-install tasks
+echo "Dropping to shell for any final configurations..."
 exec /bin/sh
