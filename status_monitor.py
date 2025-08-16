@@ -368,29 +368,6 @@ class StatusMonitor:
             return history[0]['timestamp']
         return datetime.now()
     
-def get_deployment_history(self, server_ip):
-    """Get complete deployment history for a server"""
-    node = self.db.get_node_by_management_ip(server_ip)
-    
-    if not node:
-        return None
-    
-    history = self.db.get_deployment_history(node['id'])
-    
-    return {
-        'server_ip': server_ip,
-        'node_name': node['node_name'],
-        'deployment_history': [
-            {
-                'phase': event['phase'],
-                'status': event['status'],
-                'message': event['message'],
-                'timestamp': event['timestamp'].isoformat()
-            }
-            for event in history
-        ]
-    }
-    
     def calculate_progress_percentage(self, current_phase, elapsed_time):
         """Calculate deployment progress as percentage"""
         if current_phase not in self.deployment_phases:
@@ -420,6 +397,29 @@ def get_deployment_history(self, server_ip):
         total_progress = completed_progress + current_phase_contribution
         
         return min(100, max(0, int(total_progress)))
+    
+def get_deployment_history(self, server_ip):
+    """Get complete deployment history for a server"""
+    node = self.db.get_node_by_management_ip(server_ip)
+    
+    if not node:
+        return None
+    
+    history = self.db.get_deployment_history(node['id'])
+    
+    return {
+        'server_ip': server_ip,
+        'node_name': node['node_name'],
+        'deployment_history': [
+            {
+                'phase': event['phase'],
+                'status': event['status'],
+                'message': event['message'],
+                'timestamp': event['timestamp'].isoformat()
+            }
+            for event in history
+        ]
+    }
     
 def handle_deployment_failure(self, node_id, failure_data):
     """Handle deployment failure"""
