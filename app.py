@@ -606,15 +606,29 @@ def api_update_installation_status():
         try:
             with db.get_connection() as conn:
                 with conn.cursor() as cur:
-                    # Update the 'nodes' table. Assuming 'node_id' is the primary key.
-                    # Update 'deployment_status' and 'updated_at'.
-                    update_query = """
-                        UPDATE nodes
-                        SET deployment_status = %s, updated_at = %s
-                        WHERE id = %s
-                    """
-                    current_time = datetime.utcnow()
-                    cur.execute(update_query, (deployment_status, current_time, node_id))
+                    # First check if node_id is an integer or a string (IP address)
+                    try:
+                        # Try to convert to integer - if it works, use it as ID
+                        node_db_id = int(node_id)
+                        # Use direct ID lookup
+                        update_query = """
+                            UPDATE nodes
+                            SET deployment_status = %s, updated_at = %s
+                            WHERE id = %s
+                        """
+                        current_time = datetime.utcnow()
+                        cur.execute(update_query, (deployment_status, current_time, node_db_id))
+                    except ValueError:
+                        # If conversion fails, it's likely an IP address or hostname
+                        # Look up the node by management_ip
+                        update_query = """
+                            UPDATE nodes
+                            SET deployment_status = %s, updated_at = %s
+                            WHERE management_ip = %s
+                        """
+                        current_time = datetime.utcnow()
+                        cur.execute(update_query, (deployment_status, current_time, node_id))
+                    
                     conn.commit()
                     logger.info(f"Database updated for node {node_id}: status set to {deployment_status}")
 

@@ -476,3 +476,41 @@ Sign in to the CE host and open a secure shell session (SSH) to the CVM IP addre
 Configure a single-node or multinode cluster.
 See the Next Steps section.
 For a multinode cluster, you must install CE on every node that you plan to use in the cluster. When the system restarts after installation, validate that the CVMs are online and ready to join a cluster.
+
+## Step 5: Verify files are accessible
+
+```bash
+curl -I http://your-server-ip/squashfs.img
+curl -I http://your-server-ip/arizona.cfg
+```
+
+### 5.1 Required File Structure
+```bash
+/var/www/pxe/images
+├── kernel
+├── initrd-vpc
+├── squashfs.img
+├── nutanix_installer_package.tar.gz
+├── AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso
+```
+
+## Architecture
+
+This solution works because the PXE/Config server is pre-configured with extracted and modified files from the Nutanix CE ISO file:
+
+1. **iPXE** downloads **kernel** and **initrd** over HTTP.
+2. **initrd** boots and downloads **squashfs.img** (root filesystem).
+3. **Phoenix** installer reads **Arizona** config for automation.
+4. Installs **AHV** hypervisor and **CVM** on bare metal.
+
+This results in a node that is ready to be become a single node cluster, or join with other nodes in a standard cluster and be accessible via **Prism**.
+
+```
+IBM Bare Metal Server (iPXE) → HTTP Server → Automated Installation
+                ↓
+1. Boot kernel + initrd via HTTP
+2. Download squashfs.img (root filesystem)  
+3. Download arizona.cfg (automation config)
+4. Download AOS installer + AHV ISO
+5. Automated installation based on config
+```

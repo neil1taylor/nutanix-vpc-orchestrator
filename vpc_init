@@ -170,6 +170,44 @@ EOF
     fi
 }
 
+# Function to create writable overlay from squashfs
+setup_overlay() {
+    echo "Creating writable overlay environment..."
+    mkdir -p /overlay
+    mount -t tmpfs -o size=16G tmpfs /overlay || drop_to_shell "Failed to create tmpfs overlay"
+
+    echo "Copying squashfs to overlay (excluding virtual filesystems)..."
+    for dir in /mnt/squashfs/*; do
+        if [ -d "$dir" ]; then
+            dirname=$(basename "$dir")
+            case "$dirname" in
+                proc|sys|dev)
+                    echo "Skipping virtual filesystem: $dirname"
+                    ;;
+                *)
+                    echo "Copying: $dirname"
+                    cp -af "$dir" /overlay/ || drop_to_shell "Failed to copy $dirname to overlay"
+                    ;;
+            esac
+        else
+            # Copy files in root
+            cp -af "$dir" /overlay/ 2>/dev/null || true
+        fi
+    done
+
+    # Create mount points for virtual filesystems and phoenix
+    mkdir -p /overlay/proc /overlay/sys /overlay/dev /overlay/phoenix
+
+    # Bind mount the real filesystems
+    mount --bind /proc /overlay/proc || drop_to_shell "Failed to bind mount /proc"
+    mount --bind /sys /overlay/sys || drop_to_shell "Failed to bind mount /sys"
+    mount --bind /dev /overlay/dev || drop_to_shell "Failed to bind mount /dev"
+    mount --bind /phoenix /overlay/phoenix || drop_to_shell "Failed to bind mount /phoenix"
+
+    echo "Overlay environment ready"
+    send_status_update "Overlay environment created" "overlay_ready"
+}
+
 # Configure network first
 configure_network
 
@@ -218,6 +256,9 @@ send_status_update "Squashfs mounted successfully" "mount_success"
 # Update PATH with all required directories
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/phoenix:/mnt/squashfs/usr/bin:$PATH
 
+# Set up overlay environment
+setup_overlay
+
 # Launch installation
 echo "Starting automated installation..."
 send_status_update "Starting automated installation" "install_start"
@@ -235,7 +276,7 @@ echo "Executing installation script..."
 # chroot used to stop: /mnt/squashfs/usr/bin/python3.9  # Fails with "not found".
 # The system can't find the required libraries because they're inside the squashfs
 # at paths like /mnt/squashfs/lib64/, but the binary expects them at /lib64/.
-if chroot /mnt/squashfs /usr/bin/python3.9 < vpc_ce_installation.py; then
+if chroot /overlay /usr/bin/python3.9 /phoenix/vpc_ce_installation.py; then
     echo "Installation completed successfully"
     send_status_update "Installation completed successfully" "install_complete"
 else
