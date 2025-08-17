@@ -578,15 +578,20 @@ def api_update_installation_status():
         if not data:
             return jsonify({'error': 'No JSON data received'}), 400
 
+        # Accept either node_id (for backward compatibility) or management_ip (preferred)
         node_id = data.get('node_id')
+        management_ip = data.get('management_ip', node_id)  # Default to node_id if management_ip not provided
         phase = data.get('phase')
         message = data.get('message')
 
-        if node_id is None or phase is None or message is None:
-            return jsonify({'error': 'Missing required fields: node_id, phase, message'}), 400
+        if (node_id is None and management_ip is None) or phase is None or message is None:
+            return jsonify({'error': 'Missing required fields: either node_id or management_ip, plus phase and message'}), 400
 
+        # Use management_ip for logging if available, otherwise use node_id
+        identifier = management_ip if management_ip else node_id
+        
         # Log the message to the server log file
-        log_message = f"Node {node_id} - Phase {phase}: {message}"
+        log_message = f"Node {identifier} - Phase {phase}: {message}"
         logger.info(log_message) # This will use the configured logger which writes to file and console
 
         # Update the server status in the database
@@ -606,31 +611,43 @@ def api_update_installation_status():
         try:
             with db.get_connection() as conn:
                 with conn.cursor() as cur:
-                    # First check if node_id is an integer or a string (IP address)
-                    try:
-                        # Try to convert to integer - if it works, use it as ID
-                        node_db_id = int(node_id)
-                        # Use direct ID lookup
-                        update_query = """
-                            UPDATE nodes
-                            SET deployment_status = %s, updated_at = %s
-                            WHERE id = %s
-                        """
-                        current_time = datetime.utcnow()
-                        cur.execute(update_query, (deployment_status, current_time, node_db_id))
-                    except ValueError:
-                        # If conversion fails, it's likely an IP address or hostname
-                        # Look up the node by management_ip
+                    # Determine how to look up the node
+                    if management_ip:
+                        # If management_ip is provided, use it directly
                         update_query = """
                             UPDATE nodes
                             SET deployment_status = %s, updated_at = %s
                             WHERE management_ip = %s
                         """
-                        current_time = datetime.utcnow()
-                        cur.execute(update_query, (deployment_status, current_time, node_id))
+                        lookup_value = management_ip
+                    else:
+                        # Otherwise try node_id
+                        try:
+                            # Try to convert to integer - if it works, use it as ID
+                            node_db_id = int(node_id)
+                            # Use direct ID lookup
+                            update_query = """
+                                UPDATE nodes
+                                SET deployment_status = %s, updated_at = %s
+                                WHERE id = %s
+                            """
+                            lookup_value = node_db_id
+                        except ValueError:
+                            # If conversion fails, it's likely an IP address or hostname
+                            # Look up the node by management_ip
+                            update_query = """
+                                UPDATE nodes
+                                SET deployment_status = %s, updated_at = %s
+                                WHERE management_ip = %s
+                            """
+                            lookup_value = node_id
                     
+                    current_time = datetime.utcnow()
+                    cur.execute(update_query, (deployment_status, current_time, lookup_value))
                     conn.commit()
-                    logger.info(f"Database updated for node {node_id}: status set to {deployment_status}")
+                    
+                    # Use the identifier for logging
+                    logger.info(f"Database updated for node {identifier}: status set to {deployment_status}")
 
         except Exception as db_e:
             logger.error(f"Database update failed for node {node_id}: {str(db_e)}")
