@@ -25,24 +25,24 @@ from random import randint
 import urllib.request
 import urllib.error
 
-# Global variables to store node_id and config_server
-node_id = None
+# Global variables to store management_ip and config_server
+management_ip = None
 config_server = None
 
 def log(message):
     """Logs a message to stdout and sends it to the status API."""
-    global node_id, config_server
+    global management_ip, config_server
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     
-    # Send log message to API if node_id and config_server are available
-    if node_id and config_server:
+    # Send log message to API if management_ip and config_server are available
+    if management_ip and config_server:
         # Use a specific phase for logs, e.g., -1 or a dedicated constant
-        send_status_update(node_id, -1, f"[{timestamp}] {message}")
+        send_status_update(management_ip, -1, f"[{timestamp}] {message}")
 
     print(f"[{timestamp}] {message}")
 
-def get_node_identifier():
-    """Get IP address of first interface as node identifier, in the form of x-x-x-x"""
+def get_management_ip():
+    """Get IP address of first interface as management IP, in the form of x-x-x-x"""
     
     try:
         # Get first non-loopback interface
@@ -85,11 +85,11 @@ def get_config_server_from_cmdline():
     except Exception as e:
         log(f"Error reading cmdline: {e}")
 
-def download_node_config(config_server, node_id):
+def download_node_config(config_server, mgmt_ip):
     """Download node-specific configuration"""
-    log(f"Downloading configuration for node: {node_id}")
+    log(f"Downloading configuration for node: {mgmt_ip}")
     
-    url = f"{config_server}/boot/server/{node_id}.json"
+    url = f"{config_server}/boot/server/{mgmt_ip}.json"
     
     try:
         log(f"Trying config URL: {url}")
@@ -485,7 +485,7 @@ def cleanup_previous_attempts():
         log(f"Cleanup failed: {e}")
         return False
 
-def send_status_update(node_id, phase, message):
+def send_status_update(mgmt_ip, phase, message):
     """Sends status and log messages to the PXE config server API using urllib."""
     config_server = get_config_server_from_cmdline()
     if not config_server:
@@ -494,10 +494,30 @@ def send_status_update(node_id, phase, message):
     
     api_url = f"{config_server}/api/installation/status"
     payload = {
-        "node_id": node_id,
+        "management_ip": mgmt_ip,
         "phase": phase,
         "message": message
     }
+    
+    # Prepare the JSON payload
+    json_data = json.dumps(payload).encode('utf-8')
+    
+    try:
+        # Create a request object
+        req = urllib.request.Request(
+            url=api_url,
+            data=json_data,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        # Send the request
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status == 200:
+                log(f"Status update sent successfully: {message}")
+            else:
+                log(f"Failed to send status update. Status code: {response.status}")
+    except Exception as e:
+        log(f"Error sending status update: {str(e)}")
     
     try:
         log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}")
@@ -587,24 +607,24 @@ def run_nutanix_installation(params, config):
 
 def main():
     """Main installation function"""
-    global node_id, config_server # Ensure globals are accessible
+    global management_ip, config_server # Ensure globals are accessible
     log("=== Nutanix CE Node-Agnostic Installation ===")
     log("Platform: IBM Cloud VPC with Ionic Driver")
     
     # Phase 1: Initialization
-    node_id = get_node_identifier()
+    management_ip = get_management_ip()
     config_server = get_config_server_from_cmdline()
-    send_status_update(node_id, 1, "Initialization complete")
+    send_status_update(management_ip, 1, "Initialization complete")
 
     # Phase 2: Download Node Configuration
-    send_status_update(node_id, 2, "Downloading node configuration")
-    config = download_node_config(config_server, node_id)
+    send_status_update(management_ip, 2, "Downloading node configuration")
+    config = download_node_config(config_server, management_ip)
     if not config:
         log("Unable to get configuration")
         return 1
     
     # Phase 3: Validate Configuration
-    send_status_update(node_id, 3, "Validating configuration")
+    send_status_update(management_ip, 3, "Validating configuration")
     if not validate_config(config):
         log("Configuration validation failed")
         return 1
@@ -612,13 +632,13 @@ def main():
     log(f"Configuration loaded for cluster: {config['cluster']['name']}")
     
     # Phase 4: Download Packages
-    send_status_update(node_id, 4, "Downloading installation packages")
+    send_status_update(management_ip, 4, "Downloading installation packages")
     if not download_packages(config_server):
         log("Package download failed")
         return 1
     
     # Phase 5: Install Hypervisor
-    send_status_update(node_id, 5, "Installing AHV hypervisor")
+    send_status_update(management_ip, 5, "Installing AHV hypervisor")
     if not install_hypervisor(config):
         log("Hypervisor installation failed")
         return 1

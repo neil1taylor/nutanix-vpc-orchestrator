@@ -27,8 +27,8 @@ get_config_server() {
     fi
 }
 
-# Function to get node identifier (IP address)
-get_node_id() {
+# Function to get management IP address
+get_management_ip() {
     # Try to get IP address of first interface
     for iface in $(ls /sys/class/net/ 2>/dev/null | grep -v lo | head -1); do
         ip=$(ip -4 addr show $iface 2>/dev/null | grep -o "inet [0-9.]*" | cut -d' ' -f2 | head -1)
@@ -46,14 +46,14 @@ send_status_update() {
     local message="$1"
     local phase="$2"
     local config_server=$(get_config_server)
-    local node_id=$(get_node_id)
+    local management_ip=$(get_management_ip)
     
     echo "[STATUS] $message"
     
     # Only try to send if we have network connectivity
     if command -v wget >/dev/null 2>&1 && ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
         # Create temp file with JSON payload
-        local json="{\"node_id\":\"$node_id\",\"phase\":\"$phase\",\"message\":\"$message\"}"
+        local json="{\"management_ip\":\"$management_ip\",\"phase\":\"$phase\",\"message\":\"$message\"}"
         echo "$json" > /tmp/status.json
         
         # Send status update using wget
