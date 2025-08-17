@@ -95,7 +95,7 @@ else
 fi
 
 # Network configuration function
-configure_network_direct() {
+configure_network() {
     echo "=== Direct Network Configuration ==="
 
     # Find the first non-loopback interface
@@ -215,31 +215,12 @@ fi
 echo "Squashfs mounted successfully"
 send_status_update "Squashfs mounted successfully" "mount_success"
 
-# Add squashfs binaries to PATH
-export PATH=/mnt/squashfs/usr/bin:$PATH
-
 # Update PATH with all required directories
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/phoenix:/mnt/squashfs/usr/bin:$PATH
 
 # Launch installation
 echo "Starting automated installation..."
 send_status_update "Starting automated installation" "install_start"
-
-# Check if installation script exists
-if [ ! -f "/phoenix/vpc_ce_installation.py" ]; then
-    drop_to_shell "Installation script not found at /phoenix/vpc_ce_installation.py"
-fi
-
-# Verify Python is available (might be in squashfs)
-if ! command -v python >/dev/null 2>&1; then
-    # Try python3
-    if ! command -v python3 >/dev/null 2>&1; then
-        drop_to_shell "Python interpreter not found (tried python and python3)"
-    else
-        echo "Using python3 interpreter"
-        alias python=python3
-    fi
-fi
 
 # Change to the correct directory
 if ! cd /phoenix; then
@@ -250,8 +231,11 @@ fi
 send_status_update "Executing Python installation script" "python_exec"
 echo "Executing installation script..."
 
-# Run the Python script and capture its exit code
-if python vpc_ce_installation.py; then
+# Run the Python script using chroot and capture its exit code
+# chroot used to stop: /mnt/squashfs/usr/bin/python3.9  # Fails with "not found".
+# The system can't find the required libraries because they're inside the squashfs
+# at paths like /mnt/squashfs/lib64/, but the binary expects them at /lib64/.
+if chroot /mnt/squashfs /usr/bin/python3.9 < vpc_ce_installation.py; then
     echo "Installation completed successfully"
     send_status_update "Installation completed successfully" "install_complete"
 else

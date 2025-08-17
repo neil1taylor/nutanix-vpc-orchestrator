@@ -176,7 +176,7 @@ sleep 2
 set base-url http://{Config.PXE_SERVER_DNS}:8080
 
 # Direct kernel boot with optimized parameters
-kernel ${{base-url}}/boot/images/kernel init=/vpc_init config_server=${{base-url}} console=tty1 console=ttyS1,115200n8 intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 IMG=squashfs PXEBOOT=true LIVEFS_URL=${{base-url}}/squashfs.img AUTOMATED_INSTALL=true
+kernel ${{base-url}}/boot/images/kernel init=/vpc_init config_server=${{base-url}} console=tty1 console=ttyS1,115200n8 intel_iommu=on iommu=pt kvm-intel.nested=1 kvm.ignore_msrs=1 kvm-intel.ept=1 vga=791 net.ifnames=0 IMG=squashfs PXEBOOT=true LIVEFS_URL=${{base-url}}/boot/images/squashfs.img AUTOMATED_INSTALL=true
 
 # Use VPC initrd
 initrd ${{base-url}}/boot/images/initrd-vpc.img

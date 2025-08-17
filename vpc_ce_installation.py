@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-# vpc_ce_installation.py
+
+"""
+Nutanix CE VPC Installation Script
+
+NOTE: This script is designed to use only Python standard library modules
+to ensure compatibility with minimal Python environments. Do not add any
+external dependencies (like requests, psutil, etc.) that require pip install.
+Use urllib instead of requests, and built-in modules whenever possible.
+
+This ensures the script can run in embedded/chroot environments where
+only the Python standard library is available.
+"""
 
 import sys
 import os
@@ -11,7 +22,8 @@ import hashlib
 import uuid
 import glob
 from random import randint
-import requests
+import urllib.request
+import urllib.error
 
 # Global variables to store node_id and config_server
 node_id = None
@@ -474,26 +486,43 @@ def cleanup_previous_attempts():
         return False
 
 def send_status_update(node_id, phase, message):
-    """Sends status and log messages to the PXE config server API."""
+    """Sends status and log messages to the PXE config server API using urllib."""
     config_server = get_config_server_from_cmdline()
     if not config_server:
         log(f"Error: Config server URL not found. Cannot send status update.")
         return
-
+    
     api_url = f"{config_server}/api/installation/status"
     payload = {
         "node_id": node_id,
         "phase": phase,
         "message": message
     }
-
+    
     try:
         log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}")
-        response = requests.post(api_url, json=payload, timeout=10)
-        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
-        log(f"Status update sent successfully. Response: {response.status_code}")
-    except requests.exceptions.RequestException as e:
+        
+        # Convert payload to JSON and encode
+        data = json.dumps(payload).encode('utf-8')
+        
+        # Create request
+        req = urllib.request.Request(api_url, data=data, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        
+        # Send request with timeout
+        response = urllib.request.urlopen(req, timeout=10)
+        status_code = response.getcode()
+        
+        # Check for success (2xx status codes)
+        if 200 <= status_code < 300:
+            log(f"Status update sent successfully. Response: {status_code}")
+        else:
+            log(f"Status update failed with HTTP {status_code}")
+            
+    except (urllib.error.URLError, urllib.error.HTTPError) as e:
         log(f"Error sending status update to {api_url}: {e}")
+    except socket.timeout:
+        log(f"Timeout sending status update to {api_url}")
     except Exception as e:
         log(f"An unexpected error occurred while sending status update: {e}")
 
