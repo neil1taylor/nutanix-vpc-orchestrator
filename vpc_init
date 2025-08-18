@@ -41,27 +41,26 @@ get_management_ip() {
     hostname 2>/dev/null || echo "unknown-node"
 }
 
-# Function to send status updates (works with wget)
+# Function to send status updates (uses curl from overlay)
 send_status_update() {
     local message="$1"
     local phase="$2"
     local config_server=$(get_config_server)
-    local management_ip=$(get_management_ip)
+    local node_id=$(get_node_id)
     
     echo "[STATUS] $message"
     
-    # Only try to send if we have network connectivity
-    if command -v wget >/dev/null 2>&1 && ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-        # Create temp file with JSON payload
-        local json="{\"management_ip\":\"$management_ip\",\"phase\":\"$phase\",\"message\":\"$message\"}"
-        echo "$json" > /tmp/status.json
+    # Only try to send if we have overlay with curl and network connectivity
+    if [ -d /overlay ] && ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+        # Construct JSON payload - API expects management_ip not node_id
+        local json="{\"management_ip\":\"$node_id\",\"phase\":\"$phase\",\"message\":\"$message\"}"
         
-        # Send status update using wget
-        wget -q -O- --post-file=/tmp/status.json \
-             --header="Content-Type: application/json" \
-             "${config_server}/api/installation/status" >/dev/null 2>&1 || true
-        
-        rm -f /tmp/status.json
+        # Use curl from overlay (which has better HTTP support)
+        if [ -n "$config_server" ]; then
+            chroot /overlay curl -s -X POST -H "Content-Type: application/json" \
+                 -d "$json" \
+                 "${config_server}/api/installation/status" >/dev/null 2>&1 || true
+        fi
     fi
 }
 
@@ -195,14 +194,28 @@ setup_overlay() {
         fi
     done
 
-    # Create mount points for virtual filesystems and phoenix
-    mkdir -p /overlay/proc /overlay/sys /overlay/dev /overlay/phoenix
+    # Create mount points for virtual filesystems
+    mkdir -p /overlay/proc || drop_to_shell "Failed to create /overlay/proc"
+    mkdir -p /overlay/sys || drop_to_shell "Failed to create /overlay/sys"
+    mkdir -p /overlay/dev || drop_to_shell "Failed to create /overlay/dev"
+
+    # Handle phoenix directory - remove if it's a symlink
+    if [ -L /overlay/phoenix ]; then
+        echo "Removing phoenix symlink..."
+        rm /overlay/phoenix
+    fi
+    mkdir -p /overlay/phoenix || drop_to_shell "Failed to create /overlay/phoenix"
 
     # Bind mount the real filesystems
     mount --bind /proc /overlay/proc || drop_to_shell "Failed to bind mount /proc"
     mount --bind /sys /overlay/sys || drop_to_shell "Failed to bind mount /sys"
     mount --bind /dev /overlay/dev || drop_to_shell "Failed to bind mount /dev"
     mount --bind /phoenix /overlay/phoenix || drop_to_shell "Failed to bind mount /phoenix"
+
+    # Copy DNS configuration for name resolution
+    echo "Setting up DNS in overlay..."
+    cp /etc/resolv.conf /overlay/etc/resolv.conf 2>/dev/null || true
+    cp /etc/hosts /overlay/etc/hosts 2>/dev/null || true
 
     echo "Overlay environment ready"
     send_status_update "Overlay environment created" "overlay_ready"

@@ -52,3 +52,20 @@ Also:
 ## Database 
 
 The system logs deployment events in the `deployment_history` table, which tracks:
+
+...
+
+## API
+
+`curl -X POST -H "Content-Type: application/json" -d '{"management_ip":"10.240.0.10","phase":"test","message":"Testing status update API with management_ip parameter"}' http://localhost:8080/api/installation/status`
+
+the response should be `{"message":"Status update received successfully"}`
+
+
+form the bare metal server:
+
+```bash
+chroot /overlay curl -X POST -H "Content-Type: application/json" \
+    -d '{"management_ip":"10.240.0.10","phase":"test","message":"test message"}' \
+    http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/api/installation/status
+```

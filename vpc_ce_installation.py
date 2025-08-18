@@ -85,11 +85,11 @@ def get_config_server_from_cmdline():
     except Exception as e:
         log(f"Error reading cmdline: {e}")
 
-def download_node_config(config_server, mgmt_ip):
+def download_node_config(config_server, management_ip):
     """Download node-specific configuration"""
-    log(f"Downloading configuration for node: {mgmt_ip}")
+    log(f"Downloading configuration for node: {management_ip}")
     
-    url = f"{config_server}/boot/server/{mgmt_ip}.json"
+    url = f"{config_server}/boot/server/{management_ip}.json"
     
     try:
         log(f"Trying config URL: {url}")
@@ -485,7 +485,7 @@ def cleanup_previous_attempts():
         log(f"Cleanup failed: {e}")
         return False
 
-def send_status_update(mgmt_ip, phase, message):
+def send_status_update(management_ip, phase, message):
     """Sends status and log messages to the PXE config server API using urllib."""
     config_server = get_config_server_from_cmdline()
     if not config_server:
@@ -494,7 +494,7 @@ def send_status_update(mgmt_ip, phase, message):
     
     api_url = f"{config_server}/api/installation/status"
     payload = {
-        "management_ip": mgmt_ip,
+        "management_ip": management_ip,
         "phase": phase,
         "message": message
     }
@@ -608,7 +608,7 @@ def run_nutanix_installation(params, config):
 def main():
     """Main installation function"""
     global management_ip, config_server # Ensure globals are accessible
-    log("=== Nutanix CE Node-Agnostic Installation ===")
+    log("=== Nutanix CE VPC Bare Metal Server Installation ===")
     log("Platform: IBM Cloud VPC with Ionic Driver")
     
     # Phase 1: Initialization
