@@ -14,6 +14,7 @@ import sys
 import time
 import argparse
 import logging
+import traceback
 from datetime import datetime
 
 # Add the parent directory to the Python path to import modules
@@ -240,11 +241,13 @@ curl -s {boot_config_url} | sh
                 user_data=user_data
             )
             
-            # Replace the server initialization
+            # Replace the server initialization - pass the required parameters directly
             logger.info(f"Updating server initialization with user data for network boot")
             ibm_cloud.vpc_service.replace_bare_metal_server_initialization(
                 id=server_id,
-                bare_metal_server_initialization_prototype=init_prototype
+                image=ImageIdentityById(id=image_id),
+                keys=[KeyIdentityById(id=key_id) for key_id in key_ids],
+                user_data=user_data
             )
             
             # Now start the server
