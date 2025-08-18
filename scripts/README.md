@@ -47,7 +47,7 @@ The script performs the following steps:
    
    The script performs the following steps for reinitialization:
    - Retrieves the current server initialization to extract image and SSH keys
-   - Creates a new initialization prototype with the network boot configuration
+   - Sets the user data to the iPXE boot configuration URL
    - Updates the server initialization with the network boot configuration
    - Starts the server with the updated initialization
    

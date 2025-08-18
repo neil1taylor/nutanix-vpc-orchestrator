@@ -14,7 +14,7 @@ import sys
 import time
 import argparse
 import logging
-import traceback
+import traceback  # Import traceback module for error handling
 from datetime import datetime
 
 # Add the parent directory to the Python path to import modules
@@ -196,18 +196,11 @@ def reinitialize_server(server_id, management_ip):
     """
     ibm_cloud = IBMCloudClient()
     try:
-        # Create user data with the boot configuration
-        # Use ${net0/ip} which will be expanded by the iPXE client on the bare metal server
-        # Escape the $ character to prevent Python from trying to interpret it as a variable
-        boot_config_url = "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=$${net0/ip}"
+        # Just use the URL as the user data
+        # The ${net0/ip} variable will be expanded by the iPXE client on the bare metal server
+        user_data = "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=${net0/ip}"
         
-        # Encode user data for the server
-        user_data = f"""#!/bin/sh
-# Reinitialize server with iPXE boot configuration
-echo "Reinitializing server with iPXE boot configuration: {boot_config_url}"
-# The ${{net0/ip}} variable will be expanded by the iPXE client to the actual IP address
-curl -s {boot_config_url} | sh
-"""
+        logger.info(f"Using URL for network boot: {user_data}")
         
         # Start the server with the boot configuration
         logger.info(f"Starting server {server_id} with boot configuration: {boot_config_url}")
@@ -255,10 +248,13 @@ curl -s {boot_config_url} | sh
             ibm_cloud.vpc_service.start_bare_metal_server(id=server_id)
             
         except Exception as e:
-            logger.error(f"Failed to update initialization and start server: {str(e)}")
+            error_msg = str(e)
+            logger.error(f"Failed to update initialization and start server: {error_msg}")
             logger.error("Cannot proceed without proper network boot configuration")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-            raise Exception("Failed to set network boot configuration")
+            # Use the imported traceback module
+            import traceback as tb  # Import with alias to avoid any confusion
+            logger.error(f"Full traceback: {tb.format_exc()}")
+            raise Exception(f"Failed to set network boot configuration: {error_msg}")
         
         logger.info(f"Server {server_id} reinitialization initiated")
         return True
