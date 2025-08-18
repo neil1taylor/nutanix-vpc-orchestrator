@@ -29,6 +29,43 @@ import urllib.error
 management_ip = None
 config_server = None
 
+def drop_to_shell(error_msg):
+    """
+    Drop to an interactive shell for debugging when a critical error occurs.
+    
+    Args:
+        error_msg: The error message to log before dropping to shell
+    """
+    log(f"ERROR: {error_msg}")
+    
+    # Send status update if we have the required information
+    if management_ip and config_server:
+        send_status_update(management_ip, "error", f"ERROR: {error_msg} - Dropping to shell")
+    
+    log("Dropping to interactive shell for debugging...")
+    log("You can now connect via serial console")
+    
+    # Print a visible separator to make it clear we're entering a shell
+    print("\n" + "="*60)
+    print(">>> ENTERING INTERACTIVE DEBUG SHELL <<<")
+    print("="*60 + "\n")
+    
+    # Execute an interactive shell
+    try:
+        # Try to use a more feature-rich shell if available
+        for shell_path in ['/bin/bash', '/bin/sh']:
+            if os.path.exists(shell_path):
+                os.execv(shell_path, [shell_path])
+        
+        # Fallback to Python's subprocess if exec fails
+        subprocess.call(['/bin/sh'])
+    except Exception as e:
+        log(f"Failed to start debug shell: {e}")
+        # If we can't start a shell, at least sleep to keep the process alive
+        # so logs can be examined
+        while True:
+            time.sleep(3600)
+
 def log(message):
     """Logs a message to stdout and sends it to the status API."""
     global management_ip, config_server
@@ -256,13 +293,13 @@ def install_hypervisor(config):
        log("Creating hypervisor partitions...")
        fdisk_commands = "n\np\n1\n\n+1M\nn\np\n2\n\n+20G\nn\np\n3\n\n\nt\n1\nef\nw\n"
        
-       result = subprocess.run(['fdisk', boot_device], 
-                             input=fdisk_commands, text=True, 
+       result = subprocess.run(['fdisk', boot_device],
+                             input=fdisk_commands, text=True,
                              capture_output=True)
        
        if result.returncode != 0:
            log(f"Failed to create partitions: {result.stderr}")
-           return False
+           drop_to_shell(f"Failed to create partitions on {boot_device}")
        
        # Wait for partitions to be recognized
        time.sleep(3)
@@ -276,13 +313,13 @@ def install_hypervisor(config):
        result = subprocess.run(['mkfs.vfat', f'{boot_device}p1'], capture_output=True)
        if result.returncode != 0:
            log(f"Failed to format EFI partition: {result.stderr}")
-           return False
+           drop_to_shell(f"Failed to format EFI partition on {boot_device}p1")
        
        # Hypervisor partition
        result = subprocess.run(['mkfs.ext4', '-F', f'{boot_device}p2'], capture_output=True)
        if result.returncode != 0:
            log(f"Failed to format hypervisor partition: {result.stderr}")
-           return False
+           drop_to_shell(f"Failed to format hypervisor partition on {boot_device}p2")
        
        log("Partitions created and formatted")
        
@@ -298,7 +335,7 @@ def install_hypervisor(config):
        result = subprocess.run(['mount', f'{boot_device}p2', '/mnt/stage'])
        if result.returncode != 0:
            log("Failed to mount hypervisor partition")
-           return False
+           drop_to_shell(f"Failed to mount hypervisor partition {boot_device}p2 to /mnt/stage")
        
        # Mount AHV ISO
        ahv_iso_path = '/tmp/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso'
@@ -530,7 +567,14 @@ def cleanup_previous_attempts():
         return False
 
 def send_status_update(management_ip, phase, message):
-    """Sends status and log messages to the PXE config server API using urllib."""
+    """
+    Sends status and log messages to the PXE config server API using urllib.
+    
+    Args:
+        management_ip: The IP address of the management interface
+        phase: The installation phase number or "error" for error messages
+        message: The status message to send
+    """
     config_server = get_config_server_from_cmdline()
     if not config_server:
         log(f"Error: Config server URL not found. Cannot send status update.")
@@ -605,7 +649,7 @@ def run_nutanix_installation(params, config):
             log(f"Failed to import required modules: {e}")
             log("This may indicate that the Python environment is not properly set up.")
             log("Check if the Nutanix installer package was correctly extracted.")
-            return False
+            drop_to_shell("Failed to import Nutanix installation modules")
         
         # Patch shell commands to protect partitions
         log("Patching shell commands to protect partitions...")
@@ -680,13 +724,11 @@ def main():
     
     # Validate config_server
     if not config_server:
-        log("ERROR: Could not determine config server URL from command line")
-        return 1
+        drop_to_shell("Could not determine config server URL from command line")
     
     # Validate management_ip
     if not management_ip or management_ip == 'default':
-        log("ERROR: Could not determine management IP address")
-        return 1
+        drop_to_shell("Could not determine management IP address")
     
     log(f"Initialization complete. Management IP: {management_ip}, Config Server: {config_server}")
     send_status_update(management_ip, 1, "Initialization complete")
@@ -695,28 +737,24 @@ def main():
     send_status_update(management_ip, 2, "Downloading node configuration")
     config = download_node_config(config_server, management_ip)
     if not config:
-        log("Unable to get configuration")
-        return 1
+        drop_to_shell("Unable to download node configuration from server")
     
     # Phase 3: Validate Configuration
     send_status_update(management_ip, 3, "Validating configuration")
     if not validate_config(config):
-        log("Configuration validation failed")
-        return 1
+        drop_to_shell("Configuration validation failed - missing required parameters")
     
     log(f"Configuration loaded for cluster: {config['cluster']['name']}")
     
     # Phase 4: Download Packages
     send_status_update(management_ip, 4, "Downloading installation packages")
     if not download_packages(config_server):
-        log("Package download failed")
-        return 1
+        drop_to_shell("Failed to download required installation packages")
     
     # Phase 5: Install Hypervisor
     send_status_update(management_ip, 5, "Installing AHV hypervisor")
     if not install_hypervisor(config):
-        log("Hypervisor installation failed")
-        return 1
+        drop_to_shell("AHV hypervisor installation failed")
     
     # Setup environment (not a distinct phase for status reporting)
     setup_environment(config)
@@ -724,18 +762,15 @@ def main():
     # Create installation parameters
     params = create_installation_params(config)
     if not params:
-        log("Failed to create installation parameters")
-        return 1
+        drop_to_shell("Failed to create installation parameters")
     
     # Phase 6: Clean previous attempts and run Nutanix installation
     if not cleanup_previous_attempts():
-        log("Cleanup of previous attempts failed")
-        return 1
+        drop_to_shell("Cleanup of previous installation attempts failed")
     
     send_status_update(management_ip, 6, "Running Nutanix installation")
     if not run_nutanix_installation(params, config):
-        log("Installation failed")
-        return 1
+        drop_to_shell("Nutanix installation process failed")
     
     # Phase 7: Reboot Server
     send_status_update(management_ip, 7, "Installation complete. Rebooting server.")

@@ -241,9 +241,61 @@ def reinitialize_server(server_id, management_ip):
                 user_data=user_data
             )
             
-            # Now start the server
+            # Add a delay before starting the server to allow initialization to complete
+            logger.info("Adding a 5-second delay before starting server to allow initialization to complete")
+            time.sleep(5)
+            
+            # Now start the server with retry logic
             logger.info(f"Starting server {server_id} with network boot configuration")
-            ibm_cloud.vpc_service.start_bare_metal_server(id=server_id)
+            
+            # Implement retry logic for starting the server
+            max_retries = 3
+            retry_delay = 5
+            start_success = False
+            
+            for attempt in range(1, max_retries + 1):
+                try:
+                    # Check server state before attempting to start
+                    server_details = ibm_cloud.get_bare_metal_server(server_id)
+                    current_state = server_details.get('status', '').lower()
+                    logger.info(f"Server state before start attempt {attempt}: {current_state}")
+                    
+                    # If server is already starting or running, we're done
+                    if current_state in ['starting', 'running']:
+                        logger.info(f"Server is already in {current_state} state, no need to start")
+                        start_success = True
+                        break
+                    
+                    # If server is not in stopped state, wait a bit longer
+                    if current_state != 'stopped':
+                        logger.info(f"Server not in stopped state, waiting {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        continue
+                    
+                    # Attempt to start the server
+                    ibm_cloud.vpc_service.start_bare_metal_server(id=server_id)
+                    logger.info(f"Start request sent successfully on attempt {attempt}")
+                    start_success = True
+                    break
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.warning(f"Start attempt {attempt} failed: {error_msg}")
+                    
+                    # If this is a 409 error about server not being in STOPPED status,
+                    # wait and retry
+                    if "not in the STOPPED status" in error_msg and attempt < max_retries:
+                        logger.info(f"Server not in proper state, waiting {retry_delay} seconds before retry...")
+                        time.sleep(retry_delay)
+                    elif attempt < max_retries:
+                        logger.info(f"Unexpected error, waiting {retry_delay} seconds before retry...")
+                        time.sleep(retry_delay)
+                    else:
+                        # This is the last attempt, so raise the exception
+                        raise
+            
+            if not start_success:
+                raise Exception("Failed to start server after multiple attempts")
             
         except Exception as e:
             error_msg = str(e)

@@ -285,6 +285,28 @@ fi
 send_status_update "Executing Python installation script" "python_exec"
 echo "Executing installation script..."
 
+# Add a 10-second wait for keyboard interrupt (BusyBox compatible)
+echo ""
+echo "====================================================="
+echo "Press Ctrl+C within 10 seconds to drop to shell"
+echo "Otherwise, installation will continue automatically"
+echo "====================================================="
+echo ""
+
+# Set up trap for SIGINT (Ctrl+C)
+trap 'echo "Keyboard interrupt detected. Dropping to shell..."; echo "Type exit to continue with installation or use the shell for debugging."; /bin/sh; echo "Continuing with installation..."; trap - INT; echo' INT
+
+# Wait for 10 seconds, counting down
+for i in 10 9 8 7 6 5 4 3 2 1; do
+    echo -n "$i... "
+    sleep 1
+done
+echo "0"
+
+# Reset the trap
+trap - INT
+echo "Continuing with automated installation..."
+
 # Run the Python script using chroot and capture its exit code
 # chroot used to stop: /mnt/squashfs/usr/bin/python3.9  # Fails with "not found".
 # The system can't find the required libraries because they're inside the squashfs

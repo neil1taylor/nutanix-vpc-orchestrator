@@ -391,9 +391,18 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
             
             # Reinitialize the server
             logger.info(f"Reinitializing server {server_id} with management IP {management_ip}")
-            if not reinitialize_server(server_id, management_ip):
-                error_response = {'error': f'Failed to reinitialize server {server_id}'}
-                logger.error(f"Error: {error_response}")
+            try:
+                result = reinitialize_server(server_id, management_ip)
+                if not result:
+                    error_response = {'error': f'Failed to reinitialize server {server_id}'}
+                    logger.error(f"Error: {error_response}")
+                    return jsonify(error_response), 500
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"Error reinitializing server: {error_msg}")
+                # Pass the specific error message back to the client
+                # This allows the client to detect specific errors like "not in the STOPPED status"
+                error_response = {'error': error_msg}
                 return jsonify(error_response), 500
             
             # Update node status in database
