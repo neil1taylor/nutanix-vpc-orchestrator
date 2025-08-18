@@ -40,13 +40,18 @@ The script performs the following steps:
 1. Retrieves server details from the database using the provided hostname
 2. Stops the bare metal server using the VPC SDK
 3. Waits for the server to reach the stopped state (with timeout)
-4. Reinitializes the server with an iPXE boot configuration URL:
+4. Reinitializes the server with an iPXE boot configuration URL for network boot:
    `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=${net0/ip}`
    
    The `${net0/ip}` variable is expanded by the iPXE client on the bare metal server to the actual IP address.
    
-   The script first attempts to update the server initialization with the boot configuration, then starts the server.
-   If updating the initialization fails, it falls back to starting the server without custom initialization.
+   The script performs the following steps for reinitialization:
+   - Retrieves the current server initialization to extract image and SSH keys
+   - Creates a new initialization prototype with the network boot configuration
+   - Updates the server initialization with the network boot configuration
+   - Starts the server with the updated initialization
+   
+   Network boot requires proper user data configuration, so the script ensures this is set correctly.
 
 ### Error Handling
 

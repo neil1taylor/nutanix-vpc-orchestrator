@@ -211,31 +211,51 @@ curl -s {boot_config_url} | sh
         # Start the server with the boot configuration
         logger.info(f"Starting server {server_id} with boot configuration: {boot_config_url}")
         
-        # First try to update the server initialization
+        # Get the current server initialization to extract image and keys
         try:
-            # Try to use replace_bare_metal_server_initialization to set user data
-            from ibm_vpc.vpc_v1 import BareMetalServerInitializationPrototype
+            # Get the current initialization
+            current_init = ibm_cloud.vpc_service.get_bare_metal_server_initialization(id=server_id).get_result()
+            logger.info(f"Retrieved current server initialization")
             
-            # Create initialization prototype
-            init_prototype = BareMetalServerInitializationPrototype(user_data=user_data)
+            # Import required classes
+            from ibm_vpc.vpc_v1 import (
+                BareMetalServerInitializationPrototype,
+                ImageIdentityById,
+                KeyIdentityById
+            )
+            
+            # Extract image and keys from current initialization
+            image_id = current_init.get('image', {}).get('id')
+            key_ids = [key.get('id') for key in current_init.get('keys', [])]
+            
+            if not image_id or not key_ids:
+                raise ValueError("Could not extract image or keys from current initialization")
+                
+            logger.info(f"Using image ID: {image_id} and key IDs: {key_ids}")
+            
+            # Create initialization prototype with all required parameters
+            init_prototype = BareMetalServerInitializationPrototype(
+                image=ImageIdentityById(id=image_id),
+                keys=[KeyIdentityById(id=key_id) for key_id in key_ids],
+                user_data=user_data
+            )
             
             # Replace the server initialization
-            logger.info(f"Updating server initialization with user data")
+            logger.info(f"Updating server initialization with user data for network boot")
             ibm_cloud.vpc_service.replace_bare_metal_server_initialization(
                 id=server_id,
                 bare_metal_server_initialization_prototype=init_prototype
             )
             
-            # Now start the server without additional parameters
-            logger.info(f"Starting server {server_id}")
+            # Now start the server
+            logger.info(f"Starting server {server_id} with network boot configuration")
             ibm_cloud.vpc_service.start_bare_metal_server(id=server_id)
             
         except Exception as e:
-            logger.warning(f"Failed to update initialization and start server: {str(e)}")
-            logger.warning("Trying simple start without user data")
-            
-            # Fallback to simple start
-            ibm_cloud.vpc_service.start_bare_metal_server(id=server_id)
+            logger.error(f"Failed to update initialization and start server: {str(e)}")
+            logger.error("Cannot proceed without proper network boot configuration")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            raise Exception("Failed to set network boot configuration")
         
         logger.info(f"Server {server_id} reinitialization initiated")
         return True
