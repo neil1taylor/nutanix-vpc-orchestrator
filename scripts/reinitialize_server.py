@@ -198,12 +198,13 @@ def reinitialize_server(server_id, management_ip):
     try:
         # Just use the URL as the user data
         # The ${net0/ip} variable will be expanded by the iPXE client on the bare metal server
+        # We need to escape the $ character to prevent Python from trying to interpret it as a variable in f-strings
         user_data = "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=${net0/ip}"
         
         logger.info(f"Using URL for network boot: {user_data}")
         
         # Start the server with the boot configuration
-        logger.info(f"Starting server {server_id} with boot configuration: {boot_config_url}")
+        logger.info(f"Starting server {server_id} with network boot configuration")
         
         # Get the current server initialization to extract image and keys
         try:
