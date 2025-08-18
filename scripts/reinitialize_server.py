@@ -69,6 +69,11 @@ def stop_server(server_id):
         bool: True if successful, False otherwise
     """
     ibm_cloud = IBMCloudClient()
+    
+    # Log available methods for debugging
+    bare_metal_methods = [m for m in dir(ibm_cloud.vpc_service) if 'bare_metal' in m.lower()]
+    logger.info(f"Available bare metal methods in VPC SDK: {bare_metal_methods}")
+    
     try:
         # Get current server state
         server_details = ibm_cloud.get_bare_metal_server(server_id)
@@ -92,13 +97,32 @@ def stop_server(server_id):
         # Use the VPC SDK to stop the server
         # The method name might vary based on the SDK version
         try:
-            # Try the standard method name first
-            ibm_cloud.vpc_service.stop_bare_metal_server(id=server_id)
+            # Try the standard method name first with the required 'type' parameter
+            # Based on the error message, 'type' is a required parameter
+            ibm_cloud.vpc_service.stop_bare_metal_server(id=server_id, type='hard')
+        except TypeError as te:
+            # If there's a different TypeError, log it and try alternatives
+            logger.warning(f"TypeError when calling stop_bare_metal_server: {str(te)}")
+            try:
+                # Try with different parameter combinations
+                ibm_cloud.vpc_service.stop_bare_metal_server(id=server_id, type='soft')
+            except Exception as e2:
+                logger.warning(f"Failed with soft stop: {str(e2)}")
+                # Try one more approach
+                try:
+                    # Try with a prototype object
+                    ibm_cloud.vpc_service.stop_bare_metal_server(
+                        id=server_id,
+                        bare_metal_server_stop_prototype={'type': 'hard'}
+                    )
+                except Exception as e3:
+                    logger.warning(f"Failed with prototype: {str(e3)}")
+                    raise
         except AttributeError:
             # If the method doesn't exist, try alternative method names
             try:
                 # Try alternative method name
-                ibm_cloud.vpc_service.bare_metal_server_stop(id=server_id)
+                ibm_cloud.vpc_service.bare_metal_server_stop(id=server_id, type='hard')
             except AttributeError:
                 # If that also fails, log available methods and raise an error
                 logger.error("Could not find stop method for bare metal server")
@@ -189,10 +213,19 @@ curl -s {boot_config_url} | sh
         # Use the VPC SDK to start the server with user data
         try:
             # Try the standard method name first
-            ibm_cloud.vpc_service.start_bare_metal_server(
-                id=server_id,
-                user_data=user_data
-            )
+            try:
+                # First try with direct user_data parameter
+                ibm_cloud.vpc_service.start_bare_metal_server(
+                    id=server_id,
+                    user_data=user_data
+                )
+            except TypeError as te:
+                logger.warning(f"TypeError when calling start_bare_metal_server: {str(te)}")
+                # Try with a prototype object
+                ibm_cloud.vpc_service.start_bare_metal_server(
+                    id=server_id,
+                    bare_metal_server_start_prototype={'user_data': user_data}
+                )
         except AttributeError:
             # If the method doesn't exist, try alternative method names
             try:
