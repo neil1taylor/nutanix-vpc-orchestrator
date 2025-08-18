@@ -80,7 +80,15 @@ def get_config_server_from_cmdline():
         for param in cmdline.split():
             if param.startswith('config_server='):
                 server = param.split('=', 1)[1]
-                log(f"Config server from cmdline: {server}")
+                
+                # Clean up the URL - remove any spaces
+                server = server.replace(' ', '')
+                
+                # Ensure URL has proper format
+                if not server.startswith('http://') and not server.startswith('https://'):
+                    server = 'http://' + server
+                
+                log(f"Config server from cmdline (cleaned): {server}")
                 return server
     except Exception as e:
         log(f"Error reading cmdline: {e}")
@@ -89,29 +97,46 @@ def download_node_config(config_server, management_ip):
     """Download node-specific configuration"""
     log(f"Downloading configuration for node: {management_ip}")
     
+    if not config_server:
+        log("Error: Config server URL is empty or invalid")
+        return None
+    
     url = f"{config_server}/boot/server/{management_ip}"
     
     try:
         log(f"Trying config URL: {url}")
         
+        # Add more detailed logging
+        log(f"Running curl command: curl -s --connect-timeout 10 --max-time 30 {url}")
+        
         result = subprocess.run([
-            'curl', '-s', '--connect-timeout', '10', 
+            'curl', '-s', '--connect-timeout', '10',
             '--max-time', '30', url
         ], capture_output=True, text=True)
         
-        if result.returncode == 0 and result.stdout.strip():
-            try:
-                config = json.loads(result.stdout)
-                log(f"Configuration downloaded from: {url}")
-                return config
-            except json.JSONDecodeError as e:
-                log(f"Invalid JSON from {url}: {e}")
-
+        log(f"Curl command returned code: {result.returncode}")
+        
+        if result.returncode == 0:
+            log(f"Curl output: {result.stdout[:100]}..." if len(result.stdout) > 100 else f"Curl output: {result.stdout}")
+            
+            if result.stdout.strip():
+                try:
+                    config = json.loads(result.stdout)
+                    log(f"Configuration downloaded from: {url}")
+                    return config
+                except json.JSONDecodeError as e:
+                    log(f"Invalid JSON from {url}: {e}")
+                    log(f"First 200 chars of response: {result.stdout[:200]}")
+            else:
+                log("Empty response from server")
         else:
             log(f"Failed to download from {url}")
+            log(f"Curl stderr: {result.stderr}")
             
     except Exception as e:
         log(f"Error downloading from {url}: {e}")
+        import traceback
+        log(f"Traceback: {traceback.format_exc()}")
     
     log("Could not download any configuration")
     return None
@@ -162,6 +187,17 @@ def download_packages(config_server):
    """Download required installation packages"""
    log("Downloading installation packages...")
    
+   # Validate config_server URL
+   if not config_server:
+       log("Error: Config server URL is empty or invalid")
+       return False
+   
+   # Clean up config_server URL if needed
+   if ' ' in config_server:
+       log(f"Warning: Config server URL contains spaces: '{config_server}'")
+       config_server = config_server.replace(' ', '')
+       log(f"Cleaned config server URL: '{config_server}'")
+   
    # Ensure we have network connectivity
    if not test_connectivity():
        log("No network connectivity for package download")
@@ -169,7 +205,7 @@ def download_packages(config_server):
    
    # Define required packages
    package_downloads = [
-       (f"{config_server}/nutanix_installer_package.tar.gz", 
+       (f"{config_server}/nutanix_installer_package.tar.gz",
         '/tmp/nutanix_installer_package.tar.gz'),
        (f"{config_server}/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso",
         '/tmp/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso')
@@ -177,14 +213,20 @@ def download_packages(config_server):
    
    for url, local_path in package_downloads:
        log(f"Downloading {os.path.basename(local_path)}...")
+       log(f"Download URL: {url}")
        
        # Create directory if needed
        os.makedirs(os.path.dirname(local_path), exist_ok=True)
        
+       # Add more detailed logging
+       log(f"Running curl command: curl -L --progress-bar --connect-timeout 30 --max-time 1200 -o {local_path} {url}")
+       
        result = subprocess.run([
            'curl', '-L', '--progress-bar', '--connect-timeout', '30',
            '--max-time', '1200', '-o', local_path, url
-       ])
+       ], capture_output=True, text=True)
+       
+       log(f"Curl command returned code: {result.returncode}")
        
        if result.returncode == 0 and os.path.exists(local_path):
            # Verify file size is reasonable
@@ -193,9 +235,11 @@ def download_packages(config_server):
                log(f"Downloaded {os.path.basename(local_path)} ({file_size:,} bytes)")
            else:
                log(f"Downloaded file too small: {os.path.basename(local_path)}")
+               log(f"Curl stderr: {result.stderr}")
                return False
        else:
            log(f"Failed to download {os.path.basename(local_path)}")
+           log(f"Curl stderr: {result.stderr}")
            return False
    
    return True
@@ -492,6 +536,12 @@ def send_status_update(management_ip, phase, message):
         log(f"Error: Config server URL not found. Cannot send status update.")
         return
     
+    # Validate config_server URL format
+    if ' ' in config_server:
+        log(f"Warning: Config server URL contains spaces: '{config_server}'")
+        config_server = config_server.replace(' ', '')
+        log(f"Cleaned config server URL: '{config_server}'")
+    
     api_url = f"{config_server}/api/installation/status"
     payload = {
         "management_ip": management_ip,
@@ -506,10 +556,12 @@ def send_status_update(management_ip, phase, message):
     
     try:
         # Create request
+        log(f"Creating request to {api_url}")
         req = urllib.request.Request(api_url, data=data, method='POST')
         req.add_header('Content-Type', 'application/json')
         
         # Send request with timeout
+        log("Sending request...")
         response = urllib.request.urlopen(req, timeout=10)
         status_code = response.getcode()
         
@@ -525,6 +577,8 @@ def send_status_update(management_ip, phase, message):
         log(f"Timeout sending status update to {api_url}")
     except Exception as e:
         log(f"An unexpected error occurred while sending status update: {e}")
+        import traceback
+        log(f"Traceback: {traceback.format_exc()}")
 
 def run_with_timeout(cmd, timeout=60):
     """Run a command with a timeout"""
@@ -623,6 +677,18 @@ def main():
     # Phase 1: Initialization
     management_ip = get_management_ip()
     config_server = get_config_server_from_cmdline()
+    
+    # Validate config_server
+    if not config_server:
+        log("ERROR: Could not determine config server URL from command line")
+        return 1
+    
+    # Validate management_ip
+    if not management_ip or management_ip == 'default':
+        log("ERROR: Could not determine management IP address")
+        return 1
+    
+    log(f"Initialization complete. Management IP: {management_ip}, Config Server: {config_server}")
     send_status_update(management_ip, 1, "Initialization complete")
 
     # Phase 2: Download Node Configuration
