@@ -494,6 +494,46 @@ curl -I http://your-server-ip/arizona.cfg
 ├── AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso
 ```
 
+## Server Reinitialization Issues
+
+When reinitializing a bare metal server, you might encounter issues with server state transitions. The reinitialization process involves:
+
+1. Stopping the server
+2. Waiting for the server to reach the "stopped" state
+3. Updating the server initialization with iPXE boot configuration
+4. Starting the server with the new configuration
+
+### Common Issues
+
+#### "Server not in the STOPPED status" Error
+
+After updating the server initialization, the server state may change from "stopped" to "reinitializing" before you attempt to start it. This can cause a 409 error with the message "Failed to start the bare metal server because the server is not in the STOPPED status."
+
+**Solution:**
+- The system now automatically detects when a server is in "reinitializing" state and considers this a valid state for the reinitialization process.
+- If you encounter this error, wait a few seconds and try again. The second attempt usually succeeds because the server has completed its state transition.
+- The web interface has been updated to automatically handle this case and provide appropriate feedback.
+
+#### "Failed to start server after multiple attempts" Error
+
+If the server remains in "reinitializing" state for an extended period, the system may fail after multiple retry attempts.
+
+**Solution:**
+- Check the server status in the IBM Cloud console to verify its current state
+- If the server is already starting or running, the reinitialization may have actually succeeded despite the error
+- If the server is still in "reinitializing" state, wait a few minutes and try again
+
+### Debugging Reinitialization
+
+To debug server reinitialization issues:
+
+1. Check the logs at `/var/log/nutanix-pxe/pxe-server.log` for detailed error messages
+2. Verify the server state using the IBM Cloud CLI:
+   ```bash
+   ibmcloud is bare-metal-server <server_id>
+   ```
+3. If the server is stuck in a transitional state, you may need to contact IBM Cloud support
+
 ## Architecture
 
 This solution works because the PXE/Config server is pre-configured with extracted and modified files from the Nutanix CE ISO file:

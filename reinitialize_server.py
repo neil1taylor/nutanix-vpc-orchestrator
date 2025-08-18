@@ -261,14 +261,31 @@ def reinitialize_server(server_id, management_ip):
                     logger.info(f"Server state before start attempt {attempt}: {current_state}")
                     
                     # If server is already starting or running, we're done
-                    if current_state in ['starting', 'running']:
+                    # Check for states that indicate the server is already starting or running
+                    if current_state in ['starting', 'running', 'reinitializing']:
                         logger.info(f"Server is already in {current_state} state, no need to start")
+                        logger.info(f"For 'reinitializing' state, this means the initialization update triggered the reboot")
                         start_success = True
                         break
                     
-                    # If server is not in stopped state, wait a bit longer
+                    # If server is not in stopped state, handle differently based on state
                     if current_state != 'stopped':
-                        logger.info(f"Server not in stopped state, waiting {retry_delay} seconds...")
+                        # If we've been waiting and the server is still not in a valid state,
+                        # we might need to force a restart
+                        if attempt >= 2:
+                            logger.info(f"Server still in {current_state} state after multiple checks")
+                            logger.info(f"Attempting to restart the server regardless of state")
+                            try:
+                                # Try to restart instead of start
+                                ibm_cloud.vpc_service.restart_bare_metal_server(id=server_id)
+                                logger.info(f"Restart request sent successfully on attempt {attempt}")
+                                start_success = True
+                                break
+                            except Exception as restart_error:
+                                logger.warning(f"Restart attempt failed: {str(restart_error)}")
+                                # Continue with normal retry flow
+                        
+                        logger.info(f"Server in {current_state} state, waiting {retry_delay} seconds...")
                         time.sleep(retry_delay)
                         continue
                     
@@ -281,6 +298,20 @@ def reinitialize_server(server_id, management_ip):
                 except Exception as e:
                     error_msg = str(e)
                     logger.warning(f"Start attempt {attempt} failed: {error_msg}")
+                    
+                    # Check server state again to see what happened
+                    try:
+                        server_details = ibm_cloud.get_bare_metal_server(server_id)
+                        current_state = server_details.get('status', '').lower()
+                        logger.info(f"Server state after error: {current_state}")
+                        
+                        # If server is already in a good state despite the error, consider it a success
+                        if current_state in ['starting', 'running', 'reinitializing']:
+                            logger.info(f"Server is in {current_state} state despite error, considering operation successful")
+                            start_success = True
+                            break
+                    except Exception as state_check_error:
+                        logger.warning(f"Failed to check server state after error: {str(state_check_error)}")
                     
                     # If this is a 409 error about server not being in STOPPED status,
                     # wait and retry

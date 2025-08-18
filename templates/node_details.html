@@ -266,9 +266,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(() => {
                     window.location.reload();
                 }, 1000);
-            } else if (status === 500 && data.error && data.error.includes('not in the STOPPED status')) {
-                // This is the timing issue we're handling
-                const retryConfirm = confirm('Server state transition in progress. Would you like to retry the reinitialization?');
+            } else if (status === 500 && data.error && (
+                data.error.includes('not in the STOPPED status') ||
+                data.error.includes('Failed to start server after multiple attempts') ||
+                data.error.includes('reinitializing')
+            )) {
+                // This is the timing issue or state transition issue we're handling
+                const retryConfirm = confirm('Server state transition in progress. The server may already be reinitializing. Would you like to retry or check the server status?');
                 
                 if (retryConfirm) {
                     // Wait a moment and retry automatically
