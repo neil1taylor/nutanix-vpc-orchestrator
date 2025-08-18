@@ -128,6 +128,41 @@ curl -X DELETE http://localhost:8080/api/config/clusters/1
 curl http://localhost:8080/api/config/nodes/1
 ```
 
+### `/api/reinitialize` (POST)
+
+**Description:** Reinitializes a bare metal server with iPXE boot configuration. This stops the server and restarts it with the network boot configuration. Supports both node_id and management IP identification.
+
+**Example `curl` commands:**
+```bash
+# Using node_id
+curl -X POST "http://localhost:8080/api/reinitialize?node_id=1" \
+-H "Content-Type: application/json" \
+-d '{}'
+
+# Using management IP
+curl -X POST "http://localhost:8080/api/reinitialize?mgmt_ip=10.240.0.10" \
+-H "Content-Type: application/json" \
+-d '{}'
+
+# Using JSON body
+curl -X POST http://localhost:8080/api/reinitialize \
+-H "Content-Type: application/json" \
+-d '{
+  "node_id": 1
+}'
+```
+
+### `/api/config/nodes/<int:node_id>/reinitialize` (POST) [DEPRECATED]
+
+**Description:** Reinitializes a bare metal server with iPXE boot configuration. This endpoint is deprecated and will be removed in a future release. Please use `/api/reinitialize` instead.
+
+**Example `curl` command:**
+```bash
+curl -X POST http://localhost:8080/api/config/nodes/1/reinitialize \
+-H "Content-Type: application/json" \
+-d '{}'
+```
+
 ### `/api/config/nodes` (GET)
 
 **Description:** Lists all nodes managed by the orchestrator.

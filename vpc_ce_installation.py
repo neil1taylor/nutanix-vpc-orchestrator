@@ -410,9 +410,9 @@ def create_installation_params(config):
         
         # Node configuration
         node_config = config['node']
-        params.block_id = (str(uuid4()).split('-')[0])
+        params.block_id = str(uuid.uuid4()).split('-')[0]
         params.node_position = "A"
-        params.node_serial = str(uuid4())
+        params.node_serial = str(uuid.uuid4())
         params.cluster_id = generate_cluster_id()
         
         # Hardware configuration
@@ -499,32 +499,12 @@ def send_status_update(management_ip, phase, message):
         "message": message
     }
     
-    # Prepare the JSON payload
-    json_data = json.dumps(payload).encode('utf-8')
+    log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}")
+    
+    # Convert payload to JSON and encode
+    data = json.dumps(payload).encode('utf-8')
     
     try:
-        # Create a request object
-        req = urllib.request.Request(
-            url=api_url,
-            data=json_data,
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        # Send the request
-        with urllib.request.urlopen(req, timeout=10) as response:
-            if response.status == 200:
-                log(f"Status update sent successfully: {message}")
-            else:
-                log(f"Failed to send status update. Status code: {response.status}")
-    except Exception as e:
-        log(f"Error sending status update: {str(e)}")
-    
-    try:
-        log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}")
-        
-        # Convert payload to JSON and encode
-        data = json.dumps(payload).encode('utf-8')
-        
         # Create request
         req = urllib.request.Request(api_url, data=data, method='POST')
         req.add_header('Content-Type', 'application/json')
@@ -546,17 +526,35 @@ def send_status_update(management_ip, phase, message):
     except Exception as e:
         log(f"An unexpected error occurred while sending status update: {e}")
 
+def run_with_timeout(cmd, timeout=60):
+    """Run a command with a timeout"""
+    try:
+        log(f"Running command with {timeout}s timeout: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return result
+    except subprocess.TimeoutExpired:
+        log(f"Command timed out after {timeout} seconds: {' '.join(cmd)}")
+        return None
+
 def run_nutanix_installation(params, config):
     """Run the actual Nutanix installation"""
     log("Starting Nutanix CE installation...")
     
     try:
         # Import installation modules
-        import imagingUtil
-        import sysUtil
-        import shell
+        log("Importing Nutanix installation modules...")
+        try:
+            import imagingUtil
+            import sysUtil
+            import shell
+        except ImportError as e:
+            log(f"Failed to import required modules: {e}")
+            log("This may indicate that the Python environment is not properly set up.")
+            log("Check if the Nutanix installer package was correctly extracted.")
+            return False
         
         # Patch shell commands to protect partitions
+        log("Patching shell commands to protect partitions...")
         original_shell_cmd = shell.shell_cmd
         
         def protected_shell_cmd(cmd_list, *args, **kwargs):
@@ -564,19 +562,22 @@ def run_nutanix_installation(params, config):
             if 'wipefs' in cmd_str and params.boot_disk in cmd_str:
                 log(f'BLOCKED: {cmd_str}')
                 return '', ''
+            log(f'Executing: {cmd_str}')
             return original_shell_cmd(cmd_list, *args, **kwargs)
         
         shell.shell_cmd = protected_shell_cmd
         sysUtil.shell_cmd = protected_shell_cmd
         
         # Bypass hardware detection
+        log("Bypassing hardware detection...")
         try:
             import layout.layout_tools
             def mock_get_hyp_raid_info_from_layout(layout):
                 return None, None
             layout.layout_tools.get_hyp_raid_info_from_layout = mock_get_hyp_raid_info_from_layout
-        except ImportError:
-            pass
+        except ImportError as e:
+            log(f"Warning: Could not bypass hardware detection: {e}")
+            log("This may cause issues with hardware compatibility checks.")
         
         # Bypass hardware detection functions
         def bypass_populate_host_boot_disk_param(param_list):
@@ -594,7 +595,15 @@ def run_nutanix_installation(params, config):
         
         # Start installation
         log("Starting installation process...")
-        imagingUtil.image_node(params)
+        try:
+            log("Calling imagingUtil.image_node...")
+            imagingUtil.image_node(params)
+            log("imagingUtil.image_node completed successfully")
+        except Exception as e:
+            log(f"Error during image_node: {e}")
+            import traceback
+            log(f"Traceback: {traceback.format_exc()}")
+            return False
         
         log("Installation completed successfully!")
         return True
@@ -602,7 +611,7 @@ def run_nutanix_installation(params, config):
     except Exception as e:
         log(f"Installation error: {e}")
         import traceback
-        traceback.print_exc()
+        log(f"Traceback: {traceback.format_exc()}")
         return False
 
 def main():
@@ -657,13 +666,13 @@ def main():
         log("Cleanup of previous attempts failed")
         return 1
     
-    send_status_update(node_id, 6, "Running Nutanix installation")
+    send_status_update(management_ip, 6, "Running Nutanix installation")
     if not run_nutanix_installation(params, config):
         log("Installation failed")
         return 1
     
     # Phase 7: Reboot Server
-    send_status_update(node_id, 7, "Installation complete. Rebooting server.")
+    send_status_update(management_ip, 7, "Installation complete. Rebooting server.")
     subprocess.run(['reboot'])
     
     log("Node-agnostic installation completed successfully!")

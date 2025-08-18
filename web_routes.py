@@ -252,6 +252,179 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
             logger.error(f"Error loading node details: {e}")
             flash('Error loading node details', 'error')
             return redirect(url_for('nodes'))
+            
+    @app.route('/node/<int:node_id>/reinitialize', methods=['POST'])
+    def web_reinitialize_node(node_id):
+        """Web endpoint to reinitialize a node"""
+        try:
+            # Get node details from database
+            node = db.get_node(node_id)
+            if not node:
+                flash(f'Node with ID {node_id} not found', 'error')
+                return redirect(url_for('nodes'))
+            
+            # Check if node has a bare metal ID
+            if not node.get('bare_metal_id'):
+                flash(f'Node {node["node_name"]} does not have a bare metal server ID', 'error')
+                return redirect(url_for('node_details', node_id=node_id))
+            
+            # Check if node has a management IP
+            if not node.get('management_ip'):
+                flash(f'Node {node["node_name"]} does not have a management IP', 'error')
+                return redirect(url_for('node_details', node_id=node_id))
+            
+            # Import the reinitialize_server function
+            from reinitialize_server import reinitialize_server, stop_server, wait_for_server_state
+            
+            # Get server details
+            server_id = node['bare_metal_id']
+            management_ip = node['management_ip']
+            
+            # Stop the server
+            logger.info(f"Stopping server {server_id}")
+            if not stop_server(server_id):
+                flash(f'Failed to stop server {node["node_name"]}', 'error')
+                return redirect(url_for('node_details', node_id=node_id))
+            
+            # Wait for server to reach stopped state
+            logger.info(f"Waiting for server {server_id} to reach stopped state")
+            if not wait_for_server_state(server_id, 'stopped', 30):
+                flash(f'Timeout waiting for server {node["node_name"]} to reach stopped state', 'error')
+                return redirect(url_for('node_details', node_id=node_id))
+            
+            # Reinitialize the server
+            logger.info(f"Reinitializing server {server_id} with management IP {management_ip}")
+            if not reinitialize_server(server_id, management_ip):
+                flash(f'Failed to reinitialize server {node["node_name"]}', 'error')
+                return redirect(url_for('node_details', node_id=node_id))
+            
+            # Update node status in database
+            db.update_node_status(node_id, 'reinitializing')
+            
+            # Log deployment event
+            db.log_deployment_event(
+                node_id,
+                'reinitialize',
+                'in_progress',
+                f'Server reinitialization initiated for {node["node_name"]}'
+            )
+            
+            flash(f'Server {node["node_name"]} reinitialization initiated successfully', 'success')
+            return redirect(url_for('node_details', node_id=node_id))
+        except Exception as e:
+            logger.error(f"Failed to reinitialize node {node_id}: {str(e)}")
+            # Log full traceback for debugging
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            flash(f'Error reinitializing node: {str(e)}', 'error')
+            return redirect(url_for('node_details', node_id=node_id))
+            
+    @app.route('/api/web/reinitialize', methods=['POST'])
+    def web_api_reinitialize_node():
+        """API endpoint to reinitialize a node using query parameters"""
+        try:
+            # Get parameters from query string or JSON body
+            data = request.get_json() or {}
+            node_id = request.args.get('node_id') or data.get('node_id')
+            mgmt_ip = request.args.get('mgmt_ip') or data.get('mgmt_ip')
+            
+            # Validate that at least one parameter is provided
+            if not node_id and not mgmt_ip:
+                error_response = {'error': 'Either node_id or mgmt_ip must be provided'}
+                logger.warning(f"Validation failed: {error_response}")
+                return jsonify(error_response), 400
+            
+            # Get node details from database
+            node = None
+            if node_id:
+                try:
+                    node_id = int(node_id)
+                    node = db.get_node(node_id)
+                    if not node:
+                        error_response = {'error': f'Node with ID {node_id} not found'}
+                        logger.warning(f"Validation failed: {error_response}")
+                        return jsonify(error_response), 404
+                except ValueError:
+                    error_response = {'error': f'Invalid node_id: {node_id}'}
+                    logger.warning(f"Validation failed: {error_response}")
+                    return jsonify(error_response), 400
+            elif mgmt_ip:
+                node = db.get_node_by_management_ip(mgmt_ip)
+                if not node:
+                    error_response = {'error': f'Node with management IP {mgmt_ip} not found'}
+                    logger.warning(f"Validation failed: {error_response}")
+                    return jsonify(error_response), 404
+            
+            # Check if node has a bare metal ID
+            if not node.get('bare_metal_id'):
+                error_response = {'error': f'Node does not have a bare metal server ID'}
+                logger.warning(f"Validation failed: {error_response}")
+                return jsonify(error_response), 400
+            
+            # Check if node has a management IP
+            if not node.get('management_ip'):
+                error_response = {'error': f'Node does not have a management IP'}
+                logger.warning(f"Validation failed: {error_response}")
+                return jsonify(error_response), 400
+            
+            # Import the reinitialize_server function
+            from reinitialize_server import reinitialize_server, stop_server, wait_for_server_state
+            
+            # Get server details
+            server_id = node['bare_metal_id']
+            management_ip = node['management_ip']
+            node_id = node['id']
+            
+            # Stop the server
+            logger.info(f"Stopping server {server_id}")
+            if not stop_server(server_id):
+                error_response = {'error': f'Failed to stop server {server_id}'}
+                logger.error(f"Error: {error_response}")
+                return jsonify(error_response), 500
+            
+            # Wait for server to reach stopped state
+            logger.info(f"Waiting for server {server_id} to reach stopped state")
+            if not wait_for_server_state(server_id, 'stopped', 30):
+                error_response = {'error': f'Timeout waiting for server {server_id} to reach stopped state'}
+                logger.error(f"Error: {error_response}")
+                return jsonify(error_response), 500
+            
+            # Reinitialize the server
+            logger.info(f"Reinitializing server {server_id} with management IP {management_ip}")
+            if not reinitialize_server(server_id, management_ip):
+                error_response = {'error': f'Failed to reinitialize server {server_id}'}
+                logger.error(f"Error: {error_response}")
+                return jsonify(error_response), 500
+            
+            # Update node status in database
+            db.update_node_status(node_id, 'reinitializing')
+            
+            # Log deployment event
+            db.log_deployment_event(
+                node_id,
+                'reinitialize',
+                'in_progress',
+                f'Server reinitialization initiated for {node["node_name"]}'
+            )
+            
+            # Log successful response
+            response_data = {
+                'status': 'success',
+                'message': f'Server {node["node_name"]} reinitialization initiated successfully',
+                'node_id': node_id,
+                'server_id': server_id,
+                'management_ip': management_ip
+            }
+            logger.info(f"API Response (200): {response_data}")
+            
+            return jsonify(response_data), 200
+            
+        except Exception as e:
+            logger.error(f"Failed to reinitialize node: {str(e)}")
+            # Log full traceback for debugging
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return jsonify({'error': f'Error reinitializing node: {str(e)}'}), 500
 
     @app.route('/deployment/<deployment_id>/logs')
     def deployment_logs(deployment_id):

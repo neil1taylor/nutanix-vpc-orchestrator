@@ -8,7 +8,26 @@
 <div class="page-header">
     <h1 class="page-title">{{ node.node_name }}</h1>
     <div>
+        <button id="reinitialize-server-btn" class="btn btn-primary" data-node-id="{{ node.id }}" data-node-name="{{ node.node_name }}">Reinitialize Server</button>
         <a href="{{ url_for('nodes') }}" class="btn btn-secondary">Back to Nodes</a>
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div id="reinitialize-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Confirm Reinitialization</h2>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to reinitialize server <strong id="server-name-confirm"></strong>?</p>
+            <p>This will stop the server and restart it with the iPXE boot configuration.</p>
+        </div>
+        <div class="modal-footer">
+            <button id="confirm-reinitialize" class="btn btn-danger">Reinitialize</button>
+            <button id="cancel-reinitialize" class="btn btn-secondary">Cancel</button>
+        </div>
     </div>
 </div>
 
@@ -103,5 +122,153 @@
     padding: 0.5rem 0;
     border-bottom: 1px solid var(--cds-border-subtle);
 }
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: var(--cds-background);
+    margin: 15% auto;
+    padding: 0;
+    border: 1px solid var(--cds-border-subtle);
+    border-radius: 4px;
+    width: 50%;
+    max-width: 500px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--cds-border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.modal-body {
+    padding: 1rem;
+}
+
+.modal-footer {
+    padding: 1rem;
+    border-top: 1px solid var(--cds-border-subtle);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.close {
+    color: var(--cds-text-secondary);
+    font-size: 1.5rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: var(--cds-text-primary);
+}
 </style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get modal elements
+    const modal = document.getElementById('reinitialize-modal');
+    const closeBtn = modal.querySelector('.close');
+    const cancelBtn = document.getElementById('cancel-reinitialize');
+    const confirmBtn = document.getElementById('confirm-reinitialize');
+    const serverNameConfirm = document.getElementById('server-name-confirm');
+    
+    // Get reinitialize button
+    const reinitializeBtn = document.getElementById('reinitialize-server-btn');
+    
+    // Store node ID
+    let currentNodeId = null;
+    
+    // Open modal when reinitialize button is clicked
+    reinitializeBtn.addEventListener('click', function() {
+        currentNodeId = this.getAttribute('data-node-id');
+        const nodeName = this.getAttribute('data-node-name');
+        serverNameConfirm.textContent = nodeName;
+        modal.style.display = 'block';
+    });
+    
+    // Close modal when close button is clicked
+    closeBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+    
+    // Close modal when cancel button is clicked
+    cancelBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+    
+    // Close modal when clicking outside of it
+    window.addEventListener('click', function(event) {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+    
+    // Handle confirm button click
+    confirmBtn.addEventListener('click', function() {
+        if (!currentNodeId) return;
+        
+        // Show loading state
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Reinitializing...';
+        
+        // Call API to reinitialize server
+        fetch(`/api/reinitialize?node_id=${currentNodeId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Close modal
+            modal.style.display = 'none';
+            
+            // Show success message
+            if (data.message) {
+                alert(data.message);
+            } else {
+                alert('Server reinitialization initiated successfully');
+            }
+            
+            // Reload page after a short delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to reinitialize server. See console for details.');
+        })
+        .finally(() => {
+            // Reset button state
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Reinitialize';
+        });
+    });
+});
+</script>
 {% endblock %}
