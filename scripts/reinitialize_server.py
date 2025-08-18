@@ -211,35 +211,31 @@ curl -s {boot_config_url} | sh
         # Start the server with the boot configuration
         logger.info(f"Starting server {server_id} with boot configuration: {boot_config_url}")
         
-        # Use the VPC SDK to start the server with user data
+        # First try to update the server initialization
         try:
-            # Try the standard method name first
-            try:
-                # First try with direct user_data parameter
-                ibm_cloud.vpc_service.start_bare_metal_server(
-                    id=server_id,
-                    user_data=user_data
-                )
-            except TypeError as te:
-                logger.warning(f"TypeError when calling start_bare_metal_server: {str(te)}")
-                # Try with a prototype object
-                ibm_cloud.vpc_service.start_bare_metal_server(
-                    id=server_id,
-                    bare_metal_server_start_prototype={'user_data': user_data}
-                )
-        except AttributeError:
-            # If the method doesn't exist, try alternative method names
-            try:
-                # Try alternative method name
-                ibm_cloud.vpc_service.bare_metal_server_start(
-                    id=server_id,
-                    bare_metal_server_start_prototype={'user_data': user_data}
-                )
-            except AttributeError:
-                # If that also fails, log available methods and raise an error
-                logger.error("Could not find start method for bare metal server")
-                logger.error(f"Available methods: {[m for m in dir(ibm_cloud.vpc_service) if 'bare_metal' in m.lower()]}")
-                raise Exception("Start method for bare metal server not found in VPC SDK")
+            # Try to use replace_bare_metal_server_initialization to set user data
+            from ibm_vpc.vpc_v1 import BareMetalServerInitializationPrototype
+            
+            # Create initialization prototype
+            init_prototype = BareMetalServerInitializationPrototype(user_data=user_data)
+            
+            # Replace the server initialization
+            logger.info(f"Updating server initialization with user data")
+            ibm_cloud.vpc_service.replace_bare_metal_server_initialization(
+                id=server_id,
+                bare_metal_server_initialization_prototype=init_prototype
+            )
+            
+            # Now start the server without additional parameters
+            logger.info(f"Starting server {server_id}")
+            ibm_cloud.vpc_service.start_bare_metal_server(id=server_id)
+            
+        except Exception as e:
+            logger.warning(f"Failed to update initialization and start server: {str(e)}")
+            logger.warning("Trying simple start without user data")
+            
+            # Fallback to simple start
+            ibm_cloud.vpc_service.start_bare_metal_server(id=server_id)
         
         logger.info(f"Server {server_id} reinitialization initiated")
         return True
