@@ -46,14 +46,14 @@ send_status_update() {
     local message="$1"
     local phase="$2"
     local config_server=$(get_config_server)
-    local node_id=$(get_node_id)
+    local management_ip=$(get_management_ip)
     
     echo "[STATUS] $message"
     
     # Only try to send if we have overlay with curl and network connectivity
     if [ -d /overlay ] && ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-        # Construct JSON payload - API expects management_ip not node_id
-        local json="{\"management_ip\":\"$node_id\",\"phase\":\"$phase\",\"message\":\"$message\"}"
+        # Construct JSON payload
+        local json="{\"management_ip\":\"$management_ip\",\"phase\":\"$phase\",\"message\":\"$message\"}"
         
         # Use curl from overlay (which has better HTTP support)
         if [ -n "$config_server" ]; then

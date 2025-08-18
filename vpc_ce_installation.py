@@ -89,7 +89,7 @@ def download_node_config(config_server, management_ip):
     """Download node-specific configuration"""
     log(f"Downloading configuration for node: {management_ip}")
     
-    url = f"{config_server}/boot/server/{management_ip}.json"
+    url = f"{config_server}/boot/server/{management_ip}"
     
     try:
         log(f"Trying config URL: {url}")
