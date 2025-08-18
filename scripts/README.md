@@ -44,6 +44,7 @@ The script performs the following steps:
    `http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=${net0/ip}`
    
    The `${net0/ip}` variable is expanded by the iPXE client on the bare metal server to the actual IP address.
+   (Note: In the Python code, this is escaped as `$${net0/ip}` to prevent Python from interpreting it as a variable)
 
 ### Error Handling
 

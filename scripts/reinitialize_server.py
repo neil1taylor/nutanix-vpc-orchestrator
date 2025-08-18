@@ -197,13 +197,14 @@ def reinitialize_server(server_id, management_ip):
     try:
         # Create user data with the boot configuration
         # Use ${net0/ip} which will be expanded by the iPXE client on the bare metal server
-        boot_config_url = "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=${net0/ip}"
+        # Escape the $ character to prevent Python from trying to interpret it as a variable
+        boot_config_url = "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/config?mgmt_ip=$${net0/ip}"
         
         # Encode user data for the server
         user_data = f"""#!/bin/sh
 # Reinitialize server with iPXE boot configuration
 echo "Reinitializing server with iPXE boot configuration: {boot_config_url}"
-# The ${net0/ip} variable will be expanded by the iPXE client to the actual IP address
+# The ${{net0/ip}} variable will be expanded by the iPXE client to the actual IP address
 curl -s {boot_config_url} | sh
 """
         
