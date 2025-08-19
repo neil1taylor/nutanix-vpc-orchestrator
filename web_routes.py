@@ -288,7 +288,7 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
             
             # Wait for server to reach stopped state
             logger.info(f"Waiting for server {server_id} to reach stopped state")
-            if not wait_for_server_state(server_id, 'stopped', 30):
+            if not wait_for_server_state(server_id, 'stopped', 30, force_after_minutes=5):
                 flash(f'Timeout waiting for server {node["node_name"]} to reach stopped state', 'error')
                 return redirect(url_for('node_details', node_id=node_id))
             
@@ -384,7 +384,7 @@ def register_web_routes(app, db, node_provisioner, status_monitor):
             
             # Wait for server to reach stopped state
             logger.info(f"Waiting for server {server_id} to reach stopped state")
-            if not wait_for_server_state(server_id, 'stopped', 30):
+            if not wait_for_server_state(server_id, 'stopped', 30, force_after_minutes=5):
                 error_response = {'error': f'Timeout waiting for server {server_id} to reach stopped state'}
                 logger.error(f"Error: {error_response}")
                 return jsonify(error_response), 500

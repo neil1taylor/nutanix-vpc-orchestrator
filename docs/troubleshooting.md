@@ -514,6 +514,37 @@ After updating the server initialization, the server state may change from "stop
 - If you encounter this error, wait a few seconds and try again. The second attempt usually succeeds because the server has completed its state transition.
 - The web interface has been updated to automatically handle this case and provide appropriate feedback.
 
+#### Server State Detection Improvements
+
+The system has been enhanced to better detect server state changes:
+
+- **Adaptive Polling**: The system now polls more frequently initially (every 5 seconds for the first minute, then every 15 seconds for the next 4 minutes, then every 30 seconds) to catch state transitions more quickly.
+- **Force Proceed Option**: After 5 minutes of waiting, the system will proceed even if the target state hasn't been reached, assuming that the IBM Cloud API might be reporting a different state than the actual server state.
+- **Transitional State Handling**: The system now better handles transitional states like "stopping" and "reinitializing", and will proceed if the server has been in a transitional state for an extended period.
+- **Detailed Logging**: More detailed logs are now generated, including elapsed time and consecutive state readings, to help diagnose issues.
+- **Robust Polling Loop**: The polling loop has been made more robust with heartbeat logging, sleep checks, and comprehensive error handling to ensure it doesn't stop prematurely.
+- **Segmented Sleep**: Instead of sleeping for the full interval at once, the system now sleeps in 1-second increments with periodic checks to ensure the polling process doesn't get stuck.
+
+#### Interpreting Polling Logs
+
+The polling logs now include prefixes to help identify different stages of the polling process:
+
+- `POLL_START`: Indicates the start of the polling process
+- `POLL_LOOP_START`: Indicates the start of the polling loop
+- `POLL_ITERATION`: Indicates the start of a new polling iteration with count
+- `POLL_CHECKING`: Indicates the system is checking the server state
+- `POLL_STATE`: Shows the current server state
+- `POLL_WAITING`: Indicates the system is waiting before the next check
+- `POLL_SLEEP_CHECK`: Periodic check during sleep to ensure the process is still running
+- `POLL_HEARTBEAT`: Periodic heartbeat message to confirm the polling is still active
+- `POLL_ERROR`: Indicates an error occurred during polling
+- `POLL_TIMEOUT`: Indicates the polling timed out
+- `POLL_FINAL_CHECK`: Indicates the final state check before giving up
+- `POLL_PARTIAL_SUCCESS`: Indicates the server is in a transitional state moving toward the target
+- `POLL_END`: Indicates the end of the polling process
+
+If you see polling stop unexpectedly, look for `POLL_ERROR` or `POLL_CRITICAL` messages in the logs, which indicate errors that might have caused the polling to stop.
+
 #### "Failed to start server after multiple attempts" Error
 
 If the server remains in "reinitializing" state for an extended period, the system may fail after multiple retry attempts.

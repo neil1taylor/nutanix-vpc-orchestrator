@@ -135,7 +135,7 @@ def stop_server(server_id):
         logger.error(f"Full traceback: {tb.format_exc()}")
         return False
 
-def wait_for_server_state(server_id, target_state='stopped', timeout_minutes=30):
+def wait_for_server_state(server_id, target_state='stopped', timeout_minutes=30, force_after_minutes=None):
     """
     Wait for a server to reach the target state
     
@@ -143,41 +143,149 @@ def wait_for_server_state(server_id, target_state='stopped', timeout_minutes=30)
         server_id (str): The ID of the bare metal server
         target_state (str): The target state to wait for (default: 'stopped')
         timeout_minutes (int): Maximum time to wait in minutes
+        force_after_minutes (int, optional): If set, will return True after this many minutes
+                                           even if target state isn't reached
         
     Returns:
-        bool: True if server reached the target state, False if timeout or error
+        bool: True if server reached the target state or force timeout reached,
+              False if timeout or error
     """
     ibm_cloud = IBMCloudClient()
     
-    logger.info(f"Waiting for server {server_id} to reach '{target_state}' state...")
+    logger.info(f"POLL_START: Waiting for server {server_id} to reach '{target_state}' state...")
     
-    # Calculate timeout in seconds
+    # Calculate timeouts in seconds
     timeout_seconds = timeout_minutes * 60
+    force_timeout_seconds = force_after_minutes * 60 if force_after_minutes else None
     start_time = time.time()
+    last_state = None
+    consecutive_same_state = 0
+    poll_count = 0
+    last_heartbeat_time = start_time
+    
+    # Use adaptive polling - more frequent initially, then less frequent
+    # This helps catch quick state transitions while not overloading the API
+    def get_poll_interval(elapsed_seconds):
+        if elapsed_seconds < 60:  # First minute
+            return 5  # Poll every 5 seconds
+        elif elapsed_seconds < 300:  # First 5 minutes
+            return 15  # Poll every 15 seconds
+        else:
+            return 30  # Poll every 30 seconds
+    
+    # Set up a heartbeat to ensure we're still running
+    def log_heartbeat(current_time, last_time):
+        # Log a heartbeat every 60 seconds
+        if current_time - last_time >= 60:
+            logger.info(f"POLL_HEARTBEAT: Still waiting for server {server_id} to reach '{target_state}' state... (elapsed: {int(current_time - start_time)}s)")
+            return current_time
+        return last_time
     
     # Poll until server reaches target state or timeout
-    while (time.time() - start_time) < timeout_seconds:
-        try:
-            # Get current server state
-            server_details = ibm_cloud.get_bare_metal_server(server_id)
-            current_state = server_details.get('status', '').lower()
+    logger.info(f"POLL_LOOP_START: Beginning polling loop for server {server_id}")
+    
+    try:
+        while (time.time() - start_time) < timeout_seconds:
+            current_time = time.time()
+            elapsed_seconds = current_time - start_time
+            poll_count += 1
             
-            logger.info(f"Current server state: {current_state}")
+            # Log heartbeat to confirm the function is still running
+            last_heartbeat_time = log_heartbeat(current_time, last_heartbeat_time)
             
-            # Check if server reached target state
-            if current_state == target_state.lower():
-                logger.info(f"Server {server_id} reached '{target_state}' state")
+            logger.info(f"POLL_ITERATION: #{poll_count} for server {server_id} (elapsed: {int(elapsed_seconds)}s)")
+            
+            # Check if we should force success after waiting a certain time
+            if force_timeout_seconds and elapsed_seconds > force_timeout_seconds:
+                logger.warning(f"POLL_FORCE_TIMEOUT: Force timeout reached after {force_after_minutes} minutes. Proceeding despite server not reaching '{target_state}' state.")
                 return True
                 
-            # Wait before polling again
-            time.sleep(30)  # Poll every 30 seconds
-        except Exception as e:
-            logger.error(f"Error checking server state: {str(e)}")
-            # Continue polling despite errors
-            time.sleep(30)
+            try:
+                # Get current server state
+                logger.info(f"POLL_CHECKING: Getting state for server {server_id}")
+                server_details = ibm_cloud.get_bare_metal_server(server_id)
+                current_state = server_details.get('status', '').lower()
+                
+                # Track consecutive same state readings to detect stuck states
+                if current_state == last_state:
+                    consecutive_same_state += 1
+                else:
+                    consecutive_same_state = 0
+                    
+                last_state = current_state
+                
+                # Log with more detail including elapsed time
+                logger.info(f"POLL_STATE: Server {server_id} state is '{current_state}' (elapsed: {int(elapsed_seconds)}s, poll #{poll_count})")
+                
+                # Check if server reached target state
+                if current_state == target_state.lower():
+                    logger.info(f"POLL_SUCCESS: Server {server_id} reached '{target_state}' state after {int(elapsed_seconds)} seconds")
+                    return True
+                    
+                # Special handling for transitional states
+                if current_state == 'stopping' and target_state.lower() == 'stopped':
+                    logger.info(f"POLL_TRANSITION: Server is in transitional 'stopping' state, continuing to wait...")
+                elif current_state == 'starting' and target_state.lower() == 'running':
+                    logger.info(f"POLL_TRANSITION: Server is in transitional 'starting' state, continuing to wait...")
+                elif current_state == 'reinitializing' and target_state.lower() == 'stopped':
+                    # If we've been in reinitializing state for a while, we might need to force proceed
+                    if consecutive_same_state >= 3:
+                        logger.warning(f"POLL_STUCK: Server has been in 'reinitializing' state for {consecutive_same_state} consecutive checks")
+                        if consecutive_same_state >= 6:  # After about 1.5-3 minutes in same state
+                            logger.warning(f"POLL_FORCE_PROCEED: Server appears stuck in 'reinitializing' state. Proceeding anyway.")
+                            return True
+                
+                # Wait before polling again with adaptive interval
+                poll_interval = get_poll_interval(elapsed_seconds)
+                logger.info(f"POLL_WAITING: Waiting {poll_interval}s before next check (poll #{poll_count+1})")
+                
+                # Use a shorter sleep interval with multiple checks to ensure we don't get stuck
+                for i in range(poll_interval):
+                    if i > 0 and i % 5 == 0:
+                        logger.info(f"POLL_SLEEP_CHECK: Still sleeping, {poll_interval-i}s remaining before next poll")
+                    time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"POLL_ERROR: Error checking server state: {str(e)}")
+                logger.error(f"POLL_ERROR_DETAIL: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"POLL_ERROR_TRACE: {traceback.format_exc()}")
+                # Continue polling despite errors, but wait a bit longer
+                logger.info(f"POLL_ERROR_RECOVERY: Waiting 15s before retry after error")
+                time.sleep(15)
+        
+        # If we get here, we've timed out
+        logger.error(f"POLL_TIMEOUT: Timeout waiting for server {server_id} to reach '{target_state}' state after {timeout_minutes} minutes")
+        
+    except Exception as outer_e:
+        # Catch any exceptions in the polling loop itself
+        logger.error(f"POLL_CRITICAL: Critical error in polling loop: {str(outer_e)}")
+        import traceback
+        logger.error(f"POLL_CRITICAL_TRACE: {traceback.format_exc()}")
     
     # If we get here, we've timed out
-    logger.error(f"Timeout waiting for server {server_id} to reach '{target_state}' state")
+    logger.error(f"POLL_TIMEOUT: Timeout waiting for server {server_id} to reach '{target_state}' state after {timeout_minutes} minutes")
+    
+    # One final check before giving up
+    try:
+        logger.info(f"POLL_FINAL_CHECK: Performing final state check for server {server_id}")
+        server_details = ibm_cloud.get_bare_metal_server(server_id)
+        final_state = server_details.get('status', '').lower()
+        logger.info(f"POLL_FINAL_STATE: Final server state before timeout: {final_state}")
+        
+        # If the server is in a transitional state that's moving toward our target,
+        # we might want to consider it a success
+        if (final_state == 'stopping' and target_state.lower() == 'stopped') or \
+           (final_state == 'starting' and target_state.lower() == 'running') or \
+           (final_state == 'reinitializing' and target_state.lower() == 'stopped'):
+            logger.warning(f"POLL_PARTIAL_SUCCESS: Server is in transitional state '{final_state}' moving toward '{target_state}'. Considering this a partial success.")
+            return True
+    except Exception as final_e:
+        logger.error(f"POLL_FINAL_ERROR: Error during final state check: {str(final_e)}")
+        import traceback
+        logger.error(f"POLL_FINAL_ERROR_TRACE: {traceback.format_exc()}")
+    
+    logger.error(f"POLL_END: Polling ended for server {server_id} without reaching '{target_state}' state")
     return False
 
 def reinitialize_server(server_id, management_ip):
@@ -387,7 +495,7 @@ def main():
         sys.exit(1)
     
     # Step 3: Wait for server to reach stopped state
-    if not wait_for_server_state(server_id, 'stopped', args.timeout):
+    if not wait_for_server_state(server_id, 'stopped', args.timeout, force_after_minutes=5):
         logger.error(f"Server {args.hostname} did not reach stopped state within timeout")
         sys.exit(1)
     
