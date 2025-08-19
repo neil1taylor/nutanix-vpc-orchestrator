@@ -201,6 +201,8 @@ test_http() {
 test_system_health() {
     log "Testing system health..."
     
+    local test_failures=0
+    
     # Service status
     local services=("postgresql" "nginx" "nutanix-pxe")
     local failed_services=()
@@ -215,6 +217,7 @@ test_system_health() {
         test_result "System Services" "PASS" "All services running" "1"
     else
         test_result "System Services" "FAIL" "Failed: $(IFS=','; echo "${failed_services[*]}")" "1"
+        test_failures=$((test_failures + 1))
     fi
     
     # Database connectivity
@@ -222,6 +225,7 @@ test_system_health() {
         test_result "Database Connection" "PASS" "PostgreSQL accessible" "1"
     else
         test_result "Database Connection" "FAIL" "Cannot connect to database" "1"
+        test_failures=$((test_failures + 1))
     fi
     
     # Python environment
@@ -229,11 +233,21 @@ test_system_health() {
         test_result "Python Environment" "PASS" "Virtual environment and packages OK" "1"
     else
         test_result "Python Environment" "FAIL" "Virtual environment or packages missing" "1"
+        test_failures=$((test_failures + 1))
+    fi
+    
+    # Return overall status
+    if [[ $test_failures -gt 0 ]]; then
+        return 1
+    else
+        return 0
     fi
 }
 
 test_configuration() {
     log "Testing configuration..."
+    
+    local test_failures=0
     
     # Environment variables
     local required_vars=("IBM_CLOUD_REGION" "VPC_ID" "DNS_INSTANCE_ID" "DNS_INSTANCE_GUID" "DNS_ZONE_ID")
@@ -252,6 +266,7 @@ test_configuration() {
         test_result "Environment Variables" "PASS" "All required variables set" "1"
     else
         test_result "Environment Variables" "FAIL" "Missing: $(IFS=','; echo "${missing_vars[*]}")" "1"
+        test_failures=$((test_failures + 1))
     fi
     
     # File permissions
@@ -271,6 +286,14 @@ test_configuration() {
         test_result "File Permissions" "PASS" "All paths accessible" "1"
     else
         test_result "File Permissions" "FAIL" "Issues: $(IFS=','; echo "${errors[*]}")" "1"
+        test_failures=$((test_failures + 1))
+    fi
+    
+    # Return overall status
+    if [[ $test_failures -gt 0 ]]; then
+        return 1
+    else
+        return 0
     fi
 }
 
@@ -288,13 +311,30 @@ test_ssl_config() {
     
     # Validate certificate
     if [[ -f "$SSL_DIR/nutanix-orchestrator.crt" ]]; then
+        # Check certificate validity
         if ! openssl x509 -in "$SSL_DIR/nutanix-orchestrator.crt" -noout -checkend 86400 >/dev/null 2>&1; then
             errors+=("cert expires soon")
+        fi
+        
+        # Check certificate subject
+        local cert_subject=$(openssl x509 -in "$SSL_DIR/nutanix-orchestrator.crt" -noout -subject 2>/dev/null)
+        if [[ -z "$cert_subject" ]]; then
+            errors+=("cert subject invalid")
+        fi
+        
+        # Check if nginx is using the certificate
+        if ! grep -q "$SSL_DIR/nutanix-orchestrator.crt" /etc/nginx/sites-enabled/nutanix-pxe 2>/dev/null; then
+            errors+=("cert not used by nginx")
+        fi
+        
+        # Verify HTTPS connection works (without -k flag)
+        if ! curl -s --max-time 5 "https://localhost/health" >/dev/null 2>&1; then
+            errors+=("HTTPS connection failed")
         fi
     fi
     
     if [[ ${#errors[@]} -eq 0 ]]; then
-        test_result "SSL Configuration" "PASS" "Certificate valid" "1"
+        test_result "SSL Configuration" "PASS" "Certificate valid and properly configured" "1"
     else
         test_result "SSL Configuration" "FAIL" "Issues: $(IFS=','; echo "${errors[*]}")" "1"
     fi
@@ -306,20 +346,49 @@ test_endpoints() {
     # Wait for services
     sleep 5
     
+    local api_errors=0
+    
     # Core endpoints
-    test_http "Health Check" "http://localhost:8080/health" "200" 10
-    test_http "API Info" "http://localhost:8080/api/info" "200" 10
-    test_http "Web Interface" "http://localhost:8080/" "200" 10
-    test_http "Boot Config" "http://localhost:8080/boot/config?mgmt_ip=192.168.1.100&mgmt_mac=00:11:22:33:44:55" "200" 10
+    test_http "Health Check" "http://localhost:8080/health" "200" 10 || api_errors=$((api_errors + 1))
+    test_http "API Info" "http://localhost:8080/api/info" "200" 10 || api_errors=$((api_errors + 1))
+    test_http "Web Interface" "http://localhost:8080/" "200" 10 || api_errors=$((api_errors + 1))
+    test_http "Boot Config" "http://localhost:8080/boot/config?mgmt_ip=192.168.1.100&mgmt_mac=00:11:22:33:44:55" "200" 10 || api_errors=$((api_errors + 1))
     
     # HTTPS tests
     if [[ "$ENABLE_HTTPS" == "true" ]]; then
-        test_http "HTTP Redirect" "http://localhost/" "301" 10
-        if curl -k -s --max-time 10 "https://localhost/health" >/dev/null 2>&1; then
-            test_result "HTTPS Endpoint" "PASS" "HTTPS accessible" "1"
+        # Test HTTP to HTTPS redirect
+        test_http "HTTP Redirect" "http://localhost/" "301" 10 || api_errors=$((api_errors + 1))
+        
+        # Test HTTPS with certificate validation (no -k flag)
+        local start_time=$(date +%s)
+        local https_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://localhost/health" 2>/dev/null || echo "000")
+        local duration=$(($(date +%s) - start_time))
+        
+        if [[ "$https_status" == "200" ]]; then
+            test_result "HTTPS Endpoint (with cert validation)" "PASS" "HTTPS accessible with valid certificate" "$duration"
         else
-            test_result "HTTPS Endpoint" "FAIL" "HTTPS not accessible" "1"
+            test_result "HTTPS Endpoint (with cert validation)" "FAIL" "HTTPS not accessible with valid certificate: HTTP $https_status" "$duration"
+            api_errors=$((api_errors + 1))
         fi
+        
+        # Test HTTPS content
+        local https_content=$(curl -k -s --max-time 10 "https://localhost/" 2>/dev/null)
+        if [[ -z "$https_content" ]]; then
+            test_result "HTTPS Content" "FAIL" "No content returned from HTTPS endpoint" "1"
+            api_errors=$((api_errors + 1))
+        elif ! echo "$https_content" | grep -q "Nutanix"; then
+            test_result "HTTPS Content" "FAIL" "Invalid content returned from HTTPS endpoint" "1"
+            api_errors=$((api_errors + 1))
+        else
+            test_result "HTTPS Content" "PASS" "Valid content returned from HTTPS endpoint" "1"
+        fi
+    fi
+    
+    # Return overall status
+    if [[ $api_errors -gt 0 ]]; then
+        return 1
+    else
+        return 0
     fi
 }
 
@@ -327,6 +396,7 @@ test_static_files() {
     log "Testing static files..."
     
     local missing_files=()
+    local invalid_files=()
     local required_files=(
         "/var/www/pxe/images/kernel"
         "/var/www/pxe/images/initrd-vpc.img"
@@ -335,14 +405,66 @@ test_static_files() {
         "/var/www/pxe/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso"
     )
     
+    # Check for missing files
     for file in "${required_files[@]}"; do
-        [[ ! -f "$file" ]] && missing_files+=("$(basename "$file")")
+        if [[ ! -f "$file" ]]; then
+            missing_files+=("$(basename "$file")")
+            continue
+        fi
+        
+        # Check file size (files should not be empty)
+        local file_size=$(stat -c %s "$file" 2>/dev/null || echo "0")
+        if [[ "$file_size" -lt 1024 ]]; then  # Less than 1KB
+            invalid_files+=("$(basename "$file") (too small: ${file_size} bytes)")
+            continue
+        fi
+        
+        # Specific validation for each file type
+        case "$(basename "$file")" in
+            "kernel")
+                # Check if it's a valid kernel file
+                if ! file "$file" | grep -q "Linux kernel"; then
+                    invalid_files+=("kernel (not a valid kernel file)")
+                fi
+                ;;
+            "initrd-vpc.img")
+                # Check if it's a valid initrd file (gzip compressed)
+                if ! file "$file" | grep -q "gzip compressed data"; then
+                    invalid_files+=("initrd-vpc.img (not a valid initrd file)")
+                fi
+                ;;
+            "squashfs.img")
+                # Check if it's a valid squashfs file
+                if ! file "$file" | grep -q "Squashfs filesystem"; then
+                    invalid_files+=("squashfs.img (not a valid squashfs file)")
+                fi
+                ;;
+        esac
     done
     
-    if [[ ${#missing_files[@]} -eq 0 ]]; then
-        test_result "Static Files" "PASS" "All PXE files present" "1"
+    # Check if files are accessible via HTTP
+    if curl -s --head --max-time 5 "http://localhost:8080/boot-images/kernel" | grep -q "200 OK"; then
+        log "Kernel file is accessible via HTTP"
     else
-        test_result "Static Files" "FAIL" "Missing: $(IFS=','; echo "${missing_files[*]}")" "1"
+        invalid_files+=("kernel (not accessible via HTTP)")
+    fi
+    
+    if curl -s --head --max-time 5 "http://localhost:8080/boot-images/initrd-vpc.img" | grep -q "200 OK"; then
+        log "Initrd file is accessible via HTTP"
+    else
+        invalid_files+=("initrd-vpc.img (not accessible via HTTP)")
+    fi
+    
+    # Report results
+    if [[ ${#missing_files[@]} -eq 0 && ${#invalid_files[@]} -eq 0 ]]; then
+        test_result "Static Files" "PASS" "All PXE files present and valid" "1"
+        return 0
+    else
+        local error_msg=""
+        [[ ${#missing_files[@]} -gt 0 ]] && error_msg+="Missing: $(IFS=','; echo "${missing_files[*]}"). "
+        [[ ${#invalid_files[@]} -gt 0 ]] && error_msg+="Invalid: $(IFS=','; echo "${invalid_files[*]}")."
+        test_result "Static Files" "FAIL" "$error_msg" "1"
+        return 1
     fi
 }
 
@@ -365,8 +487,10 @@ test_network() {
     
     if [[ ${#issues[@]} -eq 0 ]]; then
         test_result "Network Connectivity" "PASS" "All network tests passed" "1"
+        return 0
     else
         test_result "Network Connectivity" "FAIL" "Issues: $(IFS=','; echo "${issues[*]}")" "1"
+        return 1
     fi
 }
 
@@ -537,13 +661,13 @@ server {
     ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
     
     location / {
-        root /var/www/html;
-        index index.html index.htm;
-        try_files $uri $uri/ =404;
+        proxy_pass http://localhost:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 90;
+        proxy_connect_timeout 90;
     }
     
     location /static/ {
@@ -569,13 +693,13 @@ server {
     server_name _;
     
     location / {
-        root /var/www/html;
-        index index.html index.htm;
-        try_files $uri $uri/ =404;
+        proxy_pass http://localhost:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 90;
+        proxy_connect_timeout 90;
     }
     
     location /static/ {
@@ -945,23 +1069,50 @@ main() {
     log "Running comprehensive tests..."
     echo -e "\n${BLUE}==================== TESTING PHASE ====================${NC}" | tee -a "$TEST_LOG"
     
-    test_system_health
-    test_configuration
-    test_ssl_config
-    test_endpoints
-    test_static_files
-    test_network
+    # Run tests and track failures
+    local test_failures=0
+    
+    if ! test_system_health; then
+        log "WARNING: System health test failed"
+        test_failures=$((test_failures + 1))
+    fi
+    
+    if ! test_configuration; then
+        log "WARNING: Configuration test failed"
+        test_failures=$((test_failures + 1))
+    fi
+    
+    if ! test_ssl_config; then
+        log "WARNING: SSL configuration test failed"
+        test_failures=$((test_failures + 1))
+    fi
+    
+    if ! test_endpoints; then
+        log "WARNING: Endpoints test failed"
+        test_failures=$((test_failures + 1))
+    fi
+    
+    if ! test_static_files; then
+        log "WARNING: Static files test failed"
+        test_failures=$((test_failures + 1))
+    fi
+    
+    if ! test_network; then
+        log "WARNING: Network test failed"
+        test_failures=$((test_failures + 1))
+    fi
     
     # Results
     echo -e "\n${BLUE}==================== TEST SUMMARY ====================${NC}" | tee -a "$TEST_LOG"
     log "Test Summary: $((TOTAL_TESTS - FAILED_TESTS))/$TOTAL_TESTS passed"
     
-    if [[ $FAILED_TESTS -eq 0 ]]; then
+    if [[ $FAILED_TESTS -eq 0 && $test_failures -eq 0 ]]; then
         echo -e "${GREEN}✓ ALL TESTS PASSED - System ready for production${NC}"
         log "Setup completed successfully"
     else
-        echo -e "${RED}✗ $FAILED_TESTS TESTS FAILED - Review and fix issues${NC}"
-        log "Setup completed with $FAILED_TESTS failed tests"
+        echo -e "${RED}✗ $FAILED_TESTS TESTS FAILED ($test_failures test functions returned errors) - Review and fix issues${NC}"
+        log "Setup completed with $FAILED_TESTS failed tests and $test_failures test function failures"
+        exit 1  # Exit with error code to indicate test failures
     fi
     
     # Final information
