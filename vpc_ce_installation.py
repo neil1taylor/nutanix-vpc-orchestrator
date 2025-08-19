@@ -264,41 +264,55 @@ def download_packages(config_server):
    
    # Define required packages
    package_downloads = [
-       (f"{config_server}/nutanix_installer_package.tar.gz",
+       (f"{config_server}/boot/images/nutanix_installer_package.tar.gz",
         '/tmp/nutanix_installer_package.tar.gz'),
-       (f"{config_server}/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso",
+       (f"{config_server}/boot/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso",
         '/tmp/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso')
    ]
    
    for url, local_path in package_downloads:
        log(f"Downloading {os.path.basename(local_path)}...")
-       log(f"Download URL: {url}", verbose=True)
+       log(f"Download URL: {url}")
        
        # Create directory if needed
        os.makedirs(os.path.dirname(local_path), exist_ok=True)
        
-       # Add more detailed logging
-       log(f"Running curl command: curl -L --connect-timeout 30 --max-time 1200 --retry 150 -o {local_path} {url}", verbose=True)
+       # Use os.system for direct execution, similar to console
+       curl_cmd = f"curl -L --progress-bar --connect-timeout 30 --max-time 1200 --retry 5 -o {local_path} {url}"
+       log(f"Executing: {curl_cmd}", verbose=True)
        
-       result = subprocess.run([
-           'curl', '-L', '--connect-timeout', '30',
-           '--max-time', '1200', '--retry', '150', '-o', local_path, url
-       ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+       # Execute curl command directly
+       exit_code = os.system(curl_cmd)
+       log(f"Curl command exit code: {exit_code}")
        
-       log(f"Curl command returned code: {result.returncode}", verbose=True)
-       
-       if result.returncode == 0 and os.path.exists(local_path):
-           # Verify file size is reasonable
+       # Check if file exists and has reasonable size
+       if exit_code == 0 and os.path.exists(local_path):
            file_size = os.path.getsize(local_path)
-           if file_size > 1024:  # At least 1KB
-               log(f"Downloaded {os.path.basename(local_path)} ({file_size:,} bytes)")
+           log(f"Downloaded file size: {file_size:,} bytes")
+           
+           if file_size > 1024 * 1024:  # At least 1MB
+               log(f"Successfully downloaded {os.path.basename(local_path)} ({file_size:,} bytes)")
            else:
-               log(f"Downloaded file too small: {os.path.basename(local_path)}")
-               log(f"Curl stderr: {result.stderr}", verbose=True)
-               return False
+               log(f"Downloaded file too small: {os.path.basename(local_path)} - only {file_size:,} bytes")
+               
+               # Try wget as fallback
+               log("Trying wget as fallback...")
+               wget_cmd = f"wget -O {local_path} {url}"
+               log(f"Executing: {wget_cmd}")
+               exit_code = os.system(wget_cmd)
+               
+               if exit_code == 0 and os.path.exists(local_path):
+                   file_size = os.path.getsize(local_path)
+                   if file_size > 1024 * 1024:
+                       log(f"Successfully downloaded with wget: {os.path.basename(local_path)} ({file_size:,} bytes)")
+                   else:
+                       log(f"Wget download also too small: {file_size:,} bytes")
+                       return False
+               else:
+                   log("Wget download failed")
+                   return False
        else:
            log(f"Failed to download {os.path.basename(local_path)}")
-           log(f"Curl stderr: {result.stderr}", verbose=True)
            return False
    
    return True
