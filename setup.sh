@@ -393,16 +393,43 @@ setup_ssl() {
     fi
     
     log "Setting up SSL certificates..."
-    mkdir -p "$SSL_DIR"
     
-    # Generate self-signed certificate
-    openssl req -x509 -newkey rsa:2048 -keyout "$SSL_DIR/nutanix-orchestrator.key" \
+    # Ensure SSL directory exists with proper permissions
+    if [[ ! -d "$SSL_DIR" ]]; then
+        log "Creating SSL directory at $SSL_DIR"
+        mkdir -p "$SSL_DIR" || {
+            log "ERROR: Failed to create SSL directory at $SSL_DIR"
+            return 1
+        }
+    fi
+    
+    # Verify service user exists
+    if ! id "$SERVICE_USER" &>/dev/null; then
+        log "ERROR: Service user $SERVICE_USER does not exist. Cannot set up SSL."
+        return 1
+    fi
+    
+    log "Generating self-signed certificate..."
+    # Generate self-signed certificate with error handling
+    if ! openssl req -x509 -newkey rsa:2048 -keyout "$SSL_DIR/nutanix-orchestrator.key" \
         -out "$SSL_DIR/nutanix-orchestrator.crt" -days 365 -nodes \
-        -subj "/C=US/ST=State/L=City/O=Organization/CN=$SSL_DOMAIN"
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=$SSL_DOMAIN"; then
+        log "ERROR: Failed to generate SSL certificate"
+        return 1
+    fi
     
+    # Verify certificate files were created
+    if [[ ! -f "$SSL_DIR/nutanix-orchestrator.crt" ]] || [[ ! -f "$SSL_DIR/nutanix-orchestrator.key" ]]; then
+        log "ERROR: SSL certificate files were not created"
+        return 1
+    fi
+    
+    log "Setting permissions on SSL files..."
     chown -R "$SERVICE_USER:$SERVICE_USER" "$SSL_DIR"
     chmod 600 "$SSL_DIR/nutanix-orchestrator.key"
     chmod 644 "$SSL_DIR/nutanix-orchestrator.crt"
+    
+    log "SSL certificate successfully created at $SSL_DIR/nutanix-orchestrator.crt"
 }
 
 setup_user_and_directories() {
@@ -482,6 +509,17 @@ setup_nginx() {
     local nginx_config="/etc/nginx/sites-available/nutanix-pxe"
     
     if [[ "$ENABLE_HTTPS" == "true" ]]; then
+        # Verify SSL certificates exist before configuring HTTPS
+        if [[ ! -f "$SSL_DIR/nutanix-orchestrator.crt" ]] || [[ ! -f "$SSL_DIR/nutanix-orchestrator.key" ]]; then
+            log "ERROR: SSL certificates not found. Falling back to HTTP-only configuration."
+            ENABLE_HTTPS="false"
+        else
+            log "SSL certificates found. Configuring HTTPS."
+        fi
+    fi
+    
+    if [[ "$ENABLE_HTTPS" == "true" ]]; then
+        log "Creating HTTPS Nginx configuration..."
         cat > "$nginx_config" << 'EOF'
 server {
     listen 80;
@@ -724,7 +762,14 @@ setup_boot_files() {
 setup_systemd_service() {
     log "Creating systemd service..."
     
-    cat > /etc/systemd/system/nutanix-pxe.service << EOF
+    # Check if service user exists
+    if ! id "$SERVICE_USER" &>/dev/null; then
+        log "ERROR: Service user $SERVICE_USER does not exist. Cannot create systemd service."
+        return 1
+    fi
+    
+    # Create systemd service file
+    if ! cat > /etc/systemd/system/nutanix-pxe.service << EOF
 [Unit]
 Description=Nutanix PXE/Config Server
 After=network.target postgresql.service
@@ -746,32 +791,81 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
+    then
+        log "ERROR: Failed to create systemd service file"
+        return 1
+    fi
 
     # Create tmpfiles.d configuration for runtime directory
-    cat > /etc/tmpfiles.d/nutanix-pxe.conf << EOF
+    if ! cat > /etc/tmpfiles.d/nutanix-pxe.conf << EOF
 d /var/run/nutanix-pxe 0755 $SERVICE_USER $SERVICE_USER - -
 EOF
+    then
+        log "ERROR: Failed to create tmpfiles.d configuration"
+        return 1
+    fi
 
-    systemctl daemon-reload
-    systemctl enable nutanix-pxe
+    # Reload systemd and enable service
+    if ! systemctl daemon-reload; then
+        log "ERROR: Failed to reload systemd daemon"
+        return 1
+    fi
+    
+    if ! systemctl enable nutanix-pxe; then
+        log "ERROR: Failed to enable nutanix-pxe service"
+        return 1
+    fi
+    
+    log "Systemd service successfully configured"
+    return 0
 }
 
 create_utilities() {
     log "Enabling utility scripts..."
-
-    chmod +x "$PROJECT_DIR/scripts/check-status.sh"
-    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/check-status.sh"
-
-    chmod +x "$PROJECT_DIR/scripts/run-tests.sh"
-    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/run-tests.sh"
-
-    # Make post-install script executable
-    chmod +x "$PROJECT_DIR/scripts/post-install.sh"
-    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/post-install.sh"
-
-    # Make database reset script executable
-    chmod +x "$PROJECT_DIR/scripts/reset-database.sh"
-    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/reset-database.sh"
+    
+    # Check if service user exists
+    if ! id "$SERVICE_USER" &>/dev/null; then
+        log "ERROR: Service user $SERVICE_USER does not exist. Cannot set up utility scripts."
+        return 1
+    fi
+    
+    # Check if project directory exists
+    if [[ ! -d "$PROJECT_DIR/scripts" ]]; then
+        log "ERROR: Scripts directory $PROJECT_DIR/scripts does not exist"
+        return 1
+    fi
+    
+    local script_errors=0
+    local scripts=(
+        "check-status.sh"
+        "run-tests.sh"
+        "post-install.sh"
+        "reset-database.sh"
+    )
+    
+    for script in "${scripts[@]}"; do
+        if [[ -f "$PROJECT_DIR/scripts/$script" ]]; then
+            if ! chmod +x "$PROJECT_DIR/scripts/$script"; then
+                log "ERROR: Failed to make $script executable"
+                script_errors=$((script_errors + 1))
+            fi
+            
+            if ! chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/scripts/$script"; then
+                log "ERROR: Failed to set ownership of $script"
+                script_errors=$((script_errors + 1))
+            fi
+        else
+            log "WARNING: Script $script not found in $PROJECT_DIR/scripts"
+        fi
+    done
+    
+    if [[ $script_errors -gt 0 ]]; then
+        log "WARNING: Encountered $script_errors errors while setting up utility scripts"
+        return 1
+    fi
+    
+    log "Utility scripts successfully configured"
+    return 0
 }
 
 # ============================================================================
@@ -782,17 +876,58 @@ main() {
     log "Starting optimized Nutanix PXE/Config Server setup"
     echo "Test run started at $(date)" > "$TEST_LOG"
     
-    # Setup phase
-    setup_system
-    setup_user_and_directories
-    setup_ssh_keys
-    setup_ssl
-    setup_python
-    setup_database
-    setup_nginx
-    setup_boot_files
-    setup_systemd_service
-    create_utilities
+    # Setup phase with error handling
+    log "Setting up system packages..."
+    if ! setup_system; then
+        log "WARNING: System setup encountered issues, but continuing..."
+    fi
+    
+    log "Setting up user and directories..."
+    if ! setup_user_and_directories; then
+        log "ERROR: Failed to set up user and directories. Exiting."
+        exit 1
+    fi
+    
+    log "Setting up SSH keys..."
+    if ! setup_ssh_keys; then
+        log "WARNING: SSH key setup encountered issues, but continuing..."
+    fi
+    
+    log "Setting up SSL certificates..."
+    if ! setup_ssl; then
+        log "WARNING: SSL setup failed. HTTPS will be disabled."
+        ENABLE_HTTPS="false"
+    fi
+    
+    log "Setting up Python environment..."
+    if ! setup_python; then
+        log "WARNING: Python setup encountered issues, but continuing..."
+    fi
+    
+    log "Setting up database..."
+    if ! setup_database; then
+        log "ERROR: Database setup failed. Exiting."
+        exit 1
+    fi
+    
+    log "Setting up Nginx..."
+    if ! setup_nginx; then
+        log "WARNING: Nginx setup encountered issues, but continuing..."
+    fi
+    
+    log "Setting up boot files..."
+    if ! setup_boot_files; then
+        log "WARNING: Boot files setup encountered issues, but continuing..."
+    fi
+    log "Setting up systemd service..."
+    if ! setup_systemd_service; then
+        log "WARNING: Systemd service setup encountered issues, but continuing..."
+    fi
+    
+    log "Creating utility scripts..."
+    if ! create_utilities; then
+        log "WARNING: Utility scripts setup encountered issues, but continuing..."
+    fi
     
     # Initialize database
     log "Initializing database..."
