@@ -175,7 +175,7 @@ def download_node_config(config_server, management_ip):
         result = subprocess.run([
             'curl', '-s', '--connect-timeout', '10',
             '--max-time', '30', url
-        ], capture_output=True, text=True)
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         log(f"Curl command returned code: {result.returncode}", verbose=True)
         
@@ -278,12 +278,12 @@ def download_packages(config_server):
        os.makedirs(os.path.dirname(local_path), exist_ok=True)
        
        # Add more detailed logging
-       log(f"Running curl command: curl -L --progress-bar --connect-timeout 30 --max-time 1200 --retry 150 -o {local_path} {url}", verbose=True)
+       log(f"Running curl command: curl -L --connect-timeout 30 --max-time 1200 --retry 150 -o {local_path} {url}", verbose=True)
        
        result = subprocess.run([
-           'curl', '-L', '--progress-bar', '--connect-timeout', '30',
+           'curl', '-L', '--connect-timeout', '30',
            '--max-time', '1200', '--retry', '150', '-o', local_path, url
-       ], capture_output=True, text=True)
+       ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
        
        log(f"Curl command returned code: {result.returncode}", verbose=True)
        
