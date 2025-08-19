@@ -43,13 +43,34 @@ build_initrd-vpc() {
     
     log "Building initrd-vpc..."
     
+    # Ensure output directory exists
+    mkdir -p "$output_dir"
+    
     # Create working directory
     mkdir -p "$work_dir"
     cd "$work_dir"
     
     # Extract original initrd
     log "Extracting original initrd..."
-    gunzip -c "$output_dir/initrd.img" | cpio -i -d -H newc --no-absolute-filenames
+    # Handle both compressed and uncompressed initrd files
+    if [[ ! -f "$output_dir/initrd.img" ]]; then
+        log "ERROR: initrd.img not found at $output_dir/initrd.img"
+        return 1
+    fi
+    
+    if file "$output_dir/initrd.img" | grep -q "gzip"; then
+        log "Extracting gzip compressed initrd..."
+        if ! gunzip -c "$output_dir/initrd.img" | cpio -i -d -H newc --no-absolute-filenames; then
+            log "ERROR: Failed to extract compressed initrd"
+            return 1
+        fi
+    else
+        log "Extracting uncompressed initrd..."
+        if ! cat "$output_dir/initrd.img" | cpio -i -d -H newc --no-absolute-filenames; then
+            log "ERROR: Failed to extract uncompressed initrd"
+            return 1
+        fi
+    fi
     
     # Find and add ionic driver
     log "Locating ionic driver..."
@@ -76,18 +97,34 @@ build_initrd-vpc() {
     mkdir -p "./lib/modules/$kernel_ver/kernel/drivers/net/ethernet/pensando/ionic"
     cp "$ionic_driver" "./lib/modules/$kernel_ver/kernel/drivers/net/ethernet/pensando/ionic/"
     
+    # Verify the driver was copied successfully
+    if [[ ! -f "./lib/modules/$kernel_ver/kernel/drivers/net/ethernet/pensando/ionic/ionic.ko" ]]; then
+        log "ERROR: Failed to copy ionic driver to initrd"
+        return 1
+    fi
+    
     # Update modules.dep
     echo "kernel/drivers/net/ethernet/pensando/ionic/ionic.ko:" >> "./lib/modules/$kernel_ver/modules.dep"
     
     # Copy the vpc_init script to the $work_dir
     log "Copying vpc_init script to ${work_dir}..."
-    cp $PROJECT_DIR/vpc_init vpc_init
-    chmod +x vpc_init
+    if [[ -f "$PROJECT_DIR/vpc_init" ]]; then
+        cp "$PROJECT_DIR/vpc_init" vpc_init
+        chmod +x vpc_init
+    else
+        log "WARNING: vpc_init script not found at $PROJECT_DIR/vpc_init"
+    fi
 
     # Copy the vpc_ce_installation.py script to the $work_dir
     log "Copying vpc_ce_installation.py script to ${work_dir}..."
-    cp $PROJECT_DIR/vpc_ce_installation.py phoenix/vpc_ce_installation.py
-    chmod +x phoenix/vpc_ce_installation.py
+    if [[ -f "$PROJECT_DIR/vpc_ce_installation.py" ]]; then
+        # Create phoenix directory if it doesn't exist
+        mkdir -p phoenix
+        cp "$PROJECT_DIR/vpc_ce_installation.py" phoenix/vpc_ce_installation.py
+        chmod +x phoenix/vpc_ce_installation.py
+    else
+        log "WARNING: vpc_ce_installation.py script not found at $PROJECT_DIR/vpc_ce_installation.py"
+    fi
 
     # Repack initrd
     local timestamp=$(date +%Y%m%d_%H%M%S)
@@ -563,8 +600,28 @@ setup_boot_files() {
     }
     
     cd "$INITRD_TMP_DIR"
-
-    build_initrd-vpc
+    
+    # Ensure the output directory exists
+    mkdir -p /var/www/pxe/images
+    
+    # Copy the initrd.img from ISO before building the VPC version
+    log "Copying initrd.img from ISO to /var/www/pxe/images..."
+    if [[ -f "/mnt/boot/initrd.img" ]]; then
+        cp /mnt/boot/initrd.img /var/www/pxe/images/
+        log "Copied /mnt/boot/initrd.img to /var/www/pxe/images/"
+    elif [[ -f "/mnt/boot/initrd" ]]; then
+        cp /mnt/boot/initrd /var/www/pxe/images/initrd.img
+        log "Copied /mnt/boot/initrd to /var/www/pxe/images/initrd.img"
+    else
+        log "ERROR: Could not find initrd.img in the ISO"
+        exit 1
+    fi
+    
+    # Now build the VPC version with the ionic driver
+    if ! build_initrd-vpc; then
+        log "ERROR: Failed to build initrd-vpc"
+        exit 1
+    fi
     
     cd /tmp
 
