@@ -555,6 +555,21 @@ def create_installation_params(config):
         params.hyp_version = 'el8.nutanix.20230302.101026'
         params.phoenix_version = '4.6'
         params.foundation_version = '4.6'
+
+        # Configure CVM network interface
+        network_config = config['network']
+        params.cvm_interfaces = [
+            {
+                "name": "eth0",
+                "ip": network_config['cvm_ip'],
+                "netmask": network_config['cvm_netmask'], 
+                "gateway": network_config['cvm_gateway'],
+                "vswitch": "br0"
+            }
+        ]
+
+        # Set DNS servers
+        params.dns_ip = ",".join(network_config['dns_servers'])
         
         log("Installation parameters created")
         return params
@@ -703,12 +718,17 @@ def run_nutanix_installation(params, config):
         
         # Log installation summary
         log("Installation Summary:")
-        log(f"  Node: {config['node']['node_serial']}")
-        log(f"  Hypervisor: KVM on {params.ce_hyp_boot_disk}")
-        log(f"  CVM: {params.svm_gb_ram}GB RAM, {params.svm_num_vcpus} vCPUs")
-        log(f"  Storage: {len(params.ce_cvm_data_disks)} data drives")
+        log(f"  Node:          {config['node']['node_serial']}")
+        log(f"  Hypervisor:    KVM on {params.ce_hyp_boot_disk}")
+        log(f"  Storage:       {len(params.ce_cvm_data_disks)} data drives")
         log(f"  Management IP: {config['network'].get('management_ip', 'DHCP')}")
-        
+        log(f"  CVM:           {params.svm_gb_ram}GB RAM, {params.svm_num_vcpus} vCPUs")
+        log("CVM Network Summary:")
+        log(f"  IP:            {params.cvm_interfaces['ip']}")
+        log(f"  Netmask:       {params.cvm_interfaces['netmask']}")
+        log(f"  Gateway:       {params.cvm_interfaces['gateway']}")
+        log(f"  DNS:           {params['dns_ip']}")
+
         # Start installation
         log("Starting installation process...")
         try:
