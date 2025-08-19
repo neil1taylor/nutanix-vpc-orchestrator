@@ -785,8 +785,6 @@ def main():
     if not validate_config(config):
         drop_to_shell("Configuration validation failed - missing required parameters")
     
-    log(f"Configuration loaded for cluster: {config['cluster']['name']}")
-    
     # Phase 4: Download Packages
     log("Downloading installation packages", phase=4)
     if not download_packages(config_server):
