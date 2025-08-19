@@ -29,6 +29,9 @@ import urllib.error
 management_ip = None
 config_server = None
 
+# Set to False to reduce logging verbosity
+VERBOSE_LOGGING = False
+
 def drop_to_shell(error_msg):
     """
     Drop to an interactive shell for debugging when a critical error occurs.
@@ -66,7 +69,7 @@ def drop_to_shell(error_msg):
         while True:
             time.sleep(3600)
 
-def log(message, phase=-1, send_to_api=True):
+def log(message, phase=-1, send_to_api=True, verbose=False):
     """
     Log a message to stdout and optionally send to the status API.
     
@@ -74,16 +77,18 @@ def log(message, phase=-1, send_to_api=True):
         message: The message to log
         phase: The installation phase number (default: -1 for general logs)
         send_to_api: Whether to also send the message to the API (default: True)
+        verbose: Whether this is a verbose/debug log (default: False)
     """
-    global management_ip, config_server
+    global management_ip, config_server, VERBOSE_LOGGING
     
-    # Always print to stdout with timestamp
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] {message}")
+    # Only print verbose logs if VERBOSE_LOGGING is enabled
+    if not verbose or VERBOSE_LOGGING:
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{timestamp}] {message}")
     
-    # Send log message to API if requested
+    # Send log message to API if requested and it's not a verbose log
     # No need for recursion protection since send_status_update always calls log with send_to_api=False
-    if send_to_api and management_ip and config_server:
+    if send_to_api and management_ip and config_server and not verbose:
         # Send status update with specified phase
         send_status_update(management_ip, phase, message)
 
@@ -132,13 +137,13 @@ def get_config_server_from_cmdline():
                 if ': ' in server:
                     # Fix the space between hostname and port number
                     server = server.replace(': ', ':')
-                    log(f"Fixed port separator in URL: '{server}'")
+                    log(f"Fixed port separator in URL: '{server}'", verbose=True)
                 
                 # Clean up the URL - remove any remaining spaces
                 if ' ' in server:
-                    log(f"Warning: Config server URL contains spaces: '{server}'")
+                    log(f"Warning: Config server URL contains spaces: '{server}'", verbose=True)
                     server = server.replace(' ', '')
-                    log(f"Cleaned config server URL: '{server}'")
+                    log(f"Cleaned config server URL: '{server}'", verbose=True)
                 
                 # Ensure URL has proper format
                 if not server.startswith('http://') and not server.startswith('https://'):
@@ -165,17 +170,17 @@ def download_node_config(config_server, management_ip):
         log(f"Trying config URL: {url}")
         
         # Add more detailed logging
-        log(f"Running curl command: curl -s --connect-timeout 10 --max-time 30 {url}")
+        log(f"Running curl command: curl -s --connect-timeout 10 --max-time 30 {url}", verbose=True)
         
         result = subprocess.run([
             'curl', '-s', '--connect-timeout', '10',
             '--max-time', '30', url
         ], capture_output=True, text=True)
         
-        log(f"Curl command returned code: {result.returncode}")
+        log(f"Curl command returned code: {result.returncode}", verbose=True)
         
         if result.returncode == 0:
-            log(f"Curl output: {result.stdout[:100]}..." if len(result.stdout) > 100 else f"Curl output: {result.stdout}")
+            log(f"Curl output: {result.stdout[:100]}..." if len(result.stdout) > 100 else f"Curl output: {result.stdout}", verbose=True)
             
             if result.stdout.strip():
                 try:
@@ -184,17 +189,17 @@ def download_node_config(config_server, management_ip):
                     return config
                 except json.JSONDecodeError as e:
                     log(f"Invalid JSON from {url}: {e}")
-                    log(f"First 200 chars of response: {result.stdout[:200]}")
+                    log(f"First 200 chars of response: {result.stdout[:200]}", verbose=True)
             else:
                 log("Empty response from server")
         else:
             log(f"Failed to download from {url}")
-            log(f"Curl stderr: {result.stderr}")
+            log(f"Curl stderr: {result.stderr}", verbose=True)
             
     except Exception as e:
         log(f"Error downloading from {url}: {e}")
         import traceback
-        log(f"Traceback: {traceback.format_exc()}")
+        log(f"Traceback: {traceback.format_exc()}", verbose=True)
     
     log("Could not download any configuration")
     return None
@@ -267,20 +272,20 @@ def download_packages(config_server):
    
    for url, local_path in package_downloads:
        log(f"Downloading {os.path.basename(local_path)}...")
-       log(f"Download URL: {url}")
+       log(f"Download URL: {url}", verbose=True)
        
        # Create directory if needed
        os.makedirs(os.path.dirname(local_path), exist_ok=True)
        
        # Add more detailed logging
-       log(f"Running curl command: curl -L --progress-bar --connect-timeout 30 --max-time 1200 -o {local_path} {url}")
+       log(f"Running curl command: curl -L --progress-bar --connect-timeout 30 --max-time 1200 -o {local_path} {url}", verbose=True)
        
        result = subprocess.run([
            'curl', '-L', '--progress-bar', '--connect-timeout', '30',
            '--max-time', '1200', '-o', local_path, url
        ], capture_output=True, text=True)
        
-       log(f"Curl command returned code: {result.returncode}")
+       log(f"Curl command returned code: {result.returncode}", verbose=True)
        
        if result.returncode == 0 and os.path.exists(local_path):
            # Verify file size is reasonable
@@ -289,11 +294,11 @@ def download_packages(config_server):
                log(f"Downloaded {os.path.basename(local_path)} ({file_size:,} bytes)")
            else:
                log(f"Downloaded file too small: {os.path.basename(local_path)}")
-               log(f"Curl stderr: {result.stderr}")
+               log(f"Curl stderr: {result.stderr}", verbose=True)
                return False
        else:
            log(f"Failed to download {os.path.basename(local_path)}")
-           log(f"Curl stderr: {result.stderr}")
+           log(f"Curl stderr: {result.stderr}", verbose=True)
            return False
    
    return True
@@ -604,25 +609,25 @@ def send_status_update(management_ip, phase, message):
         "message": message
     }
     
-    log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}", send_to_api=False)
+    log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}", send_to_api=False, verbose=True)
     
     # Convert payload to JSON and encode
     data = json.dumps(payload).encode('utf-8')
     
     try:
         # Create request
-        log(f"Creating request to {api_url}", send_to_api=False)
+        log(f"Creating request to {api_url}", send_to_api=False, verbose=True)
         req = urllib.request.Request(api_url, data=data, method='POST')
         req.add_header('Content-Type', 'application/json')
         
         # Send request with timeout
-        log("Sending request...", send_to_api=False)
+        log("Sending request...", send_to_api=False, verbose=True)
         response = urllib.request.urlopen(req, timeout=10)
         status_code = response.getcode()
         
         # Check for success (2xx status codes)
         if 200 <= status_code < 300:
-            log(f"Status update sent successfully. Response: {status_code}", send_to_api=False)
+            log(f"Status update sent successfully. Response: {status_code}", send_to_api=False, verbose=True)
         else:
             log(f"Status update failed with HTTP {status_code}", send_to_api=False)
             

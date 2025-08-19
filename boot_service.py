@@ -292,7 +292,7 @@ shell
                     "boot_disk_model": storage_config['boot_device_model'],
                     "boot_disk_size_gb": convert_size_to_gb(storage_config['boot_drive_size']), # Convert size to GB
                     "cvm_data_disks": storage_config['data_drives'],
-                    "cvm_boot_disks": [storage_config['boot_device']], # Using boot_device as per common practice, example in doc might be wrong
+                    "cvm_boot_disks": storage_config['boot_device'], # Using boot_device as per common practice, example in doc might be wrong
                     "hypervisor_boot_disk": storage_config['hypervisor_device']
                 },
                 "resources": {
