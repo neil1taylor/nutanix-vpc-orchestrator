@@ -13,8 +13,8 @@ max_requests_jitter = 50
 preload_app = True
 
 # Timeouts
-timeout = 30
-keepalive = 2
+timeout = 600
+keepalive = 30
 graceful_timeout = 30
 
 # Process naming
