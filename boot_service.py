@@ -27,9 +27,6 @@ class BootService:
             # Handle case where @ is used instead of & in URL
             logger.warning(f"Found @ in IP: {mgmt_ip}, cleaning up")
             mgmt_ip = mgmt_ip.split('@')[0]
-            
-        # Removed boot_type check and calls to generate_iso_boot_script and generate_default_boot_script
-        # All requests will now use the general generate_boot_script
 
         # Start monitoring for this IP address immediately, even before database lookup
         if mgmt_ip:
@@ -145,14 +142,6 @@ class BootService:
             logger.info(f"Network info prepared: {network_info}")
         except Exception as e:
             logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
-            # Use default values if VPC SDK fails
-            network_info = {
-                'ip': str(node['management_ip']),
-                'netmask': '255.255.0.0',
-                'gateway': '',
-                'dns': '8.8.8.8,9.9.9.9',  # Use multiple DNS servers by default
-                'mac': ''
-            }
         
         # Define URLs for boot files
         base_url = f"http://{Config.PXE_SERVER_DNS}:8080/boot/images"
@@ -208,10 +197,6 @@ echo Dropping to iPXE shell for debugging...
 shell
 """
         return template
-        
-# Removed generate_iso_boot_script method
-
-    # generate_default_boot_script method removed as per requirements
     
     def get_server_config(self, server_ip):
         """Get detailed server configuration for CE installer automation (Arizona configuration)"""
@@ -296,14 +281,6 @@ shell
                 logger.info(f"Network info prepared: {network_info}")
             except Exception as e:
                 logger.warning(f"Failed to get network information from VPC SDK: {str(e)}")
-                # Use default values if VPC SDK fails
-                network_info = {
-                    'ip': str(node['management_ip']),
-                    'netmask': '255.255.0.0',
-                    'gateway': '',
-                    'dns': '8.8.8.8,9.9.9.9',  # Use multiple DNS servers by default
-                    'mac': ''
-                }
             
             # Get storage configuration for installer
             storage_config = self.storage_config_for_installer(node)
@@ -324,9 +301,9 @@ shell
                 },
                 "network": {
                     "cvm_ip": node.get('nutanix_config', {}).get('cvm_ip', node['management_ip']),
-                    "cvm_netmask": network_info.get('netmask', '255.255.0.0'),
-                    "cvm_gateway": network_info.get('gateway', ''),
-                    "dns_servers": network_info.get('dns', '8.8.8.8').split(',') # Split comma-separated string
+                    "cvm_netmask": network_info.get('netmask'),
+                    "cvm_gateway": network_info.get('gateway'),
+                    "dns_servers": network_info.get('dns').split(',') # Split comma-separated string
                 }
             }
             # ... rest of the function, ensuring installer_config is returned or used ...

@@ -40,7 +40,7 @@ def drop_to_shell(error_msg):
     
     # Send status update if we have the required information
     if management_ip and config_server:
-        send_status_update(management_ip, "error", f"ERROR: {error_msg} - Dropping to shell")
+        log(f"ERROR: {error_msg} - Dropping to shell", phase="error")
     
     log("Dropping to interactive shell for debugging...")
     log("You can now connect via serial console")
@@ -66,17 +66,26 @@ def drop_to_shell(error_msg):
         while True:
             time.sleep(3600)
 
-def log(message):
-    """Logs a message to stdout and sends it to the status API."""
-    global management_ip, config_server
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+def log(message, phase=-1, send_to_api=True):
+    """
+    Log a message to stdout and optionally send to the status API.
     
-    # Send log message to API if management_ip and config_server are available
-    if management_ip and config_server:
-        # Use a specific phase for logs, e.g., -1 or a dedicated constant
-        send_status_update(management_ip, -1, f"[{timestamp}] {message}")
-
+    Args:
+        message: The message to log
+        phase: The installation phase number (default: -1 for general logs)
+        send_to_api: Whether to also send the message to the API (default: True)
+    """
+    global management_ip, config_server
+    
+    # Always print to stdout with timestamp
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}")
+    
+    # Send log message to API if requested
+    # No need for recursion protection since send_status_update always calls log with send_to_api=False
+    if send_to_api and management_ip and config_server:
+        # Send status update with specified phase
+        send_status_update(management_ip, phase, message)
 
 def get_management_ip():
     """Get IP address of first interface as management IP, in the form of x-x-x-x"""
@@ -585,7 +594,7 @@ def send_status_update(management_ip, phase, message):
     """
     global config_server
     if not config_server:
-        log(f"Error: Config server URL not found. Cannot send status update.")
+        log(f"Error: Config server URL not found. Cannot send status update.", send_to_api=False)
         return
     
     api_url = f"{config_server}/api/installation/status"
@@ -595,34 +604,36 @@ def send_status_update(management_ip, phase, message):
         "message": message
     }
     
-    log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}")
+    log(f"Sending status update: Phase {phase}, Message: '{message}' to {api_url}", send_to_api=False)
     
     # Convert payload to JSON and encode
     data = json.dumps(payload).encode('utf-8')
     
     try:
         # Create request
-        log(f"Creating request to {api_url}")
+        log(f"Creating request to {api_url}", send_to_api=False)
         req = urllib.request.Request(api_url, data=data, method='POST')
         req.add_header('Content-Type', 'application/json')
         
         # Send request with timeout
-        log("Sending request...")
+        log("Sending request...", send_to_api=False)
         response = urllib.request.urlopen(req, timeout=10)
         status_code = response.getcode()
         
         # Check for success (2xx status codes)
         if 200 <= status_code < 300:
-            log(f"Status update sent successfully. Response: {status_code}")
+            log(f"Status update sent successfully. Response: {status_code}", send_to_api=False)
         else:
-            log(f"Status update failed with HTTP {status_code}")
+            log(f"Status update failed with HTTP {status_code}", send_to_api=False)
             
     except (urllib.error.URLError, urllib.error.HTTPError) as e:
-        log(f"Error sending status update to {api_url}: {e}")
+        log(f"Error sending status update to {api_url}: {e}", send_to_api=False)
     except socket.timeout:
-        log(f"Timeout sending status update to {api_url}")
+        log(f"Timeout sending status update to {api_url}", send_to_api=False)
     except Exception as e:
-        log(f"An unexpected error occurred while sending status update: {e}")
+        log(f"An unexpected error occurred while sending status update: {e}", send_to_api=False)
+        import traceback
+        log(f"Traceback: {traceback.format_exc()}", send_to_api=False)
         import traceback
         log(f"Traceback: {traceback.format_exc()}")
 
@@ -736,28 +747,28 @@ def main():
         drop_to_shell("Could not determine management IP address")
     
     log(f"Initialization complete. Management IP: {management_ip}, Config Server: {config_server}")
-    send_status_update(management_ip, 1, "Initialization complete")
+    log("Initialization complete", phase=1)
 
     # Phase 2: Download Node Configuration
-    send_status_update(management_ip, 2, "Downloading node configuration")
+    log("Downloading node configuration", phase=2)
     config = download_node_config(config_server, management_ip)
     if not config:
         drop_to_shell("Unable to download node configuration from server")
     
     # Phase 3: Validate Configuration
-    send_status_update(management_ip, 3, "Validating configuration")
+    log("Validating configuration", phase=3)
     if not validate_config(config):
         drop_to_shell("Configuration validation failed - missing required parameters")
     
     log(f"Configuration loaded for cluster: {config['cluster']['name']}")
     
     # Phase 4: Download Packages
-    send_status_update(management_ip, 4, "Downloading installation packages")
+    log("Downloading installation packages", phase=4)
     if not download_packages(config_server):
         drop_to_shell("Failed to download required installation packages")
     
     # Phase 5: Install Hypervisor
-    send_status_update(management_ip, 5, "Installing AHV hypervisor")
+    log("Installing AHV hypervisor", phase=5)
     if not install_hypervisor(config):
         drop_to_shell("AHV hypervisor installation failed")
     
@@ -773,12 +784,12 @@ def main():
     if not cleanup_previous_attempts():
         drop_to_shell("Cleanup of previous installation attempts failed")
     
-    send_status_update(management_ip, 6, "Running Nutanix installation")
+    log("Running Nutanix installation", phase=6)
     if not run_nutanix_installation(params, config):
         drop_to_shell("Nutanix installation process failed")
     
     # Phase 7: Reboot Server
-    send_status_update(management_ip, 7, "Installation complete. Rebooting server.")
+    log("Installation complete. Rebooting server.", phase=7)
     subprocess.run(['reboot'])
     
     log("Node-agnostic installation completed successfully!")

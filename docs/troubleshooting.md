@@ -37,6 +37,7 @@ curl -X POST http://localhost:8080/api/config/nodes \
 
 cat /var/log/nutanix-pxe/pxe-server.log
 ```
+`tail -f /var/log/nutanix-pxe/pxe-server.log`
 
 1. Monitor the install in the console
 
