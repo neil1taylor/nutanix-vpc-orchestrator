@@ -322,6 +322,8 @@ def install_hypervisor(config):
    log("Installing AHV hypervisor...")
    
    boot_disk = config['hardware']['boot_disk']
+   # Assume boot_disk is a string
+   log(f"Using boot disk: {boot_disk}")
    boot_device = f"/dev/{boot_disk}"
    
    try:

@@ -450,12 +450,16 @@ shell
             storage_config = server_profiles.get_storage_config(profile)
             
             # Create storage configuration for installer
+            # Get boot device as string
+            boot_device = storage_config.get('boot_device')
+            
+            # Create storage configuration for installer
             installer_storage_config = {
-                'boot_device': storage_config.get('boot_device'),
+                'boot_device': boot_device,
                 'boot_device_model': storage_config.get('boot_device_model'),
                 'boot_drive_size': storage_config.get('boot_drive_size'),
                 'data_drives': storage_config.get('data_drives'),
-                'hypervisor_device': storage_config.get('boot_device')
+                'hypervisor_device': boot_device
             }
             
             return installer_storage_config

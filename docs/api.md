@@ -37,12 +37,11 @@ curl -I http://localhost:8080/boot/images/kernel
 curl -I http://localhost:8080/boot/images/initrd-vpc.img
 curl -I http://localhost:8080/boot/images/nutanix_installer_package.tar.gz
 
+# From the bare metal server
 curl -L --progress-bar --connect-timeout 30 --max-time 1200 --retry 5 -o /tmp/nutanix_installer_package.tar.gz http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images/nutanix_installer_package.tar.gz
 
 curl -L --progress-bar --connect-timeout 30 --max-time 1200 --retry 5 -o /tmp/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images/AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso
 ```
-
-curl --retry 5 --retry-connrefused --keepalive-time 30 -o /tmp/nutanix_installer_package.tar.gz http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/images/nutanix_installer_package.tar.gz
 
 ### `/boot/scripts/<script_name>` (GET)
 

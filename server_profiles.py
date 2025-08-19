@@ -15,7 +15,7 @@ class ServerProfileConfig:
             'display_name': 'Balanced Gen2 - 24 vCPU, 96 GB RAM, NVMe Storage',
             'cpu_cores': 12,  # Physical cores (24 vCPU / 2)
             'memory_gb': 96,
-            'boot_drives': ['nvme0n1'],  # RAID1 SATA M.2 drives
+            'boot_drive': 'nvme0n1',  # RAID1 SATA M.2 drives
             'boot_drive_size': '960GB',
             'boot_device_model': 'Micron_7450_PRO',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1', 'nvme8n1'],
@@ -29,7 +29,7 @@ class ServerProfileConfig:
             'display_name': 'Balanced Gen2 - 48 vCPU, 192 GB RAM, NVMe Storage',
             'cpu_cores': 24,
             'memory_gb': 192,
-            'boot_drives': ['nvme0n1'],
+            'boot_drive': 'nvme0n1',
             'boot_drive_size': '960GB',
             'boot_device_model': 'Micron_7450_PRO',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1', 'nvme8n1'],
@@ -43,7 +43,7 @@ class ServerProfileConfig:
             'display_name': 'Balanced Gen2 - 96 vCPU, 384 GB RAM, NVMe Storage',
             'cpu_cores': 48,
             'memory_gb': 384,
-            'boot_drives': ['nvme0n1'],
+            'boot_drive': 'nvme0n1',
             'boot_drive_size': '960GB',
             'boot_device_model': 'Micron_7450_PRO',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1', 'nvme5n1', 'nvme6n1', 'nvme7n1', 'nvme8n1'],
@@ -59,7 +59,7 @@ class ServerProfileConfig:
             'display_name': 'Compute Gen3 - 48 vCPU, 128 GB RAM, NVMe Storage',
             'cpu_cores': 24,
             'memory_gb': 128,
-            'boot_drives': ['nvme0n1'],
+            'boot_drive': 'nvme0n1',
             'boot_drive_size': '480GB',
             'boot_device_model': 'Micron_7450_MTFD',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
@@ -73,7 +73,7 @@ class ServerProfileConfig:
             'display_name': 'Compute Gen3 - 64 vCPU, 128 GB RAM, NVMe Storage',
             'cpu_cores': 32,
             'memory_gb': 128,
-            'boot_drives': ['nvme0n1'],
+            'boot_drive': 'nvme0n1',
             'boot_drive_size': '480GB',
             'boot_device_model': 'Micron_7450_MTFD',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
@@ -89,7 +89,7 @@ class ServerProfileConfig:
             'display_name': 'Balanced Gen3 - 48 vCPU, 256 GB RAM, NVMe Storage',
             'cpu_cores': 24,
             'memory_gb': 256,
-            'boot_drives': ['nvme0n1'],
+            'boot_drive': 'nvme0n1',
             'boot_drive_size': '480GB',
             'boot_device_model': 'Micron_7450_MTFD',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
@@ -103,7 +103,7 @@ class ServerProfileConfig:
             'display_name': 'Balanced Gen3 - 64 vCPU, 256 GB RAM, NVMe Storage',
             'cpu_cores': 32,
             'memory_gb': 256,
-            'boot_drives': ['nvme0n1'],
+            'boot_drive': 'nvme0n1',
             'boot_drive_size': '480GB',
             'boot_device_model': 'Micron_7450_MTFD',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
@@ -119,7 +119,7 @@ class ServerProfileConfig:
             'display_name': 'Memory Gen3 - 16 vCPU, 128 GB RAM, NVMe Storage',
             'cpu_cores': 8,
             'memory_gb': 128,
-            'boot_drives': ['nvme0n1'],
+            'boot_drive': 'nvme0n1',
             'boot_drive_size': '480GB',
             'boot_device_model': 'Micron_7450_MTFD',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],  # Memory-optimized
@@ -135,7 +135,7 @@ class ServerProfileConfig:
             'display_name': 'Very High Memory Gen3 - 16 vCPU, 256 GB RAM, NVMe Storage',
             'cpu_cores': 8,
             'memory_gb': 256,
-            'boot_drives': ['nvme0n1'],
+            'boot_drive': 'nvme0n1',
             'boot_drive_size': '480GB',
             'boot_device_model': 'Micron_7450_MTFD',
             'data_drives': ['nvme1n1', 'nvme2n1', 'nvme3n1', 'nvme4n1'],
@@ -173,11 +173,11 @@ class ServerProfileConfig:
         
         return {
             'server_profile': server_profile,
-            'boot_device': profile_config['boot_drives'],
-            'hypervisor_device': profile_config['boot_drives'],
-            'cvm_device': profile_config['boot_drives'],
+            'boot_device': profile_config['boot_drive'],  # Now a string
+            'hypervisor_device': profile_config['boot_drive'],  # Now a string
+            'cvm_device': profile_config['boot_drive'],  # Now a string
             'data_drives': data_drives,
-            'boot_drives': profile_config['boot_drives'],
+            'boot_drive': profile_config['boot_drive'],  # Changed from boot_drives to boot_drive
             'boot_drive_size': profile_config['boot_drive_size'],
             'boot_device_model': profile_config['boot_device_model'],
             'total_drives': len(data_drives),
@@ -230,7 +230,7 @@ class ServerProfileConfig:
                 'memory_gb': config['memory_gb']
             },
             'storage': {
-                'boot_drives': len(config['boot_drives']),
+                'boot_drives': 1,  # Always 1 since we now use a single string
                 'boot_capacity': config['boot_drive_size'],
                 'data_drives': len(config['data_drives']),
                 'data_capacity_per_drive': config['data_drive_size'],

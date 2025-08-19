@@ -10,6 +10,7 @@
 
 ```bash
 rm -rf /var/log/nutanix-pxe
+rm /var/www/pxe/images/initrd*.img
 cd /
 GITHUB_REPO="https://github.com/neil1taylor/nutanix-vpc-orchestrator"
 GITHUB_BRANCH="main"
