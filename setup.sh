@@ -1104,14 +1104,21 @@ main() {
     
     # Results
     echo -e "\n${BLUE}==================== TEST SUMMARY ====================${NC}" | tee -a "$TEST_LOG"
-    log "Test Summary: $((TOTAL_TESTS - FAILED_TESTS))/$TOTAL_TESTS passed"
     
-    if [[ $FAILED_TESTS -eq 0 && $test_failures -eq 0 ]]; then
+    # Calculate total failures (both from test_result and test function returns)
+    local total_failures=$((FAILED_TESTS + test_failures))
+    
+    # Ensure we don't double-count failures
+    [[ $total_failures -gt $TOTAL_TESTS ]] && total_failures=$TOTAL_TESTS
+    
+    log "Test Summary: $(($TOTAL_TESTS - $total_failures))/$TOTAL_TESTS passed"
+    
+    if [[ $total_failures -eq 0 ]]; then
         echo -e "${GREEN}✓ ALL TESTS PASSED - System ready for production${NC}"
         log "Setup completed successfully"
     else
-        echo -e "${RED}✗ $FAILED_TESTS TESTS FAILED ($test_failures test functions returned errors) - Review and fix issues${NC}"
-        log "Setup completed with $FAILED_TESTS failed tests and $test_failures test function failures"
+        echo -e "${RED}✗ $total_failures TESTS FAILED - Review and fix issues${NC}"
+        log "Setup completed with $total_failures failed tests"
         exit 1  # Exit with error code to indicate test failures
     fi
     
