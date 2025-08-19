@@ -102,13 +102,14 @@ def get_management_ip():
                         
     except Exception as e:
         log(f"Could not get IP address: {e}")
-    
-    # Fallback to original logic
-    log("Using default node identifier")
-    return 'default'
 
 def get_config_server_from_cmdline():
-    """Extract config server from kernel command line"""
+    """
+    Extract config server from kernel command line and clean up the URL
+    
+    Returns:
+        A cleaned URL string with proper formatting, or None if not found
+    """
     try:
         with open('/proc/cmdline', 'r') as f:
             cmdline = f.read().strip()
@@ -118,8 +119,17 @@ def get_config_server_from_cmdline():
             if param.startswith('config_server='):
                 server = param.split('=', 1)[1]
                 
-                # Clean up the URL - remove any spaces
-                server = server.replace(' ', '')
+                # Special handling for URLs with space between hostname and port
+                if ': ' in server:
+                    # Fix the space between hostname and port number
+                    server = server.replace(': ', ':')
+                    log(f"Fixed port separator in URL: '{server}'")
+                
+                # Clean up the URL - remove any remaining spaces
+                if ' ' in server:
+                    log(f"Warning: Config server URL contains spaces: '{server}'")
+                    server = server.replace(' ', '')
+                    log(f"Cleaned config server URL: '{server}'")
                 
                 # Ensure URL has proper format
                 if not server.startswith('http://') and not server.startswith('https://'):
@@ -137,6 +147,8 @@ def download_node_config(config_server, management_ip):
     if not config_server:
         log("Error: Config server URL is empty or invalid")
         return None
+    
+    # No need to clean up URL here as it's already cleaned in main()
     
     url = f"{config_server}/boot/server/{management_ip}"
     
@@ -229,11 +241,7 @@ def download_packages(config_server):
        log("Error: Config server URL is empty or invalid")
        return False
    
-   # Clean up config_server URL if needed
-   if ' ' in config_server:
-       log(f"Warning: Config server URL contains spaces: '{config_server}'")
-       config_server = config_server.replace(' ', '')
-       log(f"Cleaned config server URL: '{config_server}'")
+   # No need to clean up URL here as it's already cleaned in main()
    
    # Ensure we have network connectivity
    if not test_connectivity():
@@ -575,16 +583,10 @@ def send_status_update(management_ip, phase, message):
         phase: The installation phase number or "error" for error messages
         message: The status message to send
     """
-    config_server = get_config_server_from_cmdline()
+    global config_server
     if not config_server:
         log(f"Error: Config server URL not found. Cannot send status update.")
         return
-    
-    # Validate config_server URL format
-    if ' ' in config_server:
-        log(f"Warning: Config server URL contains spaces: '{config_server}'")
-        config_server = config_server.replace(' ', '')
-        log(f"Cleaned config server URL: '{config_server}'")
     
     api_url = f"{config_server}/api/installation/status"
     payload = {
@@ -720,6 +722,9 @@ def main():
     
     # Phase 1: Initialization
     management_ip = get_management_ip()
+    
+    # Get config server URL once and store it in the global variable
+    # URL cleaning is now done inside get_config_server_from_cmdline()
     config_server = get_config_server_from_cmdline()
     
     # Validate config_server
@@ -727,7 +732,7 @@ def main():
         drop_to_shell("Could not determine config server URL from command line")
     
     # Validate management_ip
-    if not management_ip or management_ip == 'default':
+    if not management_ip:
         drop_to_shell("Could not determine management IP address")
     
     log(f"Initialization complete. Management IP: {management_ip}, Config Server: {config_server}")

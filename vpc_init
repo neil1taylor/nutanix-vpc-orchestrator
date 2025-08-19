@@ -285,26 +285,31 @@ fi
 send_status_update "Executing Python installation script" "python_exec"
 echo "Executing installation script..."
 
-# Add a 10-second wait for keyboard interrupt (BusyBox compatible)
+# Add a 30-second wait for any key press (BusyBox compatible)
 echo ""
 echo "====================================================="
-echo "Press Ctrl+C within 10 seconds to drop to shell"
+echo "Press any key within 30 seconds to drop to shell"
 echo "Otherwise, installation will continue automatically"
 echo "====================================================="
 echo ""
 
-# Set up trap for SIGINT (Ctrl+C)
-trap 'echo "Keyboard interrupt detected. Dropping to shell..."; echo "Type exit to continue with installation or use the shell for debugging."; /bin/sh; echo "Continuing with installation..."; trap - INT; echo' INT
-
-# Wait for 10 seconds, counting down
-for i in 10 9 8 7 6 5 4 3 2 1; do
+# Wait for 30 seconds or any key press
+for i in 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1; do
     echo -n "$i... "
-    sleep 1
+    if read -t 1 -n 1 key; then
+        echo ""
+        echo "Key press detected. Dropping to shell..."
+        echo "Type exit to continue with installation or use the shell for debugging."
+        /bin/sh
+        echo "Continuing with installation..."
+        break
+    fi
 done
-echo "0"
 
-# Reset the trap
-trap - INT
+# If we completed the countdown without a key press, show 0
+if [ "$i" = "1" ]; then
+    echo "0"
+fi
 echo "Continuing with automated installation..."
 
 # Run the Python script using chroot and capture its exit code
