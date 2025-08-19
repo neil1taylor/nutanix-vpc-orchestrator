@@ -220,9 +220,9 @@ def validate_config(config):
         ('hardware', 'boot_disk'),
         ('hardware', 'cvm_data_disks'),
         ('resources', 'cvm_memory_gb'),
-        ('network', 'vm_ip'),
-        ('network', 'vm_netmask'),
-        ('network', 'vm_gateway'),
+        ('network', 'cvm_ip'),
+        ('network', 'cvm_netmask'),
+        ('network', 'cvm_gateway'),
         ('network', 'dns_servers')
     ]
     
