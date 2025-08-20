@@ -962,6 +962,13 @@ def main():
         
         # Create layout.layout_tools
         layout_tools = types.ModuleType('layout.layout_tools')
+        
+        # Add constants
+        layout_tools.RDMA_NIC_PASSTHRU = "rdma_nic_passthru"
+        layout_tools.RDMA_PORT_PASSTHRU = "rdma_port_passthru"
+        layout_tools.VROC = "VROC"
+        
+        # Add functions
         layout_tools.get_boot_device_from_layout = lambda layout, lun_index=0, exclude_boot_serial=None: None
         layout_tools.normalize_node_number = lambda x: 1
         layout_tools.get_hyp_raid_info_from_layout = lambda layout: (None, None)
