@@ -885,8 +885,21 @@ def main():
                            prog_if=None, bus=None, slot=None, function=None):
             return []
         
+        # Add more required functions to pci_util
+        def mock_list_block_devices_by_controllers(pci_device_search_list=None):
+            # Use the config parameters to create a more accurate mock
+            # This mimics the behavior of collect_disk_info() in the real implementation
+            disk_info = {}
+            for disk in config['hardware']['cvm_data_disks']:
+                disk_info[disk] = {
+                    'model': config['hardware'].get('disk_model', 'NVMe Drive'),
+                    'size': config['hardware'].get('boot_disk_size_gb', 100) * 1024 * 1024 * 1024
+                }
+            return disk_info
+            
         # Assign the functions to the module
         pci_util.pci_search = mock_pci_search
+        pci_util.list_block_devices_by_controllers = mock_list_block_devices_by_controllers
         
         # Register the pci_util submodule
         sys.modules['hardware_inventory.pci_util'] = pci_util
