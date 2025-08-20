@@ -756,10 +756,10 @@ def run_nutanix_installation(params, config):
         log(f"  Management IP: {config['network'].get('management_ip', 'DHCP')}")
         log(f"  CVM:           {params.svm_gb_ram}GB RAM, {params.svm_num_vcpus} vCPUs")
         log("CVM Network Summary:")
-        log(f"  IP:            {params.cvm_interfaces['ip']}")
-        log(f"  Netmask:       {params.cvm_interfaces['netmask']}")
-        log(f"  Gateway:       {params.cvm_interfaces['gateway']}")
-        log(f"  DNS:           {params['dns_ip']}")
+        log(f"  IP:            {params.cvm_interfaces[0]['ip']}")
+        log(f"  Netmask:       {params.cvm_interfaces[0]['netmask']}")
+        log(f"  Gateway:       {params.cvm_interfaces[0]['gateway']}")
+        log(f"  DNS:           {params.dns_ip}")
 
         # Start installation
         log("Starting installation process...")
