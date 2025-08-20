@@ -979,9 +979,18 @@ def main():
             # Return an empty list of passthrough devices
             return []
             
+        # More detailed implementation of get_platform_class based on the real implementation
+        def mock_get_platform_class(hw_layout):
+            """
+            Returns the platform class: SMIPMI, IDRAC7, iLO4 or CE.
+            """
+            # For our mock implementation, always return "CE" (Community Edition)
+            return "CE"
+            
         # Assign the functions to the module
         layout_tools.get_hbas = mock_get_hbas
         layout_tools.get_passthru_rdma_pci_info = mock_get_passthru_rdma_pci_info
+        layout_tools.get_platform_class = mock_get_platform_class
         sys.modules['layout.layout_tools'] = layout_tools
         
         # Create layout.layout_vroc_utils
