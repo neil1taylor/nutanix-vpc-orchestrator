@@ -987,10 +987,28 @@ def main():
             # For our mock implementation, always return "CE" (Community Edition)
             return "CE"
             
+        # More detailed implementation of get_boot_hba_drivers based on the real implementation
+        def mock_get_boot_hba_drivers(layout):
+            """
+            Returns a list of boot HBA drivers from the layout
+            """
+            # For our mock implementation, return a list with a single driver
+            return ['nvme']
+            
+        # More detailed implementation of get_passthru_devices based on the real implementation
+        def mock_get_passthru_devices(default_passthru=None, passthru_exclusions=None, **kwargs):
+            """
+            Returns a list of passthrough devices
+            """
+            # For our mock implementation, return an empty list
+            return []
+            
         # Assign the functions to the module
         layout_tools.get_hbas = mock_get_hbas
         layout_tools.get_passthru_rdma_pci_info = mock_get_passthru_rdma_pci_info
         layout_tools.get_platform_class = mock_get_platform_class
+        layout_tools.get_boot_hba_drivers = mock_get_boot_hba_drivers
+        layout_tools.get_passthru_devices = mock_get_passthru_devices
         sys.modules['layout.layout_tools'] = layout_tools
         
         # Create layout.layout_vroc_utils
