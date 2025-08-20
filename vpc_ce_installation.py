@@ -872,9 +872,25 @@ def main():
         disk_info.collect_disk_info = mock_collect_disk_info
         disk_info.list_hyp_boot_disks = mock_list_hyp_boot_disks
         
-        # Register the submodule
+        # Register the disk_info submodule
         sys.modules['hardware_inventory.disk_info'] = disk_info
         hardware_inventory.disk_info = disk_info
+        
+        # Create the pci_util submodule
+        pci_util = types.ModuleType('hardware_inventory.pci_util')
+        
+        # Add required functions to pci_util
+        def mock_pci_search(vendor_id=None, device_id=None, subsystem_vendor_id=None,
+                           subsystem_device_id=None, class_id=None, subclass_id=None,
+                           prog_if=None, bus=None, slot=None, function=None):
+            return []
+        
+        # Assign the functions to the module
+        pci_util.pci_search = mock_pci_search
+        
+        # Register the pci_util submodule
+        sys.modules['hardware_inventory.pci_util'] = pci_util
+        hardware_inventory.pci_util = pci_util
     
     # Create mock layout module as fallback
     try:
