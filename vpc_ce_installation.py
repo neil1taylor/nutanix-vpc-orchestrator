@@ -487,7 +487,6 @@ def setup_environment(config):
     # Set up Python path with correct locations
     sys.path.insert(0, '/phoenix')
     sys.path.insert(0, '/usr/lib/python3.9')
-    sys.path.insert(0, '/usr/lib/python3.6/site-packages')  # Contains the six module
     
     # Mock /proc/cmdline with config values
     def mock_cmdline():
@@ -533,12 +532,16 @@ def create_installation_params(config):
         
         params = param_list.ParamList()
         
-        # Node configuration
+        # Node configuration - create if not exists
+        if 'node' not in config:
+            log("Node section not found in config, creating default values")
+            config['node'] = {}
+            
         node_config = config['node']
-        params.block_id = str(uuid.uuid4()).split('-')[0]
-        params.node_position = "A"
-        params.node_serial = str(uuid.uuid4())
-        params.cluster_id = generate_cluster_id()
+        params.block_id = node_config.get('block_id', str(uuid.uuid4()).split('-')[0])
+        params.node_position = node_config.get('node_position', "A")
+        params.node_serial = node_config.get('node_serial', str(uuid.uuid4()))
+        params.cluster_id = node_config.get('cluster_id', generate_cluster_id())
         
         # Hardware configuration
         hw_config = config['hardware']
