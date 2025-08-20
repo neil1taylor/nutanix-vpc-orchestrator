@@ -948,6 +948,18 @@ def main():
         layout_finder.get_vpd_info = lambda: {}
         sys.modules['layout.layout_finder'] = layout_finder
         
+        # Create layout.pre_new_policy_models
+        pre_new_policy_models = types.ModuleType('layout.pre_new_policy_models')
+        
+        # Add required functions and constants to pre_new_policy_models
+        pre_new_policy_models.BOOT_DEVICE_STRUCTURE_HYPERVISOR_ONLY = "HYPERVISOR_ONLY"
+        pre_new_policy_models.BOOT_DEVICE_STRUCTURE_HYPERVISOR_AND_CVM = "HYPERVISOR_AND_CVM"
+        pre_new_policy_models.BOOT_DEVICE_STRUCTURE_CVM_ONLY = "CVM_ONLY"
+        
+        # Register the pre_new_policy_models submodule
+        sys.modules['layout.pre_new_policy_models'] = pre_new_policy_models
+        layout.pre_new_policy_models = pre_new_policy_models
+        
         # Create layout.layout_tools
         layout_tools = types.ModuleType('layout.layout_tools')
         layout_tools.get_boot_device_from_layout = lambda layout, lun_index=0, exclude_boot_serial=None: None
