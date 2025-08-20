@@ -903,6 +903,7 @@ def main():
         layout_tools.normalize_node_number = lambda x: 1
         layout_tools.get_hyp_raid_info_from_layout = lambda layout: (None, None)
         layout_tools.get_raid_boot_devices_info = lambda structure, raid_ctl: []
+        layout_tools.get_possible_boot_devices_from_layout = lambda layout: [config['hardware']['boot_disk']]
         sys.modules['layout.layout_tools'] = layout_tools
         
         # Create layout.layout_vroc_utils
