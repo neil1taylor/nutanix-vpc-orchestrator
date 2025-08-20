@@ -968,6 +968,20 @@ def main():
         layout_tools.get_raid_boot_devices_info = lambda structure, raid_ctl: []
         layout_tools.get_possible_boot_devices_from_layout = lambda layout: [config['hardware']['boot_disk']]
         layout_tools.get_data_disks = lambda layout: config['hardware']['cvm_data_disks']
+        
+        # More detailed implementation of get_hbas based on the real implementation
+        def mock_get_hbas(pci_devices=None, **kwargs):
+            # Return an empty list of HBAs
+            return []
+            
+        # More detailed implementation of get_passthru_rdma_pci_info based on the real implementation
+        def mock_get_passthru_rdma_pci_info(hw_layout, passthru_method=None, rdma_mac_addr=None):
+            # Return an empty list of passthrough devices
+            return []
+            
+        # Assign the functions to the module
+        layout_tools.get_hbas = mock_get_hbas
+        layout_tools.get_passthru_rdma_pci_info = mock_get_passthru_rdma_pci_info
         sys.modules['layout.layout_tools'] = layout_tools
         
         # Create layout.layout_vroc_utils
