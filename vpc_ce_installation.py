@@ -487,6 +487,7 @@ def setup_environment(config):
     # Set up Python path with correct locations
     sys.path.insert(0, '/phoenix')
     sys.path.insert(0, '/usr/lib/python3.9')
+    sys.path.insert(0, '/usr/lib/python3.6/site-packages')  # Contains the six module
     
     # Mock /proc/cmdline with config values
     def mock_cmdline():

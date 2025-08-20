@@ -587,3 +587,47 @@ IBM Bare Metal Server (iPXE) → HTTP Server → Automated Installation
 4. Download AOS installer + AHV ISO
 5. Automated installation based on config
 ```
+
+Looks like the overlay is Rocky:
+
+: command not found
+bash-4.4# dnf install tree
+Rocky Linux 8 - AppStream                        16 MB/s |  20 MB     00:01    
+Rocky Linux 8 - BaseOS                           21 MB/s |  32 MB     00:01    
+Rocky Linux 8 - Extras                           29 kB/s |  15 kB     00:00    
+Rocky Linux 8 - PowerTools                      4.7 MB/s | 4.6 MB     00:00    
+Extra Packages for Enterprise Linux 8 - x86_64   12 MB/s |  14 MB     00:01    
+Remi's Modular repository for Enterprise Linux  710 kB/s | 1.1 MB     00:01    
+Safe Remi's RPM repository for Enterprise Linux 1.4 MB/s | 2.3 MB     00:01    
+Dependencies resolved.
+================================================================================
+ Package        Architecture     Version                 Repository        Size
+================================================================================
+Installing:
+ tree           x86_64           1.7.0-15.el8            baseos            58 k
+
+Transaction Summary
+================================================================================
+Install  1 Package
+
+Total download size: 58 k
+Installed size: 106 k
+Is this ok [y/N]: y
+Downloading Packages:
+tree-1.7.0-15.el8.x86_64.rpm                    1.2 MB/s |  58 kB     00:00    
+--------------------------------------------------------------------------------
+Total                                           411 kB/s |  58 kB     00:00     
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                        1/1 
+  Installing       : tree-1.7.0-15.el8.x86_64                               1/1 
+  Running scriptlet: tree-1.7.0-15.el8.x86_64                               1/1 
+  Verifying        : tree-1.7.0-15.el8.x86_64                               1/1 
+
+Installed:
+  tree-1.7.0-15.el8.x86_64                                                      
+
+Complete!
