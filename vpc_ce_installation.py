@@ -826,31 +826,11 @@ def main():
     # Setup environment (not a distinct phase for status reporting)
     setup_environment(config)
     
-    # Create mock hardware_inventory module
-    log("Creating mock hardware_inventory module...")
-    import types
-    
-    # Create the hardware_inventory module
-    hardware_inventory = types.ModuleType('hardware_inventory')
-    sys.modules['hardware_inventory'] = hardware_inventory
-    
-    # Create the disk_info submodule
-    disk_info = types.ModuleType('hardware_inventory.disk_info')
-    
-    # Add required functions to disk_info
-    def mock_collect_disk_info(disk_list_filter=None, skip_part_info=True):
-        return {disk: None for disk in config['hardware']['cvm_data_disks']}
-    
-    def mock_list_hyp_boot_disks():
-        return [config['hardware']['boot_disk']]
-    
-    # Assign the functions to the module
-    disk_info.collect_disk_info = mock_collect_disk_info
-    disk_info.list_hyp_boot_disks = mock_list_hyp_boot_disks
-    
-    # Register the submodule
-    sys.modules['hardware_inventory.disk_info'] = disk_info
-    hardware_inventory.disk_info = disk_info
+    # Add /phoenix to the Python path to use the real modules
+    log("Adding /phoenix to Python path...")
+    phoenix_dir = '/phoenix'
+    if phoenix_dir not in sys.path:
+        sys.path.insert(0, phoenix_dir)
     
     # Create installation parameters
     params = create_installation_params(config)
