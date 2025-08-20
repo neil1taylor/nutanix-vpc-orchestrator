@@ -904,6 +904,7 @@ def main():
         layout_tools.get_hyp_raid_info_from_layout = lambda layout: (None, None)
         layout_tools.get_raid_boot_devices_info = lambda structure, raid_ctl: []
         layout_tools.get_possible_boot_devices_from_layout = lambda layout: [config['hardware']['boot_disk']]
+        layout_tools.get_data_disks = lambda layout: config['hardware']['cvm_data_disks']
         sys.modules['layout.layout_tools'] = layout_tools
         
         # Create layout.layout_vroc_utils
