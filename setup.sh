@@ -638,7 +638,6 @@ setup_ssh_keys() {
 }
 
 setup_python() {
-    log "Setting up Python environment..."
     
     cd "$PROJECT_DIR"
     sudo -u "$SERVICE_USER" python3 -m venv venv
@@ -805,7 +804,6 @@ EOF
 }
 
 setup_boot_files() {
-    log "Setting up boot files..."
     
     # Download Nutanix ISO if not exists
     if [[ ! -f "/tmp/nutanix-ce.iso" ]]; then

@@ -1196,6 +1196,42 @@ def main():
         xattr_module.removexattr = mock_removexattr
         xattr_module.listxattr = mock_listxattr
     
+    # Create mock pycdlib module
+    try:
+        import pycdlib
+        log("Found pycdlib module")
+    except ImportError:
+        log("Creating mock pycdlib module...")
+        import types
+        
+        # Create the pycdlib module
+        pycdlib_module = types.ModuleType('pycdlib')
+        sys.modules['pycdlib'] = pycdlib_module
+        
+        # Create PyCdlib class
+        class MockPyCdlib:
+            def __init__(self):
+                self.files = {}
+                
+            def open(self, iso_path):
+                return
+                
+            def get_file_from_iso(self, iso_path, local_path):
+                return
+                
+            def add_file(self, local_path, iso_path):
+                self.files[iso_path] = local_path
+                return
+                
+            def write(self, iso_path):
+                return
+                
+            def close(self):
+                return
+        
+        # Add the class to the module
+        pycdlib_module.PyCdlib = MockPyCdlib
+    
     # Ensure the config has a 'node' section
     if 'node' not in config:
         log("Adding 'node' section to config")
