@@ -884,6 +884,17 @@ def main():
                            subsystem_device_id=None, class_id=None, subclass_id=None,
                            prog_if=None, bus=None, slot=None, function=None):
             return []
+            
+        # Add parse_lspci function
+        def mock_parse_lspci(text, arch="x86"):
+            """
+            Parses output of "lspci -v -nn".
+            
+            Returns:
+                A list of PciDevice objects
+            """
+            # For our mock implementation, return an empty list
+            return []
         
         # Add more required functions to pci_util
         def mock_list_block_devices_by_controllers(pci_device_search_list=None):
@@ -920,6 +931,7 @@ def main():
             
         # Assign the functions to the module
         pci_util.pci_search = mock_pci_search
+        pci_util.parse_lspci = mock_parse_lspci
         pci_util.list_block_devices_by_controllers = mock_list_block_devices_by_controllers
         pci_util.list_nvme_devices = mock_list_nvme_devices
         
