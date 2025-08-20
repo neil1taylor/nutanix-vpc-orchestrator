@@ -897,9 +897,31 @@ def main():
                 }
             return disk_info
             
+        def mock_list_nvme_devices(exclude_devs=None):
+            # Create a list of mock PciDevice objects for NVMe devices
+            exclude_devs = exclude_devs or []
+            nvme_devs = []
+            
+            # Create a PciDevice class similar to the one in the real implementation
+            class MockPciDevice:
+                def __init__(self, bus_addr, vendor, device):
+                    self.bus = bus_addr
+                    self.vendor = vendor
+                    self.device = device
+                    self.pci_dev = f"{vendor}:{device}"
+            
+            # Add mock NVMe devices based on config
+            for i, disk in enumerate(config['hardware']['cvm_data_disks']):
+                if disk not in exclude_devs:
+                    # Use realistic values for vendor and device IDs
+                    nvme_devs.append(MockPciDevice(f"0000:00:{i+1:02x}.0", "144d", "a804"))
+            
+            return nvme_devs
+            
         # Assign the functions to the module
         pci_util.pci_search = mock_pci_search
         pci_util.list_block_devices_by_controllers = mock_list_block_devices_by_controllers
+        pci_util.list_nvme_devices = mock_list_nvme_devices
         
         # Register the pci_util submodule
         sys.modules['hardware_inventory.pci_util'] = pci_util
