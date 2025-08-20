@@ -1003,12 +1003,94 @@ def main():
             # For our mock implementation, return an empty list
             return []
             
+        # Helper functions for chassis class detection
+        def mock_belongs_to_chassis_class(hw_layout, chassis_class_list):
+            """
+            Checks if the hardware layout belongs to a specific chassis class
+            """
+            if hw_layout:
+                layout_class = hw_layout.get("chassis", {}).get("class", "")
+                if layout_class in chassis_class_list:
+                    return True
+            return False
+            
+        # Vendor-specific detection functions
+        def mock_is_dell(hw_layout):
+            """
+            Checks if the hardware layout is for a Dell system
+            """
+            return False
+            
+        def mock_is_dell_13G(hw_layout):
+            """
+            Checks if the hardware layout is for a Dell 13G system
+            """
+            return False
+            
+        def mock_is_dell_14G(hw_layout):
+            """
+            Checks if the hardware layout is for a Dell 14G system
+            """
+            return False
+            
+        def mock_is_hpe(hw_layout):
+            """
+            Checks if the hardware layout is for an HPE system
+            """
+            return False
+            
+        def mock_is_lenovo(hw_layout):
+            """
+            Checks if the hardware layout is for a Lenovo system
+            """
+            return False
+            
+        def mock_is_fujitsu(hw_layout):
+            """
+            Checks if the hardware layout is for a Fujitsu system
+            """
+            return False
+            
+        def mock_is_cisco(hw_layout):
+            """
+            Checks if the hardware layout is for a Cisco system
+            """
+            return False
+            
+        def mock_is_inspur(hw_layout):
+            """
+            Checks if the hardware layout is for an Inspur system
+            """
+            return False
+            
+        def mock_is_nx(hw_layout):
+            """
+            Checks if the hardware layout is for an NX system
+            """
+            return True
+            
+        def mock_is_intel(hw_layout):
+            """
+            Checks if the hardware layout is for an Intel system
+            """
+            return False
+            
         # Assign the functions to the module
         layout_tools.get_hbas = mock_get_hbas
         layout_tools.get_passthru_rdma_pci_info = mock_get_passthru_rdma_pci_info
         layout_tools.get_platform_class = mock_get_platform_class
         layout_tools.get_boot_hba_drivers = mock_get_boot_hba_drivers
         layout_tools.get_passthru_devices = mock_get_passthru_devices
+        layout_tools.is_dell = mock_is_dell
+        layout_tools.is_dell_13G = mock_is_dell_13G
+        layout_tools.is_dell_14G = mock_is_dell_14G
+        layout_tools.is_hpe = mock_is_hpe
+        layout_tools.is_lenovo = mock_is_lenovo
+        layout_tools.is_fujitsu = mock_is_fujitsu
+        layout_tools.is_cisco = mock_is_cisco
+        layout_tools.is_inspur = mock_is_inspur
+        layout_tools.is_nx = mock_is_nx
+        layout_tools.is_intel = mock_is_intel
         sys.modules['layout.layout_tools'] = layout_tools
         
         # Create layout.layout_vroc_utils
