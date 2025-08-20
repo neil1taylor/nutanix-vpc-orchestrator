@@ -960,6 +960,37 @@ def main():
         sys.modules['lxml.etree'] = etree
         lxml.etree = etree
     
+    # Create mock xattr module
+    try:
+        import xattr
+        log("Found xattr module")
+    except ImportError:
+        log("Creating mock xattr module...")
+        import types
+        
+        # Create the xattr module
+        xattr_module = types.ModuleType('xattr')
+        sys.modules['xattr'] = xattr_module
+        
+        # Add minimal functionality
+        def mock_getxattr(path, name, *args, **kwargs):
+            return b""
+            
+        def mock_setxattr(path, name, value, *args, **kwargs):
+            pass
+            
+        def mock_removexattr(path, name, *args, **kwargs):
+            pass
+            
+        def mock_listxattr(path, *args, **kwargs):
+            return []
+        
+        # Assign functions to the module
+        xattr_module.getxattr = mock_getxattr
+        xattr_module.setxattr = mock_setxattr
+        xattr_module.removexattr = mock_removexattr
+        xattr_module.listxattr = mock_listxattr
+    
     # Ensure the config has a 'node' section
     if 'node' not in config:
         log("Adding 'node' section to config")
