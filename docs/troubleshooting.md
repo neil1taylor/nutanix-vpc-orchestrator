@@ -59,7 +59,7 @@ to test the response:
 
 ## config for server
 
-curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10"
+curl "http://nutanix-pxe-config.nutanix-ce-poc.cloud:8080/boot/server/10.240.0.10" | jq
 
 # Create a cluster
 

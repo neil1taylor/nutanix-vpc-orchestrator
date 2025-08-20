@@ -24,6 +24,7 @@ import glob
 from random import randint
 import urllib.request
 import urllib.error
+import re
 
 # Global variables to store management_ip and config_server
 management_ip = None
@@ -319,6 +320,10 @@ def download_packages(config_server):
 
 def install_hypervisor(config):
    """Install AHV hypervisor to boot disk"""
+
+   log("Wiping all drives...")
+   wipe_nvmes()
+
    log("Installing AHV hypervisor...")
    
    boot_disk = config['hardware']['boot_disk']
@@ -329,7 +334,7 @@ def install_hypervisor(config):
    try:
        # Create hypervisor partitions
        log("Creating hypervisor partitions...")
-       fdisk_commands = "n\np\n1\n\n+1M\nn\np\n2\n\n+20G\nn\np\n3\n\n\nt\n1\nef\nw\n"
+       fdisk_commands = "n\np\n1\n\n+200M\nn\np\n2\n\n+32G\nn\np\n3\n\n\nt\n1\nef\nw\n"
        
        result = subprocess.run(['fdisk', boot_device],
                              input=fdisk_commands, text=True,
@@ -673,6 +678,13 @@ def send_status_update(management_ip, phase, message):
         import traceback
         log(f"Traceback: {traceback.format_exc()}")
 
+def wipe_nvmes():
+    drives = [d for d in glob.glob('/dev/nvme*') if re.match(r'.*/nvme\d+n\d+$', d)]
+    for drive in sorted(drives):
+        print(f"Wiping {drive}")
+        subprocess.run(['wipefs', '-a', drive], check=True)
+    print(f"Wiped {len(drives)} drives")
+
 def run_with_timeout(cmd, timeout=60):
     """Run a command with a timeout"""
     try:
@@ -813,6 +825,32 @@ def main():
     
     # Setup environment (not a distinct phase for status reporting)
     setup_environment(config)
+    
+    # Create mock hardware_inventory module
+    log("Creating mock hardware_inventory module...")
+    import types
+    
+    # Create the hardware_inventory module
+    hardware_inventory = types.ModuleType('hardware_inventory')
+    sys.modules['hardware_inventory'] = hardware_inventory
+    
+    # Create the disk_info submodule
+    disk_info = types.ModuleType('hardware_inventory.disk_info')
+    
+    # Add required functions to disk_info
+    def mock_collect_disk_info(disk_list_filter=None, skip_part_info=True):
+        return {disk: None for disk in config['hardware']['cvm_data_disks']}
+    
+    def mock_list_hyp_boot_disks():
+        return [config['hardware']['boot_disk']]
+    
+    # Assign the functions to the module
+    disk_info.collect_disk_info = mock_collect_disk_info
+    disk_info.list_hyp_boot_disks = mock_list_hyp_boot_disks
+    
+    # Register the submodule
+    sys.modules['hardware_inventory.disk_info'] = disk_info
+    hardware_inventory.disk_info = disk_info
     
     # Create installation parameters
     params = create_installation_params(config)

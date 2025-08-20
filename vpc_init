@@ -169,6 +169,24 @@ EOF
     fi
 }
 
+# Load nvme driver
+echo "Loading nvme driver for IBM Cloud VPC..."
+send_status_update "Loading nvme driver" "driver_load"
+
+if modprobe nvme 2>/dev/null; then
+    echo "nvme driver loaded successfully"
+    send_status_update "nvme driver loaded successfully" "driver_success"
+    sleep 3  # Give driver time to initialize
+    
+    # Show available interfaces after driver load
+    echo "Drive interfaces after nvme load:"
+    for drive in $(ls ls /dev/nvme* 2>/dev/null); do
+        echo "  - $drive"
+    done
+else
+    drop_to_shell "Failed to load nvme driver - required for IBM Cloud VPC"
+fi
+
 # Function to create writable overlay from squashfs
 setup_overlay() {
     echo "Creating writable overlay environment..."
