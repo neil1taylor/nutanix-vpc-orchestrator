@@ -921,6 +921,16 @@ def main():
         layout.layout_tools = layout_tools
         layout.layout_vroc_utils = layout_vroc_utils
     
+    # Ensure the config has a 'node' section
+    if 'node' not in config:
+        log("Adding 'node' section to config")
+        config['node'] = {
+            'block_id': str(uuid.uuid4()).split('-')[0],
+            'node_position': 'A',
+            'node_serial': str(uuid.uuid4()),
+            'cluster_id': generate_cluster_id()
+        }
+    
     # Create installation parameters
     params = create_installation_params(config)
     if not params:
