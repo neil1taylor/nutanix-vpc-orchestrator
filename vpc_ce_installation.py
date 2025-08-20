@@ -832,10 +832,15 @@ def main():
     if phoenix_dir not in sys.path:
         sys.path.insert(0, phoenix_dir)
     
-    # Also add /usr/lib/python3.9/site-packages
-    site_packages = '/usr/lib/python3.9/site-packages'
-    if site_packages not in sys.path:
-        sys.path.insert(0, site_packages)
+    # Also add Python site-packages directories
+    site_packages_paths = [
+        '/usr/lib/python3.9/site-packages',
+        '/usr/lib/python3.6/site-packages'  # Contains the six module
+    ]
+    
+    for site_packages in site_packages_paths:
+        if site_packages not in sys.path:
+            sys.path.insert(0, site_packages)
     
     # Create mock hardware_inventory module as fallback
     try:
