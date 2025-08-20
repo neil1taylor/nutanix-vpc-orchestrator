@@ -867,6 +867,51 @@ def main():
         sys.modules['hardware_inventory.disk_info'] = disk_info
         hardware_inventory.disk_info = disk_info
     
+    # Create mock layout module as fallback
+    try:
+        import layout
+        log("Found layout module")
+    except ImportError:
+        log("Creating mock layout module...")
+        import types
+        
+        # Create the layout module
+        layout = types.ModuleType('layout')
+        sys.modules['layout'] = layout
+        
+        # Create layout.layout_finder
+        layout_finder = types.ModuleType('layout.layout_finder')
+        layout_finder.find_model_match = lambda: (None, "CommunityEdition", "Nutanix Community Edition")
+        layout_finder.is_layout_supported = lambda: True
+        layout_finder.set_hw_attributes_override = lambda x: None
+        layout_finder.get_layout = lambda x: {"node": {"boot_device": {"structure": "HYPERVISOR_ONLY"}}}
+        layout_finder.get_vpd_info = lambda: {}
+        sys.modules['layout.layout_finder'] = layout_finder
+        
+        # Create layout.layout_tools
+        layout_tools = types.ModuleType('layout.layout_tools')
+        layout_tools.get_boot_device_from_layout = lambda layout, lun_index=0, exclude_boot_serial=None: None
+        layout_tools.normalize_node_number = lambda x: 1
+        layout_tools.get_hyp_raid_info_from_layout = lambda layout: (None, None)
+        layout_tools.get_raid_boot_devices_info = lambda structure, raid_ctl: []
+        sys.modules['layout.layout_tools'] = layout_tools
+        
+        # Create layout.layout_vroc_utils
+        layout_vroc_utils = types.ModuleType('layout.layout_vroc_utils')
+        layout_vroc_utils.get_vroc_boot_devices = lambda volume: []
+        layout_vroc_utils.get_vroc_volume_size = lambda volume: 0
+        layout_vroc_utils.get_boot_device_info = lambda dev: None
+        layout_vroc_utils.get_vroc_volume = lambda path: None
+        layout_vroc_utils.get_vroc_volumes = lambda: []
+        layout_vroc_utils.get_md_volumes = lambda exclude_volumes=None: []
+        layout_vroc_utils.get_hyp_raid_volume_excluded_mds = lambda: []
+        sys.modules['layout.layout_vroc_utils'] = layout_vroc_utils
+        
+        # Add submodules to parent modules
+        layout.layout_finder = layout_finder
+        layout.layout_tools = layout_tools
+        layout.layout_vroc_utils = layout_vroc_utils
+    
     # Create installation parameters
     params = create_installation_params(config)
     if not params:
