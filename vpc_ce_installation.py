@@ -923,6 +923,43 @@ def main():
         layout.layout_tools = layout_tools
         layout.layout_vroc_utils = layout_vroc_utils
     
+    # Create mock lxml module
+    try:
+        import lxml
+        log("Found lxml module")
+    except ImportError:
+        log("Creating mock lxml module...")
+        import types
+        
+        # Create the lxml module
+        lxml = types.ModuleType('lxml')
+        sys.modules['lxml'] = lxml
+        
+        # Create lxml.etree submodule
+        etree = types.ModuleType('lxml.etree')
+        
+        # Add minimal functionality
+        class Element:
+            def __init__(self, tag, attrib=None, **extra):
+                self.tag = tag
+                self.attrib = attrib or {}
+                self.text = None
+                self.tail = None
+                self._children = []
+            
+            def append(self, element):
+                self._children.append(element)
+        
+        etree.Element = Element
+        etree.SubElement = lambda parent, tag, attrib=None, **extra: Element(tag, attrib, **extra)
+        etree.tostring = lambda element, **kwargs: b"<mock_xml />"
+        etree.fromstring = lambda text, **kwargs: Element("mock")
+        etree.parse = lambda source, **kwargs: type('MockElementTree', (), {'getroot': lambda self: Element("root")})()
+        
+        # Register the submodule
+        sys.modules['lxml.etree'] = etree
+        lxml.etree = etree
+    
     # Ensure the config has a 'node' section
     if 'node' not in config:
         log("Adding 'node' section to config")
