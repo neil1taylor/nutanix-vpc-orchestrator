@@ -484,9 +484,9 @@ def setup_environment(config):
     os.environ['COMMUNITY_EDITION'] = 'true'
     os.environ['AUTOMATED_INSTALL'] = 'true'
     
-    # Set up Python path
-    sys.path.insert(0, '/root/phoenix')
-    sys.path.insert(0, '/root/.local/lib/python3.9/site-packages')
+    # Set up Python path with correct locations
+    sys.path.insert(0, '/phoenix')
+    sys.path.insert(0, '/usr/lib/python3.9')
     
     # Mock /proc/cmdline with config values
     def mock_cmdline():
@@ -831,6 +831,41 @@ def main():
     phoenix_dir = '/phoenix'
     if phoenix_dir not in sys.path:
         sys.path.insert(0, phoenix_dir)
+    
+    # Also add /usr/lib/python3.9/site-packages
+    site_packages = '/usr/lib/python3.9/site-packages'
+    if site_packages not in sys.path:
+        sys.path.insert(0, site_packages)
+    
+    # Create mock hardware_inventory module as fallback
+    try:
+        import hardware_inventory
+        log("Found hardware_inventory module")
+    except ImportError:
+        log("Creating mock hardware_inventory module...")
+        import types
+        
+        # Create the hardware_inventory module
+        hardware_inventory = types.ModuleType('hardware_inventory')
+        sys.modules['hardware_inventory'] = hardware_inventory
+        
+        # Create the disk_info submodule
+        disk_info = types.ModuleType('hardware_inventory.disk_info')
+        
+        # Add required functions to disk_info
+        def mock_collect_disk_info(disk_list_filter=None, skip_part_info=True):
+            return {disk: None for disk in config['hardware']['cvm_data_disks']}
+        
+        def mock_list_hyp_boot_disks():
+            return [config['hardware']['boot_disk']]
+        
+        # Assign the functions to the module
+        disk_info.collect_disk_info = mock_collect_disk_info
+        disk_info.list_hyp_boot_disks = mock_list_hyp_boot_disks
+        
+        # Register the submodule
+        sys.modules['hardware_inventory.disk_info'] = disk_info
+        hardware_inventory.disk_info = disk_info
     
     # Create installation parameters
     params = create_installation_params(config)
