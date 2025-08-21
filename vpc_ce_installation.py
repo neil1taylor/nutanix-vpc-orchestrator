@@ -506,8 +506,35 @@ add_drivers+=" nvme nvme-core ionic "
            log("Could not find ionic.ko module in the current environment")
            log("Will rely on the module being included in the AHV image")
        
+       # Detect the correct kernel version
+       log("Detecting kernel version...")
+       result = subprocess.run(['chroot', '/mnt/stage', 'ls', '-1', '/lib/modules'],
+                             capture_output=True, text=True)
+       
+       if result.returncode == 0 and result.stdout.strip():
+           # Use the first kernel version found
+           kernel_version = result.stdout.strip().split('\n')[0]
+           log(f"Detected kernel version: {kernel_version}")
+       else:
+           # Fallback to a common version format, trying both el8 and e18 variants
+           log("Could not detect kernel version, using fallback versions")
+           kernel_versions = [
+               "5.10.194-5.20230302.0.991650.el8.x86_64"
+           ]
+           
+           # Check which kernel version exists
+           for version in kernel_versions:
+               if os.path.exists(f'/mnt/stage/lib/modules/{version}'):
+                   kernel_version = version
+                   log(f"Found kernel version: {kernel_version}")
+                   break
+           else:
+               # If none found, use the first one as default
+               kernel_version = kernel_versions[0]
+               log(f"No kernel version found, using default: {kernel_version}")
+       
        # Run dracut to generate the initramfs
-       kernel_version = "5.10.194-5.20230302.0.991650.el8.x86_64"
+       log(f"Generating initramfs for kernel version {kernel_version}")
        result = subprocess.run(['chroot', '/mnt/stage', 'dracut', '--force',
                                f'/boot/initramfs-{kernel_version}.img',
                                kernel_version],
@@ -533,6 +560,57 @@ add_drivers+=" nvme nvme-core ionic "
                       'grub2-efi-x64', 'grub2-tools', 'efibootmgr', 'shim-x64'],
                      capture_output=True, text=True)
        
+       # Find the actual kernel file
+       log("Locating kernel file...")
+       kernel_locations = [
+           f'/mnt/stage/boot/vmlinuz-{kernel_version}',
+           f'/mnt/stage/boot/vmlinux-{kernel_version}',
+           f'/mnt/stage/vmlinuz-{kernel_version}',
+           f'/mnt/stage/vmlinux-{kernel_version}'
+       ]
+       
+       kernel_path = None
+       for location in kernel_locations:
+           if os.path.exists(location):
+               kernel_path = location.replace('/mnt/stage', '')
+               log(f"Found kernel at: {kernel_path}")
+               break
+       
+       if not kernel_path:
+           log("Kernel file not found, searching for any kernel...")
+           result = subprocess.run(['find', '/mnt/stage/boot', '-name', 'vmlinuz-*'],
+                                 capture_output=True, text=True)
+           
+           if result.stdout.strip():
+               kernel_path = result.stdout.strip().split('\n')[0].replace('/mnt/stage', '')
+               # Extract kernel version from the path
+               kernel_version = os.path.basename(kernel_path).replace('vmlinuz-', '')
+               log(f"Found kernel at: {kernel_path} with version {kernel_version}")
+           else:
+               # Last resort - use a default path
+               kernel_path = f'/boot/vmlinuz-{kernel_version}'
+               log(f"No kernel found, using default path: {kernel_path}")
+       
+       # Find the initramfs file
+       log("Locating initramfs file...")
+       initramfs_locations = [
+           f'/mnt/stage/boot/initramfs-{kernel_version}.img',
+           f'/mnt/stage/boot/initrd-{kernel_version}.img',
+           f'/mnt/stage/boot/initrd.img-{kernel_version}'
+       ]
+       
+       initramfs_path = None
+       for location in initramfs_locations:
+           if os.path.exists(location):
+               initramfs_path = location.replace('/mnt/stage', '')
+               log(f"Found initramfs at: {initramfs_path}")
+               break
+       
+       if not initramfs_path:
+           # Use the default path
+           initramfs_path = f'/boot/initramfs-{kernel_version}.img'
+           log(f"No initramfs found, using default path: {initramfs_path}")
+       
        # Create a GRUB configuration file with automatic boot
        grub_config = f"""# Force GRUB to boot automatically
 set default=0
@@ -547,9 +625,9 @@ set check_signatures=no
 # Boot entry
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
    echo 'Loading Linux kernel...'
-   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet
+   linux {kernel_path} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet
    echo 'Loading initial ramdisk...'
-   initrd /boot/initramfs-{kernel_version}.img
+   initrd {initramfs_path}
 }}
 """
        
@@ -672,8 +750,8 @@ GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nv
        if result.returncode == 0:
            # Create an EFI stub
            result = subprocess.run(['chroot', '/mnt/stage', 'objcopy',
-                                  '--add-section', f'.linux=/boot/vmlinuz-{kernel_version}',
-                                  '--add-section', f'.initrd=/boot/initramfs-{kernel_version}.img',
+                                  '--add-section', f'.linux={kernel_path}',
+                                  '--add-section', f'.initrd={initramfs_path}',
                                   '--add-section', '.cmdline=/tmp/cmdline.txt',
                                   '--change-section-vma', '.linux=0x2000000',
                                   '--change-section-vma', '.initrd=0x3000000',
