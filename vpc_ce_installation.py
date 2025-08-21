@@ -520,243 +520,234 @@ add_drivers+=" nvme nvme-core ionic "
            log("Successfully generated initramfs with NVMe support")
        
        # Install GRUB bootloader
-       log("Installing GRUB bootloader...")
+       log("Installing GRUB bootloader with comprehensive approach...")
        
        # Create necessary directories for GRUB installation
        os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
+       os.makedirs('/mnt/stage/boot/efi/EFI/NUTANIX', exist_ok=True)
+       os.makedirs('/mnt/stage/boot/grub2', exist_ok=True)
        
-       # Check if grub2-install is available
-       result = subprocess.run(['chroot', '/mnt/stage', 'which', 'grub2-install'],
-                              capture_output=True, text=True)
+       # Install required packages
+       log("Installing required GRUB packages...")
+       subprocess.run(['chroot', '/mnt/stage', 'yum', 'install', '-y',
+                      'grub2-efi-x64', 'grub2-tools', 'efibootmgr', 'shim-x64'],
+                     capture_output=True, text=True)
        
-       if result.returncode != 0:
-           log("grub2-install not found, trying to install it...")
-           # Try to install grub2 packages
-           subprocess.run(['chroot', '/mnt/stage', 'yum', 'install', '-y', 'grub2-efi-x64', 'grub2-tools', 'efibootmgr'],
-                         capture_output=True, text=True)
+       # Create a GRUB configuration file with automatic boot
+       grub_config = f"""# Force GRUB to boot automatically
+set default=0
+set timeout=0
+set timeout_style=hidden
+set gfxpayload=keep
+
+# Disable all interactive features
+set pager=1
+set check_signatures=no
+
+# Boot entry
+menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
+   echo 'Loading Linux kernel...'
+   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet
+   echo 'Loading initial ramdisk...'
+   initrd /boot/initramfs-{kernel_version}.img
+}}
+"""
        
-       # Check if efibootmgr is available
-       result = subprocess.run(['chroot', '/mnt/stage', 'which', 'efibootmgr'],
-                              capture_output=True, text=True)
+       # Write GRUB configuration to all possible locations
+       log("Writing GRUB configuration to multiple locations...")
+       config_locations = [
+           '/mnt/stage/boot/grub2/grub.cfg',
+           '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg',
+           '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg',
+           '/mnt/stage/etc/grub2-efi.cfg',
+           '/mnt/stage/etc/grub2.cfg'
+       ]
        
-       if result.returncode != 0:
-           log("efibootmgr not found, trying to install it...")
-           # Try to install efibootmgr package
-           subprocess.run(['chroot', '/mnt/stage', 'yum', 'install', '-y', 'efibootmgr'],
-                         capture_output=True, text=True)
+       for config_path in config_locations:
+           os.makedirs(os.path.dirname(config_path), exist_ok=True)
+           with open(config_path, 'w') as f:
+               f.write(grub_config)
+           log(f"Created GRUB configuration at {config_path}")
        
-       # Install GRUB to the EFI partition
-       log("Running grub2-install...")
+       # Create GRUB defaults file to ensure automatic boot
+       with open('/mnt/stage/etc/default/grub', 'w') as f:
+           f.write("""GRUB_TIMEOUT=0
+GRUB_TIMEOUT_STYLE=hidden
+GRUB_DISTRIBUTOR="Nutanix AHV"
+GRUB_DEFAULT=0
+GRUB_DISABLE_RECOVERY=true
+GRUB_DISABLE_SUBMENU=true
+GRUB_TERMINAL="console serial"
+GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
+GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet"
+""".format(boot_disk=boot_disk))
+       log("Created GRUB defaults file")
+       
+       # Try multiple GRUB installation methods
+       log("Attempting multiple GRUB installation methods...")
+       
+       # Method 1: Standard grub2-install
+       log("Method 1: Standard grub2-install...")
        result = subprocess.run(['chroot', '/mnt/stage', 'grub2-install', '--target=x86_64-efi',
                                '--efi-directory=/boot/efi', '--bootloader-id=NUTANIX',
                                '--boot-directory=/boot', f'{boot_device}'],
                                capture_output=True, text=True)
        
-       if result.returncode != 0:
-           log(f"Failed to install GRUB bootloader: {result.stderr}")
-           log("Trying alternative GRUB installation method...")
-           
-           # Try to find GRUB EFI binary in the system
-           grub_binary_found = False
-           
-           # Check if the GRUB EFI binary was created despite the error
-           if os.path.exists('/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi'):
-               log("Found GRUB EFI binary at /mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi")
-               result = subprocess.run(['cp', '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi',
-                                       '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'],
-                                       capture_output=True, text=True)
-               if result.returncode == 0:
-                   grub_binary_found = True
-                   log("Copied GRUB EFI binary to standard EFI location")
-           
-           # If not found in the expected location, search for it
-           if not grub_binary_found:
-               # Try to find the GRUB EFI binary in the AHV ISO
-               result = subprocess.run(['find', '/mnt/ahv', '-name', 'grubx64.efi'],
-                                       capture_output=True, text=True)
-               
-               if result.stdout.strip():
-                   grub_paths = result.stdout.strip().split('\n')
-                   for grub_path in grub_paths:
-                       log(f"Found GRUB EFI binary at {grub_path}")
-                       os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
-                       cp_result = subprocess.run(['cp', grub_path, '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'],
-                                                 capture_output=True, text=True)
-                       if cp_result.returncode == 0:
-                           grub_binary_found = True
-                           log("Copied GRUB EFI binary to standard EFI location")
-                           break
-               
-               # If still not found, try to extract it from the GRUB package
-               if not grub_binary_found:
-                   log("Trying to extract GRUB EFI binary from package...")
-                   # Create a temporary directory for extraction
-                   os.makedirs('/tmp/grub_extract', exist_ok=True)
-                   
-                   # Try to find GRUB package in the AHV ISO
-                   result = subprocess.run(['find', '/mnt/ahv', '-name', 'grub2-efi-x64*.rpm'],
-                                          capture_output=True, text=True)
-                   
-                   if result.stdout.strip():
-                       grub_pkg = result.stdout.strip().split('\n')[0]
-                       log(f"Found GRUB package at {grub_pkg}")
-                       
-                       # Extract the package
-                       extract_result = subprocess.run(['rpm2cpio', grub_pkg, '|', 'cpio', '-idmv', '-D', '/tmp/grub_extract'],
-                                                      shell=True, capture_output=True, text=True)
-                       
-                       # Find the GRUB EFI binary in the extracted package
-                       find_result = subprocess.run(['find', '/tmp/grub_extract', '-name', 'grubx64.efi'],
-                                                   capture_output=True, text=True)
-                       
-                       if find_result.stdout.strip():
-                           extracted_grub = find_result.stdout.strip().split('\n')[0]
-                           log(f"Found extracted GRUB EFI binary at {extracted_grub}")
-                           
-                           # Copy it to the standard EFI location
-                           cp_result = subprocess.run(['cp', extracted_grub, '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'],
-                                                     capture_output=True, text=True)
-                           
-                           if cp_result.returncode == 0:
-                               grub_binary_found = True
-                               log("Copied extracted GRUB EFI binary to standard EFI location")
-           
-           # If we still couldn't find the GRUB binary, create a simple one
-           if not grub_binary_found:
-               log("Could not find GRUB EFI binary, trying alternative boot methods")
-               
-               # Try to find a bootx64.efi file in the AHV ISO
-               result = subprocess.run(['find', '/mnt/ahv', '-name', 'bootx64.efi'],
-                                     capture_output=True, text=True)
-               
-               if result.stdout.strip():
-                   # Found a bootx64.efi file, copy it to the standard location
-                   bootx64_path = result.stdout.strip().split('\n')[0]
-                   log(f"Found bootx64.efi at {bootx64_path}")
-                   os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
-                   subprocess.run(['cp', bootx64_path, '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'])
-                   log("Copied bootx64.efi to standard EFI location")
-                   
-                   # Create a GRUB configuration file for the bootloader
-                   with open('/mnt/stage/boot/efi/EFI/BOOT/grub.cfg', 'w') as f:
-                       f.write(f"""set default=0
-set timeout=0
-set timeout_style=hidden
-
-menuentry 'Nutanix AHV' {{
-linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
-initrd /boot/initramfs-{kernel_version}.img
-}}
-""")
-                   log("Created GRUB configuration file for bootx64.efi")
-               else:
-                   # Create a simple EFI boot entry that directly loads the kernel
-                   os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
-               
-               # Create a simple GRUB configuration file
-               with open('/mnt/stage/boot/efi/EFI/BOOT/grub.cfg', 'w') as f:
-                   f.write(f"""set default=0
-set timeout=0
-set timeout_style=hidden
-
-menuentry 'Nutanix AHV' {{
-linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
-initrd /boot/initramfs-{kernel_version}.img
-}}
-""")
-               
-               log("Created simple GRUB configuration file")
-               
-               # Try to create a simple EFI stub that can boot directly
-               log("Attempting to create EFI stub...")
-               
-               # Check if objcopy is available to create an EFI stub
-               result = subprocess.run(['chroot', '/mnt/stage', 'which', 'objcopy'],
-                                     capture_output=True, text=True)
-               
-               if result.returncode == 0:
-                   # Create an EFI stub that can boot directly
-                   # Create a cmdline file with the kernel parameters
-                   with open('/mnt/stage/tmp/cmdline.txt', 'w') as f:
-                       f.write(f"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic")
-                   
-                   # Create an EFI stub with the cmdline
-                   result = subprocess.run(['chroot', '/mnt/stage', 'objcopy',
-                                          '--add-section', f'.linux=/boot/vmlinuz-{kernel_version}',
-                                          '--add-section', f'.initrd=/boot/initramfs-{kernel_version}.img',
-                                          '--add-section', '.cmdline=/tmp/cmdline.txt',
-                                          '--change-section-vma', '.linux=0x2000000',
-                                          '--change-section-vma', '.initrd=0x3000000',
-                                          '--change-section-vma', '.cmdline=0x30000',
-                                          '/usr/lib/systemd/boot/efi/linuxx64.efi.stub',
-                                          '/boot/efi/EFI/BOOT/BOOTX64.EFI'],
-                                         capture_output=True, text=True)
-                   
-                   if result.returncode == 0:
-                       log("Successfully created EFI stub")
-                   else:
-                       log(f"Failed to create EFI stub: {result.stderr}")
+       if result.returncode == 0:
+           log("Standard grub2-install succeeded")
        else:
-           log("GRUB bootloader installed successfully")
+           log(f"Standard grub2-install failed: {result.stderr}")
+       
+       # Method 2: Copy GRUB binaries directly
+       log("Method 2: Copying GRUB binaries directly...")
+       
+       # Find all possible GRUB EFI binaries
+       grub_binaries = []
+       search_paths = [
+           '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi',
+           '/mnt/stage/usr/lib/grub/x86_64-efi/grubx64.efi',
+           '/mnt/stage/usr/share/grub/grubx64.efi'
+       ]
+       
+       # Also search the AHV ISO
+       result = subprocess.run(['find', '/mnt/ahv', '-name', 'grubx64.efi'],
+                             capture_output=True, text=True)
+       if result.stdout.strip():
+           search_paths.extend(result.stdout.strip().split('\n'))
+       
+       # Check which binaries exist
+       for path in search_paths:
+           if os.path.exists(path):
+               grub_binaries.append(path)
+               log(f"Found GRUB binary at {path}")
+       
+       # Copy all found binaries to standard locations
+       if grub_binaries:
+           for binary in grub_binaries:
+               # Copy to BOOT directory
+               subprocess.run(['cp', binary, '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'])
+               # Copy to NUTANIX directory
+               subprocess.run(['cp', binary, '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi'])
+           log("Copied GRUB binaries to standard locations")
+       else:
+           log("No GRUB binaries found, attempting to extract from packages...")
            
-           # Create a fallback EFI boot entry
-           os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
-           subprocess.run(['cp', '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi',
-                          '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'])
-           log("Created fallback EFI boot entry")
+           # Try to extract from RPM packages
+           os.makedirs('/tmp/grub_extract', exist_ok=True)
+           result = subprocess.run(['find', '/mnt/ahv', '-name', 'grub2-efi-x64*.rpm'],
+                                 capture_output=True, text=True)
            
-           # Create a GRUB configuration file for the fallback bootloader
-           with open('/mnt/stage/boot/efi/EFI/BOOT/grub.cfg', 'w') as f:
-               f.write(f"""set default=0
-set timeout=0
-set timeout_style=hidden
-
-menuentry 'Nutanix AHV' {{
-linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
-initrd /boot/initramfs-{kernel_version}.img
-}}
-""")
-           log("Created GRUB configuration file for fallback EFI boot entry")
+           if result.stdout.strip():
+               grub_pkg = result.stdout.strip().split('\n')[0]
+               log(f"Found GRUB package at {grub_pkg}")
+               
+               # Extract the package
+               extract_result = subprocess.run(['rpm2cpio', grub_pkg, '|', 'cpio', '-idmv', '-D', '/tmp/grub_extract'],
+                                             shell=True, capture_output=True, text=True)
+               
+               # Find the GRUB EFI binary in the extracted package
+               find_result = subprocess.run(['find', '/tmp/grub_extract', '-name', 'grubx64.efi'],
+                                         capture_output=True, text=True)
+               
+               if find_result.stdout.strip():
+                   extracted_grub = find_result.stdout.strip().split('\n')[0]
+                   log(f"Found extracted GRUB EFI binary at {extracted_grub}")
+                   
+                   # Copy to standard locations
+                   subprocess.run(['cp', extracted_grub, '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'])
+                   subprocess.run(['cp', extracted_grub, '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi'])
+                   log("Copied extracted GRUB binary to standard locations")
+       
+       # Method 3: Create EFI stub
+       log("Method 3: Creating EFI stub...")
+       
+       # Create a cmdline file with the kernel parameters
+       with open('/mnt/stage/tmp/cmdline.txt', 'w') as f:
+           f.write(f"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet")
+       
+       # Check if objcopy is available
+       result = subprocess.run(['chroot', '/mnt/stage', 'which', 'objcopy'],
+                             capture_output=True, text=True)
+       
+       if result.returncode == 0:
+           # Create an EFI stub
+           result = subprocess.run(['chroot', '/mnt/stage', 'objcopy',
+                                  '--add-section', f'.linux=/boot/vmlinuz-{kernel_version}',
+                                  '--add-section', f'.initrd=/boot/initramfs-{kernel_version}.img',
+                                  '--add-section', '.cmdline=/tmp/cmdline.txt',
+                                  '--change-section-vma', '.linux=0x2000000',
+                                  '--change-section-vma', '.initrd=0x3000000',
+                                  '--change-section-vma', '.cmdline=0x30000',
+                                  '/usr/lib/systemd/boot/efi/linuxx64.efi.stub',
+                                  '/boot/efi/EFI/BOOT/BOOTX64.EFI.stub'],
+                                 capture_output=True, text=True)
            
-           # Also create a grub.cfg in the NUTANIX directory
-           with open('/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg', 'w') as f:
-               f.write(f"""set default=0
-set timeout=0
-set timeout_style=hidden
-
-menuentry 'Nutanix AHV' {{
-linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
-initrd /boot/initramfs-{kernel_version}.img
-}}
-""")
-           log("Created GRUB configuration file in NUTANIX directory")
-           
-           # Create a grub.cfg in the /boot/grub2 directory
-           os.makedirs('/mnt/stage/boot/grub2', exist_ok=True)
-           with open('/mnt/stage/boot/grub2/grub.cfg', 'w') as f:
-               f.write(f"""set default=0
-set timeout=0
-set timeout_style=hidden
-
-menuentry 'Nutanix AHV' {{
-linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
-initrd /boot/initramfs-{kernel_version}.img
-}}
-""")
-           log("Created GRUB configuration file in /boot/grub2 directory")
+           if result.returncode == 0:
+               log("Successfully created EFI stub")
+               # Copy it as a fallback
+               subprocess.run(['cp', '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI.stub',
+                             '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI.backup'])
+           else:
+               log(f"Failed to create EFI stub: {result.stderr}")
+       
+       # Method 4: Generate GRUB configuration with grub2-mkconfig
+       log("Method 4: Generating GRUB configuration with grub2-mkconfig...")
+       result = subprocess.run(['chroot', '/mnt/stage', 'grub2-mkconfig', '-o', '/boot/grub2/grub.cfg'],
+                             capture_output=True, text=True)
+       
+       if result.returncode == 0:
+           log("Successfully generated GRUB configuration with grub2-mkconfig")
+           # Copy the generated config to other locations
+           subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg'])
+           subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg'])
+       else:
+           log(f"Failed to generate GRUB configuration with grub2-mkconfig: {result.stderr}")
        
        # Create EFI NVRAM entries
        log("Creating EFI NVRAM entries...")
+       
+       # First, clear any existing entries
+       subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--delete-all'],
+                     capture_output=True, text=True)
+       
+       # Create new entry for NUTANIX
        result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--create',
                                '--disk', f'{boot_device}', '--part', '1',
                                '--label', 'Nutanix AHV', '--loader', '/EFI/NUTANIX/grubx64.efi'],
                                capture_output=True, text=True)
        
-       if result.returncode != 0:
-           log(f"Failed to create EFI NVRAM entry: {result.stderr}")
-           log("This is not critical as the fallback EFI boot entry should work")
+       if result.returncode == 0:
+           log("Successfully created EFI NVRAM entry for NUTANIX")
        else:
-           log("EFI NVRAM entry created successfully")
+           log(f"Failed to create EFI NVRAM entry for NUTANIX: {result.stderr}")
+       
+       # Create fallback entry for BOOT
+       result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--create',
+                               '--disk', f'{boot_device}', '--part', '1',
+                               '--label', 'Fallback Boot', '--loader', '/EFI/BOOT/BOOTX64.EFI'],
+                               capture_output=True, text=True)
+       
+       if result.returncode == 0:
+           log("Successfully created EFI NVRAM entry for fallback boot")
+       else:
+           log(f"Failed to create EFI NVRAM entry for fallback boot: {result.stderr}")
+       
+       # Set boot order to try NUTANIX first, then fallback
+       result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--bootorder', '0000,0001'],
+                             capture_output=True, text=True)
+       
+       if result.returncode == 0:
+           log("Successfully set EFI boot order")
+       else:
+           log(f"Failed to set EFI boot order: {result.stderr}")
+       
+       # Create a startup.nsh script for emergency boot
+       with open('/mnt/stage/boot/efi/startup.nsh', 'w') as f:
+           f.write(f"""@echo -off
+echo Loading Nutanix AHV...
+\\EFI\\BOOT\\BOOTX64.EFI
+""")
+       log("Created startup.nsh script for emergency boot")
        
        # Cleanup - unmount everything
        cleanup_mounts()
