@@ -783,8 +783,24 @@ def run_nutanix_installation(params, config):
             os.makedirs('/mnt/svm_installer', exist_ok=True)
             
             log("Calling imagingUtil.image_node...")
-            imagingUtil.image_node(params)
-            log("imagingUtil.image_node completed successfully")
+            try:
+                imagingUtil.image_node(params)
+                log("imagingUtil.image_node completed successfully")
+            except Exception as e:
+                # Check if the error is about unmounting /tmp/svm_install_chroot/dev
+                error_str = str(e)
+                if "umount /tmp/svm_install_chroot/dev" in error_str and "target is busy" in error_str:
+                    log("Warning: Could not unmount /tmp/svm_install_chroot/dev, but this is not critical")
+                    log("Continuing with installation...")
+                    # Force unmount the directory
+                    try:
+                        log("Attempting to force unmount /tmp/svm_install_chroot/dev...")
+                        subprocess.run(['umount', '-f', '/tmp/svm_install_chroot/dev'], check=False)
+                    except:
+                        pass
+                else:
+                    # Re-raise the exception if it's not the unmount error
+                    raise
         except Exception as e:
             log(f"Error during image_node: {e}")
             import traceback
