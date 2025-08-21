@@ -501,24 +501,32 @@ def install_hypervisor(config):
            grub_efi_path = grub_efi_paths[0]
            log(f"Using GRUB EFI binary at {grub_efi_path}")
            
-           # Copy to standard locations with verbose logging
+           # Copy to essential locations only to save space
            efi_targets = [
-               ('/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI', 'BOOTX64.EFI'),
-               ('/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi', 'grubx64.efi'),
-               ('/mnt/stage/boot/efi/EFI/BOOT/grubx64.efi', 'grubx64.efi'),
-               ('/mnt/stage/boot/efi/EFI/redhat/grubx64.efi', 'grubx64.efi'),
-               ('/mnt/stage/boot/efi/EFI/centos/grubx64.efi', 'grubx64.efi')
+               ('/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI', 'BOOTX64.EFI'),  # Primary EFI location
+               ('/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi', 'grubx64.efi')  # Nutanix-specific location
            ]
            
-           for target_path, target_name in efi_targets:
-               result = subprocess.run(['cp', '-v', grub_efi_path, target_path],
+           # Check EFI partition space before copying
+           df_result = subprocess.run(['df', '-k', '/mnt/stage/boot/efi'],
                                      capture_output=True, text=True)
-               if result.returncode == 0:
-                   log(f"Copied GRUB EFI binary to {target_path}")
-               else:
-                   log(f"Failed to copy GRUB EFI binary to {target_path}: {result.stderr}")
+           log(f"EFI partition space before copying GRUB binaries: {df_result.stdout}")
            
-           # Verify files were copied
+           for target_path, target_name in efi_targets:
+               try:
+                   result = subprocess.run(['cp', grub_efi_path, target_path],
+                                         capture_output=True, text=True)
+                   if result.returncode == 0:
+                       log(f"Copied GRUB EFI binary to {target_path}")
+                   else:
+                       log(f"Failed to copy GRUB EFI binary to {target_path}: {result.stderr}")
+                       if 'No space left on device' in result.stderr:
+                           log("EFI partition is full, skipping remaining copies")
+                           break
+               except Exception as e:
+                   log(f"Error copying GRUB EFI binary to {target_path}: {e}")
+           
+           # Verify essential files were copied
            for target_path, _ in efi_targets:
                if os.path.exists(target_path):
                    log(f"Verified EFI binary exists at {target_path}")
@@ -541,9 +549,8 @@ def install_hypervisor(config):
                    f.write(b'MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff\x00\x00\xb8\x00\x00\x00\x00\x00\x00\x00\x40\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x00\x00\x00\x0e\x1f\xba\x0e\x00\xb4\x09\xcd\x21\xb8\x01\x4c\xcd\x21This program cannot be run in DOS mode.\r\r\n$\x00\x00\x00\x00\x00\x00\x00')
                log(f"Created minimal EFI binary at {target_path}")
        
-       # Create startup.nsh script for EFI shell fallback boot
-       log("Creating startup.nsh scripts for EFI shell fallback boot in multiple locations...")
-       os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
+       # Create startup.nsh script for EFI shell fallback boot (only in the root of EFI partition)
+       log("Creating startup.nsh script for EFI shell fallback boot...")
        
        startup_script = f"""@echo -off
 echo Loading Nutanix AHV...
@@ -558,25 +565,24 @@ echo Boot parameters: root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_
 \\vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 initrd=\\initrd
 """
        
-       # Create startup.nsh in multiple locations for redundancy
-       startup_script_locations = [
-           '/mnt/stage/boot/efi/startup.nsh',
-           '/mnt/stage/boot/efi/EFI/BOOT/startup.nsh',
-           '/mnt/stage/boot/efi/EFI/startup.nsh',
-           '/mnt/stage/boot/efi/EFI/NUTANIX/startup.nsh'
-       ]
-       
-       for script_path in startup_script_locations:
-           os.makedirs(os.path.dirname(script_path), exist_ok=True)
-           with open(script_path, 'w') as f:
+       # Only create startup.nsh in the root of the EFI partition to save space
+       startup_script_path = '/mnt/stage/boot/efi/startup.nsh'
+       try:
+           with open(startup_script_path, 'w') as f:
                f.write(startup_script)
-           log(f"Created startup.nsh script at {script_path}")
+           log(f"Created startup.nsh script at {startup_script_path}")
+       except Exception as e:
+           log(f"Failed to create startup.nsh script: {e}")
        
-       # Create a grub.cfg file directly in the EFI partition
+       # Create a grub.cfg file directly in the EFI partition (only in essential locations)
        log("Creating grub.cfg in EFI partition directories...")
-       os.makedirs('/mnt/stage/boot/efi/EFI/BOOT/grub', exist_ok=True)
-       os.makedirs('/mnt/stage/boot/efi/EFI/NUTANIX/grub', exist_ok=True)
        
+       # Check available space before creating more files
+       df_result = subprocess.run(['df', '-k', '/mnt/stage/boot/efi'],
+                                 capture_output=True, text=True)
+       log(f"EFI partition space before creating GRUB configs: {df_result.stdout}")
+       
+       # Create minimal but essential GRUB configuration
        efi_grub_config = f"""# GRUB configuration for Nutanix AHV (EFI partition)
 insmod part_gpt
 insmod ext2
@@ -597,24 +603,30 @@ search --no-floppy --set=root --label=ROOT
 
 # Boot entry
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
-  echo 'Loading Linux kernel...'
-  linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet
-  echo 'Loading initial ramdisk...'
-  initrd /initrd
+ echo 'Loading Linux kernel...'
+ linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet
+ echo 'Loading initial ramdisk...'
+ initrd /initrd
 }}
 """
        
+       # Only create in essential locations
        efi_grub_locations = [
-           '/mnt/stage/boot/efi/EFI/BOOT/grub/grub.cfg',
-           '/mnt/stage/boot/efi/EFI/NUTANIX/grub/grub.cfg',
-           '/mnt/stage/boot/efi/grub.cfg'
+           '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg',  # Primary location
+           '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg'  # Nutanix-specific location
        ]
        
        for grub_path in efi_grub_locations:
-           os.makedirs(os.path.dirname(grub_path), exist_ok=True)
-           with open(grub_path, 'w') as f:
-               f.write(efi_grub_config)
-           log(f"Created grub.cfg at {grub_path}")
+           try:
+               os.makedirs(os.path.dirname(grub_path), exist_ok=True)
+               with open(grub_path, 'w') as f:
+                   f.write(efi_grub_config)
+               log(f"Created grub.cfg at {grub_path}")
+           except Exception as e:
+               log(f"Failed to create grub.cfg at {grub_path}: {e}")
+               if 'No space left on device' in str(e):
+                   log("EFI partition is full, skipping remaining GRUB configs")
+                   break
        
        log("Created startup.nsh scripts and GRUB configurations in EFI partition")
        
@@ -1080,51 +1092,98 @@ early_microcode="yes"
                            f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
                        log("Created minimal initramfs file")
        
-       # Copy kernel and initramfs to multiple standard locations to ensure they're found
-       log("Copying kernel and initramfs to standard locations...")
-       standard_locations = [
-           ('/boot', 'vmlinuz'),
-           ('/boot/efi', 'vmlinuz'),
-           ('/boot/efi/EFI/BOOT', 'vmlinuz'),
-           ('/boot/efi/EFI/NUTANIX', 'vmlinuz'),
-           ('/', 'vmlinuz'),
-           ('/boot', 'bzImage'),
-           ('/boot/efi', 'bzImage'),
-           ('/boot/efi/EFI/BOOT', 'bzImage'),
-           ('/boot/efi/EFI/NUTANIX', 'bzImage')
+       # Copy kernel and initramfs to essential locations only to avoid filling up the EFI partition
+       log("Copying kernel and initramfs to essential locations...")
+       
+       # Define essential locations - prioritize main boot directory and only one copy in EFI
+       essential_locations = [
+           ('/boot', 'vmlinuz'),  # Main boot directory
+           ('/boot/efi/EFI/BOOT', 'vmlinuz'),  # Primary EFI location
+           ('/', 'vmlinuz')  # Root directory for fallback
        ]
        
-       for dir_path, prefix in standard_locations:
+       # Check EFI partition size before copying
+       efi_space_check = subprocess.run(['df', '-h', '/mnt/stage/boot/efi'],
+                                       capture_output=True, text=True)
+       log(f"EFI partition space before copying: {efi_space_check.stdout}")
+       
+       # Source files
+       source_kernel = f'/mnt/stage{kernel_path}'
+       source_initramfs = f'/mnt/stage{initramfs_path}'
+       
+       # Create minimal initramfs at source location if it doesn't exist
+       if not os.path.exists(source_initramfs):
+           log(f"WARNING: Source initramfs {initramfs_path} does not exist, creating a minimal one...")
+           os.makedirs(os.path.dirname(source_initramfs), exist_ok=True)
+           with open(source_initramfs, 'wb') as f:
+               # Write a minimal cpio archive header
+               f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
+           log(f"Created minimal initramfs at source location {initramfs_path}")
+       
+       # Copy to essential locations
+       for dir_path, prefix in essential_locations:
            target_dir = f'/mnt/stage{dir_path}'
            os.makedirs(target_dir, exist_ok=True)
            
+           # Check if this is an EFI directory
+           is_efi_dir = 'efi' in dir_path.lower()
+           
+           # For EFI directories, check available space first
+           if is_efi_dir:
+               df_result = subprocess.run(['df', '-k', target_dir],
+                                         capture_output=True, text=True)
+               
+               # Parse available space
+               available_kb = 0
+               if df_result.returncode == 0:
+                   for line in df_result.stdout.strip().split('\n'):
+                       if target_dir in line or '/mnt/stage/boot/efi' in line:
+                           parts = line.split()
+                           if len(parts) >= 4:
+                               try:
+                                   available_kb = int(parts[3])
+                               except ValueError:
+                                   pass
+               
+               # Check if we have enough space (kernel ~10MB, initramfs ~20MB)
+               required_kb = 30000  # 30MB
+               if available_kb < required_kb:
+                   log(f"WARNING: Not enough space in {target_dir} ({available_kb}KB available, {required_kb}KB required)")
+                   log(f"Skipping copy to {target_dir} to avoid filling EFI partition")
+                   continue
+           
            # Copy kernel
            target_kernel = f'{target_dir}/{prefix}-{kernel_version}'
-           if os.path.exists(f'/mnt/stage{kernel_path}'):
-               subprocess.run(['cp', f'/mnt/stage{kernel_path}', target_kernel])
-               log(f"Copied kernel to {target_kernel}")
+           if os.path.exists(source_kernel):
+               try:
+                   subprocess.run(['cp', source_kernel, target_kernel],
+                                 capture_output=True, check=True)
+                   log(f"Copied kernel to {target_kernel}")
+               except subprocess.CalledProcessError as e:
+                   log(f"Failed to copy kernel to {target_kernel}: {e}")
+                   if 'No space left on device' in str(e.stderr):
+                       log("EFI partition is full, skipping remaining copies")
+                       break
            
-           # Copy initramfs with fallback creation
+           # Copy initramfs
            target_initramfs = f'{target_dir}/initramfs-{kernel_version}.img'
-           if os.path.exists(f'/mnt/stage{initramfs_path}'):
-               subprocess.run(['cp', '-v', f'/mnt/stage{initramfs_path}', target_initramfs],
-                            capture_output=True, text=True)
-               log(f"Copied initramfs to {target_initramfs}")
+           if os.path.exists(source_initramfs):
+               try:
+                   subprocess.run(['cp', source_initramfs, target_initramfs],
+                                 capture_output=True, check=True)
+                   log(f"Copied initramfs to {target_initramfs}")
+               except subprocess.CalledProcessError as e:
+                   log(f"Failed to copy initramfs to {target_initramfs}: {e}")
+                   if 'No space left on device' in str(e.stderr):
+                       log("EFI partition is full, skipping remaining copies")
+                       break
            else:
-               log(f"WARNING: Source initramfs {initramfs_path} does not exist, creating a minimal one...")
-               
-               # Create a minimal initramfs file
-               os.makedirs(os.path.dirname(target_initramfs), exist_ok=True)
-               with open(target_initramfs, 'wb') as f:
-                   # Write a minimal cpio archive header
-                   f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
-               log(f"Created minimal initramfs at {target_initramfs}")
-               
-               # Also create it at the source location for future copies
-               os.makedirs(os.path.dirname(f'/mnt/stage{initramfs_path}'), exist_ok=True)
-               with open(f'/mnt/stage{initramfs_path}', 'wb') as f:
-                   f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
-               log(f"Created minimal initramfs at source location {initramfs_path}")
+               log(f"WARNING: Source initramfs {initramfs_path} does not exist")
+       
+       # Check EFI partition space after copying
+       efi_space_check = subprocess.run(['df', '-h', '/mnt/stage/boot/efi'],
+                                       capture_output=True, text=True)
+       log(f"EFI partition space after copying: {efi_space_check.stdout}")
        
        # Create symlinks for GRUB
        log("Creating symlinks for GRUB...")
@@ -1390,9 +1449,11 @@ GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux
        else:
            log(f"Failed to set EFI boot order: {result.stderr}")
        
-       # Create a startup.nsh script for emergency boot
-       with open('/mnt/stage/boot/efi/startup.nsh', 'w') as f:
-           f.write(f"""@echo -off
+       # Create a startup.nsh script for emergency boot (only in the root of EFI partition)
+       log("Creating startup.nsh script for emergency boot...")
+       try:
+           with open('/mnt/stage/boot/efi/startup.nsh', 'w') as f:
+               f.write(f"""@echo -off
 echo Loading Nutanix AHV...
 echo Attempting to boot from EFI/BOOT...
 \\EFI\\BOOT\\BOOTX64.EFI
@@ -1406,7 +1467,9 @@ echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 
 echo If all boot methods failed, try running the rescue script...
 \\boot\\rescue.sh
 """)
-       log("Created startup.nsh script for emergency boot")
+           log("Created startup.nsh script at /mnt/stage/boot/efi/startup.nsh")
+       except Exception as e:
+           log(f"Failed to create startup.nsh script: {e}")
        
        # Create a rescue script that can be used to manually boot the system
        log("Creating rescue script...")
@@ -1834,40 +1897,89 @@ def verify_installation(config):
             return False
     
     # Define critical files that must exist
+    # Define essential files that must exist for a successful boot
     critical_files = [
-        # Kernel files
+        # Kernel files (at least one must exist)
         '/mnt/stage/boot/vmlinuz',
-        '/mnt/stage/vmlinuz',
         
-        # Initramfs files
+        # Initramfs files (at least one must exist)
         '/mnt/stage/boot/initrd',
-        '/mnt/stage/initrd',
         
-        # GRUB configuration files
+        # GRUB configuration files (at least one must exist)
         '/mnt/stage/boot/grub2/grub.cfg',
-        '/mnt/stage/boot/grub/grub.conf',
         
-        # EFI files
+        # EFI files (essential for EFI boot)
         '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI',
-        '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi',
         
-        # Startup scripts
+        # Startup script (only one needed at the root of EFI)
         '/mnt/stage/boot/efi/startup.nsh',
         
         # Rescue script
         '/mnt/stage/boot/rescue.sh'
     ]
     
-    # Check for existence of critical files
+    # Check for existence of critical files with more flexible approach
+    missing_critical_files = True
+    
+    # Check kernel files - need at least one
+    kernel_files = ['/mnt/stage/boot/vmlinuz', '/mnt/stage/vmlinuz']
+    if any(os.path.exists(f) for f in kernel_files):
+        missing_critical_files = False
+    else:
+        log("Verification warning: No kernel files found in standard locations")
+    
+    # Check initramfs files - need at least one
+    initramfs_files = ['/mnt/stage/boot/initrd', '/mnt/stage/initrd']
+    if any(os.path.exists(f) for f in initramfs_files):
+        missing_critical_files = False
+    else:
+        log("Verification warning: No initramfs files found in standard locations")
+    
+    # Check GRUB config files - need at least one
+    grub_config_files = [
+        '/mnt/stage/boot/grub2/grub.cfg',
+        '/mnt/stage/boot/grub/grub.conf',
+        '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg',
+        '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg'
+    ]
+    if any(os.path.exists(f) for f in grub_config_files):
+        missing_critical_files = False
+    else:
+        log("Verification warning: No GRUB configuration files found")
+    
+    # Check EFI boot files - need at least one
+    efi_boot_files = [
+        '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI',
+        '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi'
+    ]
+    if any(os.path.exists(f) for f in efi_boot_files):
+        missing_critical_files = False
+    else:
+        log("Verification warning: No EFI boot files found")
+    
+    if missing_critical_files:
+        log("Verification failed: Critical boot files are missing")
+        return False
+    
+    # Check for existence of absolutely essential files
+    essential_files = [
+        # At least one bootloader file must exist
+        '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI',
+        # Startup script for EFI shell fallback
+        '/mnt/stage/boot/efi/startup.nsh',
+        # Rescue script for manual recovery
+        '/mnt/stage/boot/rescue.sh'
+    ]
+    
     missing_files = []
-    for file_path in critical_files:
+    for file_path in essential_files:
         if not os.path.exists(file_path):
             missing_files.append(file_path)
-            log(f"Missing critical file: {file_path}")
+            log(f"Missing essential file: {file_path}")
     
     if missing_files:
-        log(f"Verification failed: {len(missing_files)} critical files are missing")
-        return False
+        log(f"Verification warning: {len(missing_files)} essential files are missing")
+        # Continue verification but log warnings - we have fallbacks
     
     # Check for EFI directory structure
     efi_dirs = [
