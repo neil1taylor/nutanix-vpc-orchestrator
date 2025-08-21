@@ -363,11 +363,13 @@ def install_hypervisor(config):
            log(f"Failed to format EFI partition: {result.stderr}")
            drop_to_shell(f"Failed to format EFI partition on {boot_device}p1")
        
-       # Hypervisor partition
-       result = subprocess.run(['mkfs.ext4', '-F', f'{boot_device}p2'], capture_output=True)
+       # Hypervisor partition with ROOT label
+       result = subprocess.run(['mkfs.ext4', '-F', '-L', 'ROOT', f'{boot_device}p2'], capture_output=True)
        if result.returncode != 0:
            log(f"Failed to format hypervisor partition: {result.stderr}")
            drop_to_shell(f"Failed to format hypervisor partition on {boot_device}p2")
+       
+       log(f"Formatted hypervisor partition with ROOT label")
        
        log("Partitions created and formatted")
        
@@ -424,6 +426,47 @@ def install_hypervisor(config):
            log("Failed to copy EFI files")
            cleanup_mounts()
            return False
+           
+       # Create additional EFI directories
+       os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
+       os.makedirs('/mnt/stage/boot/efi/EFI/NUTANIX', exist_ok=True)
+       
+       # Find and copy GRUB EFI binary
+       log("Finding and copying GRUB EFI binary...")
+       result = subprocess.run(['find', '/mnt/ahv', '-name', 'grubx64.efi'],
+                             capture_output=True, text=True)
+       
+       if result.stdout.strip():
+           grub_efi_path = result.stdout.strip().split('\n')[0]
+           log(f"Found GRUB EFI binary at {grub_efi_path}")
+           
+           # Copy to standard locations
+           subprocess.run(['cp', grub_efi_path, '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'])
+           subprocess.run(['cp', grub_efi_path, '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi'])
+           log("Copied GRUB EFI binary to standard locations")
+       else:
+           log("Could not find GRUB EFI binary in the ISO")
+       
+       # Create startup.nsh script for EFI shell fallback boot
+       log("Creating startup.nsh script for EFI shell fallback boot...")
+       os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
+       
+       startup_script = f"""@echo -off
+echo Loading Nutanix AHV...
+echo Attempting to boot from EFI/BOOT...
+\\EFI\\BOOT\\BOOTX64.EFI
+echo If that failed, trying EFI/NUTANIX...
+\\EFI\\NUTANIX\\grubx64.efi
+echo If that failed, trying direct kernel boot...
+echo Loading kernel: vmlinuz
+echo Loading initrd: initrd
+echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 initrd=\\initrd
+"""
+       
+       with open('/mnt/stage/boot/efi/startup.nsh', 'w') as f:
+           f.write(startup_script)
+       log("Created startup.nsh script for EFI shell fallback boot")
        
        # Create GRUB configurations
        log("Creating GRUB configurations...")
@@ -431,11 +474,57 @@ def install_hypervisor(config):
        # GRUB2 configuration
        os.makedirs('/mnt/stage/boot/grub2', exist_ok=True)
        kernel_version = "5.10.194-5.20230302.0.991650.el8.x86_64"
-       grub2_config = f"""set default=0
-set timeout=10
+       
+       # Get UUID of the root partition
+       result = subprocess.run(['blkid', '-s', 'UUID', '-o', 'value', f'{boot_device}p2'],
+                             capture_output=True, text=True)
+       root_uuid = result.stdout.strip() if result.returncode == 0 else None
+       
+       # Create a more comprehensive GRUB configuration with multiple boot options
+       grub2_config = f"""# GRUB configuration for Nutanix AHV
+insmod part_gpt
+insmod ext2
+insmod search_fs_uuid
+insmod search_label
+insmod fat
+insmod normal
+insmod linux
+insmod gzio
 
-menuentry 'Nutanix AHV' {{
-  linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
+set default=0
+set timeout=5
+set timeout_style=menu
+set gfxpayload=keep
+
+# Use root partition by label
+search --no-floppy --set=root --label=ROOT
+
+# Primary boot entry
+menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
+  echo 'Loading Linux kernel...'
+  linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+  echo 'Loading initial ramdisk...'
+  initrd /boot/initramfs-{kernel_version}.img
+}}
+
+# Fallback entry with symlinks
+menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
+  echo 'Loading Linux kernel (fallback)...'
+  linux /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+  echo 'Loading initial ramdisk (fallback)...'
+  initrd /initrd
+}}
+"""
+
+       # Add UUID-based entry if we have the UUID
+       if root_uuid:
+           grub2_config += f"""
+# UUID-based entry
+menuentry 'Nutanix AHV (UUID)' --unrestricted --id nutanix_uuid {{
+  echo 'Loading Linux kernel (UUID)...'
+  search --no-floppy --set=root --fs-uuid {root_uuid}
+  linux /boot/vmlinuz-{kernel_version} root=UUID={root_uuid} ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+  echo 'Loading initial ramdisk (UUID)...'
   initrd /boot/initramfs-{kernel_version}.img
 }}
 """
@@ -446,17 +535,109 @@ menuentry 'Nutanix AHV' {{
        # Legacy GRUB configuration
        os.makedirs('/mnt/stage/boot/grub', exist_ok=True)
        grub_config = f"""default=0
-timeout=10
+timeout=5
 title Nutanix AHV
-  root (hd0,1)
-  kernel /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
-  initrd /boot/initramfs-{kernel_version}.img
+ root (hd0,1)
+ kernel /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+ initrd /boot/initramfs-{kernel_version}.img
+
+title Nutanix AHV (Fallback)
+ root (hd0,1)
+ kernel /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+ initrd /initrd
 """
        
        with open('/mnt/stage/boot/grub/grub.conf', 'w') as f:
            f.write(grub_config)
        
        log("GRUB configurations created")
+       
+       # Create a rescue script that can be used to manually boot the system
+       log("Creating rescue script...")
+       rescue_script = f"""#!/bin/sh
+# Rescue script for Nutanix AHV boot
+echo "Nutanix AHV Rescue Boot Script"
+echo "Attempting to find and boot the kernel..."
+
+# List all available kernels and initrds
+echo "Available kernels:"
+find / -name "vmlinuz*" -o -name "bzImage*" 2>/dev/null | sort
+echo ""
+echo "Available initrds:"
+find / -name "initramfs*" -o -name "initrd*" 2>/dev/null | sort
+echo ""
+
+# Try different kernel paths
+for KERNEL_PATH in /boot/vmlinuz-{kernel_version} /vmlinuz /boot/bzImage /bzImage /boot/vmlinuz-*.x86_64 /boot/vmlinuz-*; do
+ if [ -f "$KERNEL_PATH" ]; then
+   echo "Found kernel at $KERNEL_PATH"
+   
+   # Try different initrd paths
+   for INITRD_PATH in /boot/initramfs-{kernel_version}.img /initrd /boot/initramfs-*.img; do
+     if [ -f "$INITRD_PATH" ]; then
+       echo "Found initrd at $INITRD_PATH"
+       
+       # Try different root specifications
+       for ROOT_SPEC in "root=/dev/{boot_disk}p2" "root=LABEL=ROOT" "root=UUID=$(blkid -s UUID -o value /dev/{boot_disk}p2 2>/dev/null || echo 'none')"; do
+         echo "Attempting boot with $ROOT_SPEC"
+         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8\\""
+         
+         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8" 2>/dev/null
+         
+         if [ $? -eq 0 ]; then
+           echo "kexec load successful, executing kernel..."
+           echo "Press Ctrl+C within 5 seconds to abort..."
+           sleep 5
+           kexec -e
+           # If we get here, kexec failed
+           echo "kexec execution failed, trying next option"
+         else
+           echo "kexec load failed, trying next option"
+         fi
+       done
+     fi
+   done
+ fi
+done
+
+# If all automatic attempts fail, provide manual instructions
+echo "All automatic boot attempts failed!"
+echo ""
+echo "Manual boot instructions:"
+echo "1. Find a valid kernel:"
+echo "   ls -la /boot/vmlinuz*"
+echo ""
+echo "2. Find a valid initrd:"
+echo "   ls -la /boot/initramfs*"
+echo ""
+echo "3. Try manual boot with kexec:"
+echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8\\""
+echo "   kexec -e"
+echo ""
+echo "4. Or try manual boot from GRUB command line:"
+echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8"
+echo "   initrd /boot/initramfs-{kernel_version}.img"
+echo "   boot"
+echo ""
+echo "Dropping to shell for manual recovery"
+exec /bin/sh
+"""
+       
+       with open('/mnt/stage/boot/rescue.sh', 'w') as f:
+           f.write(rescue_script)
+       subprocess.run(['chmod', '+x', '/mnt/stage/boot/rescue.sh'])
+       log("Created rescue script at /boot/rescue.sh")
+       
+       # Add a rescue entry to the GRUB configuration
+       with open('/mnt/stage/boot/grub2/grub.cfg', 'a') as f:
+           f.write(f"""
+# Rescue script entry
+menuentry 'Nutanix AHV (Rescue Script)' --unrestricted --id nutanix_rescue {{
+  echo 'Running rescue script...'
+  linux16 /boot/rescue.sh
+}}
+""")
+       log("Added rescue script entry to GRUB configuration")
        
        # Generate initramfs with required modules
        log("Generating initramfs with NVMe and Ionic support...")
@@ -466,6 +647,10 @@ title Nutanix AHV
        with open('/mnt/stage/etc/dracut.conf.d/vpc_drivers.conf', 'w') as f:
            f.write("""# Include NVMe and Ionic modules in initramfs
 add_drivers+=" nvme nvme-core ionic "
+force_drivers+=" nvme nvme-core ionic "
+hostonly="no"
+hostonly_cmdline="no"
+early_microcode="yes"
 """)
        
        # Create a modprobe configuration to load the ionic driver at boot
@@ -498,6 +683,56 @@ add_drivers+=" nvme nvme-core ionic "
                # Run depmod to update module dependencies
                subprocess.run(['chroot', '/mnt/stage', 'depmod', '-a', kernel_version],
                              capture_output=True)
+               
+               # Ensure the initramfs is created
+               log("Creating initramfs with dracut...")
+               
+               # First, check if dracut is available in the chroot
+               result = subprocess.run(['chroot', '/mnt/stage', 'which', 'dracut'],
+                                     capture_output=True, text=True)
+               
+               if result.returncode == 0:
+                   # Use dracut to create the initramfs
+                   log("Using dracut to create initramfs...")
+                   result = subprocess.run(['chroot', '/mnt/stage', 'dracut', '--force', '--no-hostonly',
+                                          f'/boot/initramfs-{kernel_version}.img', kernel_version],
+                                         capture_output=True, text=True)
+                   
+                   if result.returncode == 0:
+                       log("Successfully created initramfs with dracut")
+                   else:
+                       log(f"Failed to create initramfs with dracut: {result.stderr}")
+                       
+                       # Try to copy an existing initramfs from the ISO
+                       log("Trying to find an initramfs in the ISO...")
+                       result = subprocess.run(['find', '/mnt/ahv', '-name', 'initramfs*'],
+                                             capture_output=True, text=True)
+                       
+                       if result.stdout.strip():
+                           initramfs_path = result.stdout.strip().split('\n')[0]
+                           log(f"Found initramfs at {initramfs_path}")
+                           
+                           # Copy the initramfs
+                           subprocess.run(['cp', initramfs_path, f'/mnt/stage/boot/initramfs-{kernel_version}.img'])
+                           log(f"Copied initramfs from {initramfs_path} to /mnt/stage/boot/initramfs-{kernel_version}.img")
+                       else:
+                           log("Could not find an initramfs in the ISO")
+               else:
+                   log("dracut not available in chroot, trying to find an existing initramfs...")
+                   
+                   # Try to find an existing initramfs in the ISO
+                   result = subprocess.run(['find', '/mnt/ahv', '-name', 'initramfs*'],
+                                         capture_output=True, text=True)
+                   
+                   if result.stdout.strip():
+                       initramfs_path = result.stdout.strip().split('\n')[0]
+                       log(f"Found initramfs at {initramfs_path}")
+                       
+                       # Copy the initramfs
+                       subprocess.run(['cp', initramfs_path, f'/mnt/stage/boot/initramfs-{kernel_version}.img'])
+                       log(f"Copied initramfs from {initramfs_path} to /mnt/stage/boot/initramfs-{kernel_version}.img")
+                   else:
+                       log("Could not find an initramfs in the ISO")
                log("Updated module dependencies")
            except subprocess.CalledProcessError as e:
                log(f"Failed to copy ionic module: {e}")
@@ -519,7 +754,11 @@ add_drivers+=" nvme nvme-core ionic "
            # Fallback to a common version format, trying both el8 and e18 variants
            log("Could not detect kernel version, using fallback versions")
            kernel_versions = [
-               "5.10.194-5.20230302.0.991650.el8.x86_64"
+               "5.10.194-5.20230302.0.991650.el8.x86_64",
+               "5.10.194-5.20230302.0.991650.e18.x86_64",  # Include both formats to handle possible OCR errors
+               "5.10.194-5.20230302.0.991650.x86_64",      # Try without el8/e18 prefix
+               "5.10.0-0.x86_64",                          # Generic fallback
+               "5.10.0-0.el8.x86_64"                       # Another common format
            ]
            
            # Check which kernel version exists
@@ -563,8 +802,8 @@ add_drivers+=" nvme nvme-core ionic "
        # Comprehensive search for kernel files
        log("Performing comprehensive kernel file search...")
        
-       # First, search for any kernel files in the system
-       result = subprocess.run(['find', '/mnt/stage', '-name', 'vmlinuz*', '-o', '-name', 'vmlinux*'],
+       # First, search for any kernel files in the system (more comprehensive search)
+       result = subprocess.run(['find', '/mnt/stage', '-name', 'vmlinuz*', '-o', '-name', 'vmlinux*', '-o', '-name', 'bzImage*'],
                              capture_output=True, text=True)
        
        all_kernels = []
@@ -664,7 +903,11 @@ add_drivers+=" nvme nvme-core ionic "
            ('/boot/efi', 'vmlinuz'),
            ('/boot/efi/EFI/BOOT', 'vmlinuz'),
            ('/boot/efi/EFI/NUTANIX', 'vmlinuz'),
-           ('/', 'vmlinuz')
+           ('/', 'vmlinuz'),
+           ('/boot', 'bzImage'),
+           ('/boot/efi', 'bzImage'),
+           ('/boot/efi/EFI/BOOT', 'bzImage'),
+           ('/boot/efi/EFI/NUTANIX', 'bzImage')
        ]
        
        for dir_path, prefix in standard_locations:
@@ -689,7 +932,11 @@ add_drivers+=" nvme nvme-core ionic "
            ('/boot/vmlinuz', f'/boot/vmlinuz-{kernel_version}'),
            ('/boot/initrd', f'/boot/initramfs-{kernel_version}.img'),
            ('/vmlinuz', f'/boot/vmlinuz-{kernel_version}'),
-           ('/initrd', f'/boot/initramfs-{kernel_version}.img')
+           ('/initrd', f'/boot/initramfs-{kernel_version}.img'),
+           ('/boot/bzImage', f'/boot/vmlinuz-{kernel_version}'),
+           ('/bzImage', f'/boot/vmlinuz-{kernel_version}'),
+           ('/boot/kernel', f'/boot/vmlinuz-{kernel_version}'),
+           ('/kernel', f'/boot/vmlinuz-{kernel_version}')
        ]
        
        for link, target in symlink_pairs:
@@ -709,11 +956,11 @@ insmod linux
 insmod gzio
 
 set default=0
-set timeout=0
-set timeout_style=hidden
+set timeout=5
+set timeout_style=menu
 set gfxpayload=keep
 
-# Disable all interactive features
+# Enable interactive features for debugging
 set pager=1
 set check_signatures=no
 
@@ -743,6 +990,12 @@ menuentry 'Nutanix AHV (Emergency)' --unrestricted --id nutanix_emergency {{
    echo 'Loading initial ramdisk (emergency)...'
    initrd /boot/initramfs-{kernel_version}.img
 }}
+
+# Rescue script entry
+menuentry 'Nutanix AHV (Rescue Script)' --unrestricted --id nutanix_rescue {{
+   echo 'Running rescue script...'
+   linux16 /boot/rescue.sh
+}}
 """
        
        # Write GRUB configuration to all possible locations
@@ -764,17 +1017,17 @@ menuentry 'Nutanix AHV (Emergency)' --unrestricted --id nutanix_emergency {{
                f.write(grub_config)
            log(f"Created GRUB configuration at {config_path}")
        
-       # Create GRUB defaults file to ensure automatic boot
+       # Create GRUB defaults file with longer timeout for debugging
        with open('/mnt/stage/etc/default/grub', 'w') as f:
-           f.write("""GRUB_TIMEOUT=0
-GRUB_TIMEOUT_STYLE=hidden
+           f.write("""GRUB_TIMEOUT=5
+GRUB_TIMEOUT_STYLE=menu
 GRUB_DISTRIBUTOR="Nutanix AHV"
 GRUB_DEFAULT=0
-GRUB_DISABLE_RECOVERY=true
-GRUB_DISABLE_SUBMENU=true
+GRUB_DISABLE_RECOVERY=false
+GRUB_DISABLE_SUBMENU=false
 GRUB_TERMINAL="console serial"
 GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
-GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet"
+GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8"
 GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux gzio"
 """.format(boot_disk=boot_disk))
        log("Created GRUB defaults file")
@@ -941,9 +1194,148 @@ GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux
        with open('/mnt/stage/boot/efi/startup.nsh', 'w') as f:
            f.write(f"""@echo -off
 echo Loading Nutanix AHV...
+echo Attempting to boot from EFI/BOOT...
 \\EFI\\BOOT\\BOOTX64.EFI
+echo If that failed, trying EFI/NUTANIX...
+\\EFI\\NUTANIX\\grubx64.efi
+echo If that failed, trying direct kernel boot...
+echo Loading kernel: vmlinuz
+echo Loading initrd: initrd
+echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 initrd=\\initrd
+echo If all boot methods failed, try running the rescue script...
+\\boot\\rescue.sh
 """)
        log("Created startup.nsh script for emergency boot")
+       
+       # Create a rescue script that can be used to manually boot the system
+       log("Creating rescue script...")
+       rescue_script = f"""#!/bin/sh
+# Rescue script for Nutanix AHV boot
+echo "Nutanix AHV Rescue Boot Script"
+echo "Attempting to find and boot the kernel..."
+
+# List all available kernels and initrds
+echo "Available kernels:"
+find / -name "vmlinuz*" -o -name "bzImage*" 2>/dev/null | sort
+echo ""
+echo "Available initrds:"
+find / -name "initramfs*" -o -name "initrd*" 2>/dev/null | sort
+echo ""
+
+# Try different kernel paths
+for KERNEL_PATH in /boot/vmlinuz-{kernel_version} /vmlinuz /boot/bzImage /bzImage /boot/vmlinuz-*.x86_64 /boot/vmlinuz-*; do
+ if [ -f "$KERNEL_PATH" ]; then
+   echo "Found kernel at $KERNEL_PATH"
+   
+   # Try different initrd paths
+   for INITRD_PATH in /boot/initramfs-{kernel_version}.img /initrd /boot/initramfs-*.img; do
+     if [ -f "$INITRD_PATH" ]; then
+       echo "Found initrd at $INITRD_PATH"
+       
+       # Try different root specifications
+       for ROOT_SPEC in "root=/dev/{boot_disk}p2" "root=LABEL=ROOT" "root=UUID=$(blkid -s UUID -o value /dev/{boot_disk}p2 2>/dev/null || echo 'none')"; do
+         echo "Attempting boot with $ROOT_SPEC"
+         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8\""
+         
+         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8" 2>/dev/null
+         
+         if [ $? -eq 0 ]; then
+           echo "kexec load successful, executing kernel..."
+           echo "Press Ctrl+C within 5 seconds to abort..."
+           sleep 5
+           kexec -e
+           # If we get here, kexec failed
+           echo "kexec execution failed, trying next option"
+         else
+           echo "kexec load failed, trying next option"
+         fi
+       done
+     fi
+   done
+ fi
+done
+
+# If all automatic attempts fail, provide manual instructions
+echo "All automatic boot attempts failed!"
+echo ""
+echo "Manual boot instructions:"
+echo "1. Find a valid kernel:"
+echo "   ls -la /boot/vmlinuz*"
+echo ""
+echo "2. Find a valid initrd:"
+echo "   ls -la /boot/initramfs*"
+echo ""
+echo "3. Try manual boot with kexec:"
+echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8\""
+echo "   kexec -e"
+echo ""
+echo "4. Or try manual boot from GRUB command line:"
+echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8"
+echo "   initrd /boot/initramfs-{kernel_version}.img"
+echo "   boot"
+echo ""
+echo "Dropping to shell for manual recovery"
+exec /bin/sh
+"""
+       
+       with open('/mnt/stage/boot/rescue.sh', 'w') as f:
+           f.write(rescue_script)
+       subprocess.run(['chmod', '+x', '/mnt/stage/boot/rescue.sh'])
+       log("Created rescue script at /boot/rescue.sh")
+       
+       # Verify kernel installation
+       log("Verifying kernel installation...")
+       kernel_found = False
+       for kernel_path in [f'/mnt/stage/boot/vmlinuz-{kernel_version}', '/mnt/stage/vmlinuz', '/mnt/stage/boot/bzImage']:
+           if os.path.exists(kernel_path):
+               kernel_size = os.path.getsize(kernel_path)
+               log(f"Found kernel at {kernel_path} (size: {kernel_size} bytes)")
+               kernel_found = True
+               
+               # If kernel is too small, it might be corrupted or a symlink to a non-existent file
+               if kernel_size < 1000000:  # Typical kernel is several MB
+                   log(f"WARNING: Kernel file at {kernel_path} is suspiciously small ({kernel_size} bytes)")
+                   
+                   # Try to find a valid kernel and copy it
+                   result = subprocess.run(['find', '/mnt/ahv', '-name', 'vmlinuz*', '-size', '+5M'],
+                                         capture_output=True, text=True)
+                   if result.stdout.strip():
+                       valid_kernel = result.stdout.strip().split('\n')[0]
+                       log(f"Found valid kernel in installation media: {valid_kernel}")
+                       subprocess.run(['cp', valid_kernel, kernel_path])
+                       log(f"Copied valid kernel to {kernel_path}")
+                   else:
+                       log("Could not find a valid kernel in installation media")
+       
+       if not kernel_found:
+           log("WARNING: No kernel files found! System may not boot properly.")
+           
+           # Last resort - try to extract kernel from RPM packages
+           log("Attempting to extract kernel from RPM packages...")
+           result = subprocess.run(['find', '/mnt/ahv', '-name', 'kernel*.rpm'],
+                                 capture_output=True, text=True)
+           if result.stdout.strip():
+               kernel_rpm = result.stdout.strip().split('\n')[0]
+               log(f"Found kernel RPM at {kernel_rpm}")
+               
+               # Extract the package
+               os.makedirs('/tmp/kernel_extract', exist_ok=True)
+               extract_result = subprocess.run(['rpm2cpio', kernel_rpm, '|', 'cpio', '-idmv', '-D', '/tmp/kernel_extract'],
+                                             shell=True, capture_output=True, text=True)
+               
+               # Find the kernel in the extracted package
+               find_result = subprocess.run(['find', '/tmp/kernel_extract', '-name', 'vmlinuz*'],
+                                         capture_output=True, text=True)
+               
+               if find_result.stdout.strip():
+                   extracted_kernel = find_result.stdout.strip().split('\n')[0]
+                   log(f"Found extracted kernel at {extracted_kernel}")
+                   
+                   # Copy to standard locations
+                   subprocess.run(['cp', extracted_kernel, f'/mnt/stage/boot/vmlinuz-{kernel_version}'])
+                   subprocess.run(['cp', extracted_kernel, '/mnt/stage/vmlinuz'])
+                   log("Copied extracted kernel to standard locations")
        
        # Cleanup - unmount everything
        cleanup_mounts()
