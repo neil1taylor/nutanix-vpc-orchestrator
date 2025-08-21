@@ -764,6 +764,10 @@ def run_nutanix_installation(params, config):
         # Start installation
         log("Starting installation process...")
         try:
+            # Create the svm_installer directory if it doesn't exist
+            log("Creating /mnt/svm_installer directory...")
+            os.makedirs('/mnt/svm_installer', exist_ok=True)
+            
             log("Calling imagingUtil.image_node...")
             imagingUtil.image_node(params)
             log("imagingUtil.image_node completed successfully")
