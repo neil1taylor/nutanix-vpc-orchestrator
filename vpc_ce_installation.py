@@ -640,7 +640,8 @@ add_drivers+=" nvme nvme-core ionic "
                    # Create a GRUB configuration file for the bootloader
                    with open('/mnt/stage/boot/efi/EFI/BOOT/grub.cfg', 'w') as f:
                        f.write(f"""set default=0
-set timeout=5
+set timeout=0
+set timeout_style=hidden
 
 menuentry 'Nutanix AHV' {{
 linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
@@ -655,7 +656,8 @@ initrd /boot/initramfs-{kernel_version}.img
                # Create a simple GRUB configuration file
                with open('/mnt/stage/boot/efi/EFI/BOOT/grub.cfg', 'w') as f:
                    f.write(f"""set default=0
-set timeout=5
+set timeout=0
+set timeout_style=hidden
 
 menuentry 'Nutanix AHV' {{
 linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
@@ -702,6 +704,46 @@ initrd /boot/initramfs-{kernel_version}.img
            subprocess.run(['cp', '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi',
                           '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'])
            log("Created fallback EFI boot entry")
+           
+           # Create a GRUB configuration file for the fallback bootloader
+           with open('/mnt/stage/boot/efi/EFI/BOOT/grub.cfg', 'w') as f:
+               f.write(f"""set default=0
+set timeout=0
+set timeout_style=hidden
+
+menuentry 'Nutanix AHV' {{
+linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
+initrd /boot/initramfs-{kernel_version}.img
+}}
+""")
+           log("Created GRUB configuration file for fallback EFI boot entry")
+           
+           # Also create a grub.cfg in the NUTANIX directory
+           with open('/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg', 'w') as f:
+               f.write(f"""set default=0
+set timeout=0
+set timeout_style=hidden
+
+menuentry 'Nutanix AHV' {{
+linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
+initrd /boot/initramfs-{kernel_version}.img
+}}
+""")
+           log("Created GRUB configuration file in NUTANIX directory")
+           
+           # Create a grub.cfg in the /boot/grub2 directory
+           os.makedirs('/mnt/stage/boot/grub2', exist_ok=True)
+           with open('/mnt/stage/boot/grub2/grub.cfg', 'w') as f:
+               f.write(f"""set default=0
+set timeout=0
+set timeout_style=hidden
+
+menuentry 'Nutanix AHV' {{
+linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic
+initrd /boot/initramfs-{kernel_version}.img
+}}
+""")
+           log("Created GRUB configuration file in /boot/grub2 directory")
        
        # Create EFI NVRAM entries
        log("Creating EFI NVRAM entries...")
