@@ -1096,9 +1096,10 @@ early_microcode="yes"
        log("Copying kernel and initramfs to essential locations...")
        
        # Define essential locations - prioritize main boot directory and only one copy in EFI
+       # Make sure to include the locations that our verification function checks
        essential_locations = [
-           ('/boot', 'vmlinuz'),  # Main boot directory
-           ('/boot/efi/EFI/BOOT', 'vmlinuz'),  # Primary EFI location
+           ('/boot', 'vmlinuz'),  # Main boot directory - critical for booting
+           ('/boot/efi/EFI/BOOT', 'vmlinuz'),  # Primary EFI location - critical for EFI boot
            ('/', 'vmlinuz')  # Root directory for fallback
        ]
        
@@ -1115,10 +1116,25 @@ early_microcode="yes"
        if not os.path.exists(source_initramfs):
            log(f"WARNING: Source initramfs {initramfs_path} does not exist, creating a minimal one...")
            os.makedirs(os.path.dirname(source_initramfs), exist_ok=True)
-           with open(source_initramfs, 'wb') as f:
-               # Write a minimal cpio archive header
-               f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
-           log(f"Created minimal initramfs at source location {initramfs_path}")
+           
+           # Try to find an initramfs in the ISO first
+           result = subprocess.run(['find', '/mnt/ahv', '-name', 'initramfs*', '-o', '-name', 'initrd*'],
+                                 capture_output=True, text=True)
+           
+           if result.stdout.strip():
+               # Use the first initramfs found
+               iso_initramfs = result.stdout.strip().split('\n')[0]
+               log(f"Found initramfs in ISO: {iso_initramfs}")
+               
+               # Copy it to our target location
+               subprocess.run(['cp', iso_initramfs, source_initramfs])
+               log(f"Copied initramfs from ISO to {source_initramfs}")
+           else:
+               # Create a minimal initramfs as last resort
+               with open(source_initramfs, 'wb') as f:
+                   # Write a minimal cpio archive header
+                   f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
+               log(f"Created minimal initramfs at source location {initramfs_path}")
        
        # Copy to essential locations
        for dir_path, prefix in essential_locations:
@@ -1185,7 +1201,7 @@ early_microcode="yes"
                                        capture_output=True, text=True)
        log(f"EFI partition space after copying: {efi_space_check.stdout}")
        
-       # Create symlinks for GRUB
+       # Create symlinks for GRUB - both in chroot and directly in filesystem
        log("Creating symlinks for GRUB...")
        symlink_pairs = [
            ('/boot/vmlinuz', f'/boot/vmlinuz-{kernel_version}'),
@@ -1198,9 +1214,31 @@ early_microcode="yes"
            ('/kernel', f'/boot/vmlinuz-{kernel_version}')
        ]
        
+       # First create symlinks in the chroot environment
        for link, target in symlink_pairs:
-           subprocess.run(['chroot', '/mnt/stage', 'ln', '-sf', target, link])
-           log(f"Created symlink: {link} -> {target}")
+           try:
+               subprocess.run(['chroot', '/mnt/stage', 'ln', '-sf', target, link],
+                             capture_output=True, check=True)
+               log(f"Created symlink in chroot: {link} -> {target}")
+           except subprocess.CalledProcessError as e:
+               log(f"Failed to create symlink in chroot: {link} -> {target}: {e}")
+       
+       # Also create the symlinks directly in the filesystem
+       for link, target in symlink_pairs:
+           try:
+               # Create the symlink directly in the filesystem
+               full_link = f'/mnt/stage{link}'
+               full_target = target  # Target is relative to the link location
+               
+               # Remove existing symlink or file if it exists
+               if os.path.exists(full_link) or os.path.islink(full_link):
+                   os.remove(full_link)
+               
+               # Create the symlink
+               os.symlink(full_target, full_link)
+               log(f"Created symlink in filesystem: {full_link} -> {full_target}")
+           except Exception as e:
+               log(f"Failed to create symlink in filesystem: {full_link} -> {full_target}: {e}")
        
        # Create a simplified GRUB configuration file
        log("Creating simplified GRUB configuration...")
@@ -1918,22 +1956,56 @@ def verify_installation(config):
         '/mnt/stage/boot/rescue.sh'
     ]
     
-    # Check for existence of critical files with more flexible approach
-    missing_critical_files = True
+    # Check for existence of critical files - EACH category must have at least one file
     
     # Check kernel files - need at least one
-    kernel_files = ['/mnt/stage/boot/vmlinuz', '/mnt/stage/vmlinuz']
-    if any(os.path.exists(f) for f in kernel_files):
-        missing_critical_files = False
+    kernel_files = [
+        '/mnt/stage/boot/vmlinuz',
+        '/mnt/stage/vmlinuz',
+        '/mnt/stage/boot/vmlinuz-*',
+        '/mnt/stage/boot/bzImage',
+        '/mnt/stage/boot/bzImage-*'
+    ]
+    
+    # Expand wildcards for kernel files
+    expanded_kernel_files = []
+    for pattern in kernel_files:
+        if '*' in pattern:
+            expanded_kernel_files.extend(glob.glob(pattern))
+        else:
+            expanded_kernel_files.append(pattern)
+    
+    has_kernel = any(os.path.exists(f) for f in expanded_kernel_files)
+    if not has_kernel:
+        log("Verification FAILED: No kernel files found in any location")
+        log("The system will not be able to boot without a kernel")
+        return False
     else:
-        log("Verification warning: No kernel files found in standard locations")
+        log("Kernel files verified")
     
     # Check initramfs files - need at least one
-    initramfs_files = ['/mnt/stage/boot/initrd', '/mnt/stage/initrd']
-    if any(os.path.exists(f) for f in initramfs_files):
-        missing_critical_files = False
+    initramfs_files = [
+        '/mnt/stage/boot/initrd',
+        '/mnt/stage/initrd',
+        '/mnt/stage/boot/initramfs-*.img',
+        '/mnt/stage/boot/initrd.img-*'
+    ]
+    
+    # Expand wildcards for initramfs files
+    expanded_initramfs_files = []
+    for pattern in initramfs_files:
+        if '*' in pattern:
+            expanded_initramfs_files.extend(glob.glob(pattern))
+        else:
+            expanded_initramfs_files.append(pattern)
+    
+    has_initramfs = any(os.path.exists(f) for f in expanded_initramfs_files)
+    if not has_initramfs:
+        log("Verification FAILED: No initramfs files found in any location")
+        log("The system will not be able to boot without an initramfs")
+        return False
     else:
-        log("Verification warning: No initramfs files found in standard locations")
+        log("Initramfs files verified")
     
     # Check GRUB config files - need at least one
     grub_config_files = [
@@ -1942,29 +2014,31 @@ def verify_installation(config):
         '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg',
         '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg'
     ]
-    if any(os.path.exists(f) for f in grub_config_files):
-        missing_critical_files = False
+    
+    has_grub_config = any(os.path.exists(f) for f in grub_config_files)
+    if not has_grub_config:
+        log("Verification FAILED: No GRUB configuration files found")
+        log("The system will not be able to boot without a GRUB configuration")
+        return False
     else:
-        log("Verification warning: No GRUB configuration files found")
+        log("GRUB configuration files verified")
     
     # Check EFI boot files - need at least one
     efi_boot_files = [
         '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI',
         '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi'
     ]
-    if any(os.path.exists(f) for f in efi_boot_files):
-        missing_critical_files = False
-    else:
-        log("Verification warning: No EFI boot files found")
     
-    if missing_critical_files:
-        log("Verification failed: Critical boot files are missing")
+    has_efi_boot = any(os.path.exists(f) for f in efi_boot_files)
+    if not has_efi_boot:
+        log("Verification FAILED: No EFI boot files found")
+        log("The system will not be able to boot without an EFI bootloader")
         return False
+    else:
+        log("EFI boot files verified")
     
-    # Check for existence of absolutely essential files
+    # Check for existence of additional essential files
     essential_files = [
-        # At least one bootloader file must exist
-        '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI',
         # Startup script for EFI shell fallback
         '/mnt/stage/boot/efi/startup.nsh',
         # Rescue script for manual recovery
@@ -1978,8 +2052,9 @@ def verify_installation(config):
             log(f"Missing essential file: {file_path}")
     
     if missing_files:
-        log(f"Verification warning: {len(missing_files)} essential files are missing")
-        # Continue verification but log warnings - we have fallbacks
+        log(f"Verification FAILED: {len(missing_files)} essential files are missing")
+        log("These files are required for fallback boot methods")
+        return False
     
     # Check for EFI directory structure
     efi_dirs = [
