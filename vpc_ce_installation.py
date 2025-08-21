@@ -816,9 +816,73 @@ early_microcode="yes"
 """)
        
        # Create a modprobe configuration to load the ionic driver at boot
+       # Create modules-load.d directory and ionic.conf file
        os.makedirs('/mnt/stage/etc/modules-load.d', exist_ok=True)
        with open('/mnt/stage/etc/modules-load.d/ionic.conf', 'w') as f:
            f.write("# Load ionic driver at boot\nionic\n")
+       
+       # Set SELinux to permissive mode to avoid issues with ionic driver
+       log("Configuring SELinux for ionic driver...")
+       
+       # Create SELinux config file to set permissive mode
+       with open('/mnt/stage/etc/selinux/config', 'w') as f:
+           f.write("""# This file controls the state of SELinux on the system.
+# SELINUX= can take one of these three values:
+#     enforcing - SELinux security policy is enforced.
+#     permissive - SELinux prints warnings instead of enforcing.
+#     disabled - No SELinux policy is loaded.
+SELINUX=permissive
+# SELINUXTYPE= can take one of these three values:
+#     targeted - Targeted processes are protected,
+#     minimum - Modification of targeted policy. Only selected processes are protected.
+#     mls - Multi Level Security protection.
+SELINUXTYPE=targeted
+""")
+       log("Set SELinux to permissive mode in config")
+       
+       # Add selinux=0 to kernel command line in GRUB defaults
+       with open('/mnt/stage/etc/default/grub', 'r') as f:
+           grub_defaults = f.read()
+       
+       # Update the GRUB_CMDLINE_LINUX line to include selinux=0
+       grub_defaults = grub_defaults.replace('GRUB_CMDLINE_LINUX="', 'GRUB_CMDLINE_LINUX="selinux=0 ')
+       
+       with open('/mnt/stage/etc/default/grub', 'w') as f:
+           f.write(grub_defaults)
+       log("Added selinux=0 to GRUB kernel command line")
+       
+       # Create a script to run at first boot to properly label the ionic.conf file
+       os.makedirs('/mnt/stage/etc/rc.d/rc.local.d', exist_ok=True)
+       with open('/mnt/stage/etc/rc.d/rc.local.d/fix_selinux.sh', 'w') as f:
+           f.write("""#!/bin/bash
+# Fix SELinux labels for ionic driver files
+if [ -x /usr/sbin/restorecon ]; then
+   /usr/sbin/restorecon -v /etc/modules-load.d/ionic.conf
+   /usr/sbin/restorecon -Rv /lib/modules/*/kernel/drivers/net/ethernet/pensando
+fi
+""")
+       
+       # Make the script executable
+       subprocess.run(['chmod', '+x', '/mnt/stage/etc/rc.d/rc.local.d/fix_selinux.sh'])
+       
+       # Ensure rc.local is enabled and executable
+       with open('/mnt/stage/etc/rc.d/rc.local', 'a') as f:
+           f.write("""
+# Run custom scripts in rc.local.d
+if [ -d /etc/rc.d/rc.local.d ]; then
+   for script in /etc/rc.d/rc.local.d/*.sh; do
+       if [ -x "$script" ]; then
+           echo "Running $script"
+           $script
+       fi
+   done
+fi
+""")
+       
+       subprocess.run(['chmod', '+x', '/mnt/stage/etc/rc.d/rc.local'])
+       subprocess.run(['chroot', '/mnt/stage', 'systemctl', 'enable', 'rc-local.service'])
+       
+       log("Created SELinux fix script to run at first boot")
        
        # Copy the ionic driver module from the current environment to the hypervisor
        log("Copying ionic driver module to hypervisor...")
@@ -1351,7 +1415,7 @@ GRUB_DISABLE_RECOVERY=false
 GRUB_DISABLE_SUBMENU=false
 GRUB_TERMINAL="console serial"
 GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
-GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8"
+GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0"
 GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux gzio"
 """.format(boot_disk=boot_disk))
        log("Created GRUB defaults file")
