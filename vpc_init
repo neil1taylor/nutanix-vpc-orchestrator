@@ -352,6 +352,33 @@ fi
 echo "Installation completed successfully!"
 send_status_update "Installation completed - system ready" "install_complete"
 
-# Provide shell access for any post-install tasks
-echo "Dropping to shell for any final configurations..."
-exec /bin/sh
+# Add a 30-second countdown before automatic reboot
+echo ""
+echo "====================================================="
+echo "Installation complete! System will reboot in 30 seconds."
+echo "Press any key to drop to shell instead of rebooting."
+echo "====================================================="
+echo ""
+
+# Wait for 30 seconds or any key press
+for i in 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1; do
+    echo -n "$i... "
+    if read -t 1 -n 1 key; then
+        echo ""
+        echo "Key press detected. Dropping to shell..."
+        echo "Type 'reboot' to restart the system when ready."
+        exec /bin/sh
+        break
+    fi
+done
+
+# If we completed the countdown without a key press, show 0 and reboot
+if [ "$i" = "1" ]; then
+    echo "0"
+fi
+
+echo "No key pressed. Rebooting system..."
+send_status_update "Installation complete - rebooting system" "reboot"
+sync  # Ensure all filesystem changes are written to disk
+sleep 1
+reboot -f  # Force reboot
