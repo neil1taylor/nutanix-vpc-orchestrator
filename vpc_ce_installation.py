@@ -825,6 +825,7 @@ early_microcode="yes"
        log("Configuring SELinux for ionic driver...")
        
        # Create SELinux config file to set permissive mode
+       os.makedirs('/mnt/stage/etc/selinux', exist_ok=True)
        with open('/mnt/stage/etc/selinux/config', 'w') as f:
            f.write("""# This file controls the state of SELinux on the system.
 # SELINUX= can take one of these three values:
@@ -840,16 +841,7 @@ SELINUXTYPE=targeted
 """)
        log("Set SELinux to permissive mode in config")
        
-       # Add selinux=0 to kernel command line in GRUB defaults
-       with open('/mnt/stage/etc/default/grub', 'r') as f:
-           grub_defaults = f.read()
-       
-       # Update the GRUB_CMDLINE_LINUX line to include selinux=0
-       grub_defaults = grub_defaults.replace('GRUB_CMDLINE_LINUX="', 'GRUB_CMDLINE_LINUX="selinux=0 ')
-       
-       with open('/mnt/stage/etc/default/grub', 'w') as f:
-           f.write(grub_defaults)
-       log("Added selinux=0 to GRUB kernel command line")
+       # Note: We'll add selinux=0 to GRUB_CMDLINE_LINUX when the GRUB defaults file is created later
        
        # Create a script to run at first boot to properly label the ionic.conf file
        os.makedirs('/mnt/stage/etc/rc.d/rc.local.d', exist_ok=True)
