@@ -1275,6 +1275,49 @@ def main():
         # Add the class to the module
         pycdlib_module.PyCdlib = MockPyCdlib
     
+    # Create mock chroot module
+    try:
+        import chroot
+        log("Found chroot module")
+    except ImportError:
+        log("Creating mock chroot module...")
+        import types
+        
+        # Create the chroot module
+        chroot_module = types.ModuleType('chroot')
+        sys.modules['chroot'] = chroot_module
+        
+        # Create Chroot class
+        class MockChroot:
+            def __init__(self, chroot_path, mount_path=None, bind_mounts=None):
+                self.chroot_path = chroot_path
+                self.mount_path = mount_path
+                self.bind_mounts = bind_mounts or []
+                
+                # Create the chroot directory if it doesn't exist
+                os.makedirs(chroot_path, exist_ok=True)
+                
+                # If mount_path is specified, create it too
+                if mount_path:
+                    os.makedirs(mount_path, exist_ok=True)
+            
+            def execute(self, cmd, *args, **kwargs):
+                log(f"Mock chroot execute: {cmd}")
+                return "", ""
+                
+            def copy_file(self, src, dst):
+                log(f"Mock chroot copy_file: {src} -> {dst}")
+                return
+                
+            def __enter__(self):
+                return self
+                
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                return
+        
+        # Add the class to the module
+        chroot_module.Chroot = MockChroot
+    
     # Ensure the config has a 'node' section
     if 'node' not in config:
         log("Adding 'node' section to config")
