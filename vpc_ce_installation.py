@@ -1100,7 +1100,7 @@ early_microcode="yes"
        essential_locations = [
            ('/boot', 'vmlinuz'),  # Main boot directory - critical for booting
            ('/boot/efi/EFI/BOOT', 'vmlinuz'),  # Primary EFI location - critical for EFI boot
-           ('/', 'vmlinuz')  # Root directory for fallback
+           ('/', 'vmlinuz')  # Root directory for fallback - CRITICAL for GRUB default entry
        ]
        
        # Check EFI partition size before copying
@@ -1175,6 +1175,14 @@ early_microcode="yes"
                    subprocess.run(['cp', source_kernel, target_kernel],
                                  capture_output=True, check=True)
                    log(f"Copied kernel to {target_kernel}")
+                   
+                   # For root directory, also create a copy without version suffix
+                   # This is critical for GRUB's default entry which looks for /vmlinuz
+                   if dir_path == '/':
+                       plain_target = f'{target_dir}/{prefix}'
+                       subprocess.run(['cp', source_kernel, plain_target],
+                                     capture_output=True, check=True)
+                       log(f"Copied kernel to {plain_target} (without version suffix)")
                except subprocess.CalledProcessError as e:
                    log(f"Failed to copy kernel to {target_kernel}: {e}")
                    if 'No space left on device' in str(e.stderr):
@@ -1188,6 +1196,14 @@ early_microcode="yes"
                    subprocess.run(['cp', source_initramfs, target_initramfs],
                                  capture_output=True, check=True)
                    log(f"Copied initramfs to {target_initramfs}")
+                   
+                   # For root directory, also create a copy without version suffix
+                   # This is critical for GRUB's default entry which looks for /initrd
+                   if dir_path == '/':
+                       plain_target = f'{target_dir}/initrd'
+                       subprocess.run(['cp', source_initramfs, plain_target],
+                                     capture_output=True, check=True)
+                       log(f"Copied initramfs to {plain_target} (without version suffix)")
                except subprocess.CalledProcessError as e:
                    log(f"Failed to copy initramfs to {target_initramfs}: {e}")
                    if 'No space left on device' in str(e.stderr):
@@ -1237,6 +1253,17 @@ early_microcode="yes"
                # Create the symlink
                os.symlink(full_target, full_link)
                log(f"Created symlink in filesystem: {full_link} -> {full_target}")
+               
+               # For critical files in root, also create a hard copy
+               if link in ['/vmlinuz', '/initrd']:
+                   # Get the actual file that the symlink points to
+                   actual_target = f'/mnt/stage{target}'
+                   if os.path.exists(actual_target):
+                       # Make a hard copy
+                       subprocess.run(['cp', actual_target, full_link], check=True)
+                       log(f"Created hard copy at {full_link} from {actual_target}")
+                   else:
+                       log(f"WARNING: Target file {actual_target} does not exist, cannot create hard copy")
            except Exception as e:
                log(f"Failed to create symlink in filesystem: {full_link} -> {full_target}: {e}")
        
@@ -1264,10 +1291,10 @@ set check_signatures=no
 # Use root partition
 search --no-floppy --set=root --label=ROOT
 
-# Boot entry
+# Boot entry - use absolute paths to ensure files are found
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
    echo 'Loading Linux kernel...'
-   linux /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet
    echo 'Loading initial ramdisk...'
    initrd /initrd
 }}
@@ -1438,54 +1465,198 @@ GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux
        
        # Method 4: Generate GRUB configuration with grub2-mkconfig
        log("Method 4: Generating GRUB configuration with grub2-mkconfig...")
-       result = subprocess.run(['chroot', '/mnt/stage', 'grub2-mkconfig', '-o', '/boot/grub2/grub.cfg'],
-                             capture_output=True, text=True)
        
-       if result.returncode == 0:
-           log("Successfully generated GRUB configuration with grub2-mkconfig")
-           # Copy the generated config to other locations
-           subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg'])
-           subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg'])
-       else:
-           log(f"Failed to generate GRUB configuration with grub2-mkconfig: {result.stderr}")
+       # Mount virtual filesystems in chroot for grub2-mkconfig
+       log("Mounting virtual filesystems for chroot...")
+       for fs in ['/dev', '/proc', '/sys']:
+           mount_path = f'/mnt/stage{fs}'
+           try:
+               # Check if already mounted
+               mount_check = subprocess.run(['mount', '|', 'grep', mount_path],
+                                         shell=True, capture_output=True, text=True)
+               if mount_check.returncode != 0:
+                   # Not mounted, so mount it
+                   subprocess.run(['mount', '--bind', fs, mount_path], check=False)
+                   log(f"Mounted {fs} to {mount_path}")
+           except Exception as e:
+               log(f"Warning: Failed to mount {fs}: {e}")
+       
+       # Try to generate GRUB config
+       try:
+           result = subprocess.run(['chroot', '/mnt/stage', 'grub2-mkconfig', '-o', '/boot/grub2/grub.cfg'],
+                                 capture_output=True, text=True)
+           
+           if result.returncode == 0:
+               log("Successfully generated GRUB configuration with grub2-mkconfig")
+               # Copy the generated config to other locations
+               subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg'])
+               subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg'])
+           else:
+               log(f"Failed to generate GRUB configuration with grub2-mkconfig: {result.stderr}")
+               
+               # Fallback: Create a basic GRUB config manually
+               log("Creating basic GRUB config manually as fallback...")
+               basic_grub_cfg = f"""set timeout=5
+set default=0
+
+menuentry "Nutanix AHV" {{
+   search --no-floppy --label ROOT --set=root
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+   initrd /initrd
+}}
+
+menuentry "Nutanix AHV (rescue mode)" {{
+   search --no-floppy --label ROOT --set=root
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 single
+   initrd /initrd
+}}
+"""
+               with open('/mnt/stage/boot/grub2/grub.cfg', 'w') as f:
+                   f.write(basic_grub_cfg)
+               # Copy to other locations
+               subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg'])
+               subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg'])
+               log("Created basic GRUB config manually")
+       except Exception as e:
+           log(f"Error during GRUB config generation: {e}")
+           # Create a basic GRUB config manually as a last resort
+           log("Creating basic GRUB config manually as last resort...")
+           basic_grub_cfg = f"""set timeout=5
+set default=0
+
+menuentry "Nutanix AHV" {{
+   search --no-floppy --label ROOT --set=root
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+   initrd /initrd
+}}
+"""
+           try:
+               with open('/mnt/stage/boot/grub2/grub.cfg', 'w') as f:
+                   f.write(basic_grub_cfg)
+               # Copy to other locations
+               subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/NUTANIX/grub.cfg'])
+               subprocess.run(['cp', '/mnt/stage/boot/grub2/grub.cfg', '/mnt/stage/boot/efi/EFI/BOOT/grub.cfg'])
+               log("Created basic GRUB config manually as last resort")
+           except Exception as e2:
+               log(f"Failed to create basic GRUB config: {e2}")
+       
+       # Unmount virtual filesystems
+       log("Unmounting virtual filesystems...")
+       for fs in ['/sys', '/proc', '/dev']:  # Unmount in reverse order
+           mount_path = f'/mnt/stage{fs}'
+           try:
+               subprocess.run(['umount', mount_path], check=False)
+               log(f"Unmounted {mount_path}")
+           except Exception as e:
+               log(f"Warning: Failed to unmount {mount_path}: {e}")
        
        # Create EFI NVRAM entries
        log("Creating EFI NVRAM entries...")
        
-       # First, clear any existing entries
-       subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--delete-all'],
-                     capture_output=True, text=True)
+       # Check if EFI variables are supported
+       efi_vars_supported = False
+       try:
+           # Check if efivarfs is mounted
+           result = subprocess.run(['mount', '|', 'grep', 'efivarfs'],
+                                 shell=True, capture_output=True, text=True)
+           if result.returncode == 0:
+               log("EFI variables are supported (efivarfs is mounted)")
+               efi_vars_supported = True
+           else:
+               # Try to mount efivarfs
+               log("Attempting to mount efivarfs...")
+               mount_result = subprocess.run(['mount', '-t', 'efivarfs', 'efivarfs', '/sys/firmware/efi/efivars'],
+                                          check=False, capture_output=True, text=True)
+               if mount_result.returncode == 0:
+                   log("Successfully mounted efivarfs")
+                   efi_vars_supported = True
+               else:
+                   log(f"Failed to mount efivarfs: {mount_result.stderr}")
+                   
+           # Additional check - see if efibootmgr works
+           if efi_vars_supported:
+               test_result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '-v'],
+                                         capture_output=True, text=True)
+               if test_result.returncode != 0:
+                   log(f"efibootmgr test failed: {test_result.stderr}")
+                   efi_vars_supported = False
+               else:
+                   log("efibootmgr test successful")
+       except Exception as e:
+           log(f"Error checking EFI variables support: {e}")
+           efi_vars_supported = False
        
-       # Create new entry for NUTANIX
-       result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--create',
-                               '--disk', f'{boot_device}', '--part', '1',
-                               '--label', 'Nutanix AHV', '--loader', '/EFI/NUTANIX/grubx64.efi'],
-                               capture_output=True, text=True)
-       
-       if result.returncode == 0:
-           log("Successfully created EFI NVRAM entry for NUTANIX")
+       if efi_vars_supported:
+           try:
+               # First, clear any existing entries
+               clear_result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--delete-all'],
+                                          capture_output=True, text=True)
+               if clear_result.returncode == 0:
+                   log("Successfully cleared existing EFI entries")
+               else:
+                   log(f"Warning: Failed to clear existing EFI entries: {clear_result.stderr}")
+                   # Continue anyway - this is not critical
+               
+               # Create new entry for NUTANIX
+               result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--create',
+                                      '--disk', f'{boot_device}', '--part', '1',
+                                      '--label', 'Nutanix AHV', '--loader', '/EFI/NUTANIX/grubx64.efi'],
+                                      capture_output=True, text=True)
+               
+               if result.returncode == 0:
+                   log("Successfully created EFI NVRAM entry for NUTANIX")
+                   nutanix_entry_created = True
+               else:
+                   log(f"Failed to create EFI NVRAM entry for NUTANIX: {result.stderr}")
+                   nutanix_entry_created = False
+               
+               # Create fallback entry for BOOT
+               result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--create',
+                                      '--disk', f'{boot_device}', '--part', '1',
+                                      '--label', 'Fallback Boot', '--loader', '/EFI/BOOT/BOOTX64.EFI'],
+                                      capture_output=True, text=True)
+               
+               if result.returncode == 0:
+                   log("Successfully created EFI NVRAM entry for fallback boot")
+                   fallback_entry_created = True
+               else:
+                   log(f"Failed to create EFI NVRAM entry for fallback boot: {result.stderr}")
+                   fallback_entry_created = False
+               
+               # Set boot order only if at least one entry was created
+               if nutanix_entry_created or fallback_entry_created:
+                   # Get current boot entries
+                   list_result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr'],
+                                             capture_output=True, text=True)
+                   
+                   if list_result.returncode == 0:
+                       # Parse the output to find the boot entries we created
+                       boot_entries = []
+                       for line in list_result.stdout.splitlines():
+                           if "Nutanix AHV" in line or "Fallback Boot" in line:
+                               match = re.search(r'Boot([0-9A-F]{4})', line)
+                               if match:
+                                   boot_entries.append(match.group(1))
+                       
+                       if boot_entries:
+                           # Set boot order with our entries first
+                           boot_order = ','.join(boot_entries)
+                           result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--bootorder', boot_order],
+                                                 capture_output=True, text=True)
+                           
+                           if result.returncode == 0:
+                               log(f"Successfully set EFI boot order to {boot_order}")
+                           else:
+                               log(f"Failed to set EFI boot order: {result.stderr}")
+                       else:
+                           log("No Nutanix boot entries found in efibootmgr output")
+                   else:
+                       log(f"Failed to list EFI boot entries: {list_result.stderr}")
+           except Exception as e:
+               log(f"Error during EFI boot entry creation: {e}")
        else:
-           log(f"Failed to create EFI NVRAM entry for NUTANIX: {result.stderr}")
-       
-       # Create fallback entry for BOOT
-       result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--create',
-                               '--disk', f'{boot_device}', '--part', '1',
-                               '--label', 'Fallback Boot', '--loader', '/EFI/BOOT/BOOTX64.EFI'],
-                               capture_output=True, text=True)
-       
-       if result.returncode == 0:
-           log("Successfully created EFI NVRAM entry for fallback boot")
-       else:
-           log(f"Failed to create EFI NVRAM entry for fallback boot: {result.stderr}")
-       
-       # Set boot order to try NUTANIX first, then fallback
-       result = subprocess.run(['chroot', '/mnt/stage', 'efibootmgr', '--bootorder', '0000,0001'],
-                             capture_output=True, text=True)
-       
-       if result.returncode == 0:
-           log("Successfully set EFI boot order")
-       else:
-           log(f"Failed to set EFI boot order: {result.stderr}")
+           log("EFI variables are not supported - skipping efibootmgr commands")
+           log("Relying on fallback boot methods: BOOTX64.EFI and startup.nsh")
        
        # Create a startup.nsh script for emergency boot (only in the root of EFI partition)
        log("Creating startup.nsh script for emergency boot...")
