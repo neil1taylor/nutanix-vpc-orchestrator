@@ -633,8 +633,8 @@ exec /bin/sh
            f.write(f"""
 # Rescue script entry
 menuentry 'Nutanix AHV (Rescue Script)' --unrestricted --id nutanix_rescue {{
-  echo 'Running rescue script...'
-  linux16 /boot/rescue.sh
+ echo 'Running rescue script...'
+ linux /boot/rescue.sh
 }}
 """)
        log("Added rescue script entry to GRUB configuration")
@@ -994,7 +994,7 @@ menuentry 'Nutanix AHV (Emergency)' --unrestricted --id nutanix_emergency {{
 # Rescue script entry
 menuentry 'Nutanix AHV (Rescue Script)' --unrestricted --id nutanix_rescue {{
    echo 'Running rescue script...'
-   linux16 /boot/rescue.sh
+   linux /boot/rescue.sh
 }}
 """
        
