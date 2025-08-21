@@ -223,6 +223,13 @@ setup_overlay() {
         rm /overlay/phoenix
     fi
     mkdir -p /overlay/phoenix || drop_to_shell "Failed to create /overlay/phoenix"
+    
+    # Create /root directory in overlay
+    mkdir -p /overlay/root || drop_to_shell "Failed to create /overlay/root"
+    
+    # Create a symlink from /root/phoenix to /phoenix in the overlay
+    ln -sf /phoenix /overlay/root/phoenix || drop_to_shell "Failed to create symlink /root/phoenix -> /phoenix"
+    echo "Created symlink /overlay/root/phoenix -> /phoenix"
 
     # Bind mount the real filesystems
     mount --bind /proc /overlay/proc || drop_to_shell "Failed to bind mount /proc"
