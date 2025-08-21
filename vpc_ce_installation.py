@@ -564,10 +564,24 @@ def create_installation_params(config):
         params.svm_num_vcpus = resources['cvm_vcpus']
         
         # Disk layout
-        params.ce_cvm_data_disks = hw_config['cvm_data_disks']
-        params.ce_cvm_boot_disks = hw_config['cvm_boot_disks']
+        # Ensure these are lists, even if they're strings in the config
+        if isinstance(hw_config['cvm_data_disks'], str):
+            params.ce_cvm_data_disks = [hw_config['cvm_data_disks']]
+        else:
+            params.ce_cvm_data_disks = hw_config['cvm_data_disks']
+            
+        if isinstance(hw_config['cvm_boot_disks'], str):
+            params.ce_cvm_boot_disks = [hw_config['cvm_boot_disks']]
+        else:
+            params.ce_cvm_boot_disks = hw_config['cvm_boot_disks']
+            
         params.ce_hyp_boot_disk = hw_config['hypervisor_boot_disk']
-        params.ce_disks = [hw_config['boot_disk']] + hw_config['cvm_data_disks']
+        
+        # Ensure cvm_data_disks is a list before concatenation
+        if isinstance(hw_config['cvm_data_disks'], str):
+            params.ce_disks = [hw_config['boot_disk']] + [hw_config['cvm_data_disks']]
+        else:
+            params.ce_disks = [hw_config['boot_disk']] + hw_config['cvm_data_disks']
         
         # Community Edition settings
         params.ce_eula_accepted = True
