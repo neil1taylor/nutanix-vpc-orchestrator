@@ -879,16 +879,41 @@ def main():
         # Create the disk_info submodule
         disk_info = types.ModuleType('hardware_inventory.disk_info')
         
+        # Create a mock disk class
+        class MockDisk:
+            def __init__(self, dev, model="Generic SSD", size=100, is_ssd=True):
+                self.dev = dev
+                self.model = model
+                self.size = size
+                self.isSSD = is_ssd
+            
+            def is_virtual_disk(self):
+                return False
+        
         # Add required functions to disk_info
         def mock_collect_disk_info(disk_list_filter=None, skip_part_info=True):
-            return {disk: None for disk in config['hardware']['cvm_data_disks']}
+            result = {}
+            # Add boot disk
+            boot_disk = config['hardware']['boot_disk']
+            result[boot_disk] = MockDisk(boot_disk, "Boot SSD", 200)
+            
+            # Add data disks
+            for disk in config['hardware']['cvm_data_disks']:
+                result[disk] = MockDisk(disk, "Data SSD", 500)
+                
+            return result
         
         def mock_list_hyp_boot_disks():
             return [config['hardware']['boot_disk']]
+            
+        # Add function to list NVMe disks
+        def mock_list_nvme_disks():
+            return [disk for disk in config['hardware']['cvm_data_disks'] if 'nvme' in disk]
         
         # Assign the functions to the module
         disk_info.collect_disk_info = mock_collect_disk_info
         disk_info.list_hyp_boot_disks = mock_list_hyp_boot_disks
+        disk_info.list_nvme_disks = mock_list_nvme_disks
         
         # Register the disk_info submodule
         sys.modules['hardware_inventory.disk_info'] = disk_info
