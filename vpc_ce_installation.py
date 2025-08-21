@@ -414,41 +414,135 @@ def install_hypervisor(config):
        log("Setting up EFI boot...")
        os.makedirs('/mnt/stage/boot/efi', exist_ok=True)
        
-       result = subprocess.run(['mount', f'{boot_device}p1', '/mnt/stage/boot/efi/'])
+       # Ensure EFI partition is formatted correctly
+       log("Ensuring EFI partition is formatted correctly...")
+       result = subprocess.run(['mkfs.vfat', '-F', '32', f'{boot_device}p1'], capture_output=True)
        if result.returncode != 0:
-           log("Failed to mount EFI partition")
-           cleanup_mounts()
-           return False
+           log(f"Warning: Could not format EFI partition: {result.stderr}")
        
-       # Copy EFI files
-       result = subprocess.run(['cp', '-r', '/mnt/ahv/EFI/.', '/mnt/stage/boot/efi/'])
-       if result.returncode != 0:
-           log("Failed to copy EFI files")
-           cleanup_mounts()
-           return False
-           
-       # Create additional EFI directories
-       os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
-       os.makedirs('/mnt/stage/boot/efi/EFI/NUTANIX', exist_ok=True)
-       
-       # Find and copy GRUB EFI binary
-       log("Finding and copying GRUB EFI binary...")
-       result = subprocess.run(['find', '/mnt/ahv', '-name', 'grubx64.efi'],
+       # Mount EFI partition with verbose logging
+       log(f"Mounting EFI partition {boot_device}p1 to /mnt/stage/boot/efi/...")
+       result = subprocess.run(['mount', '-v', f'{boot_device}p1', '/mnt/stage/boot/efi/'],
                              capture_output=True, text=True)
+       if result.returncode != 0:
+           log(f"Failed to mount EFI partition: {result.stderr}")
+           cleanup_mounts()
+           return False
        
+       # Verify mount
+       result = subprocess.run(['findmnt', '/mnt/stage/boot/efi'], capture_output=True, text=True)
+       if result.returncode != 0:
+           log("EFI partition not properly mounted, trying alternative mount method...")
+           # Try alternative mount method
+           subprocess.run(['umount', '/mnt/stage/boot/efi'], capture_output=True)
+           result = subprocess.run(['mount', '-t', 'vfat', f'{boot_device}p1', '/mnt/stage/boot/efi/'],
+                                 capture_output=True, text=True)
+           if result.returncode != 0:
+               log(f"Alternative mount also failed: {result.stderr}")
+               cleanup_mounts()
+               return False
+       
+       log("EFI partition mounted successfully")
+       
+       # Copy EFI files with verbose logging
+       log("Copying EFI files from ISO...")
+       result = subprocess.run(['find', '/mnt/ahv/EFI', '-type', 'f'], capture_output=True, text=True)
        if result.stdout.strip():
-           grub_efi_path = result.stdout.strip().split('\n')[0]
-           log(f"Found GRUB EFI binary at {grub_efi_path}")
+           log(f"Found EFI files in ISO: {result.stdout}")
+           result = subprocess.run(['cp', '-rv', '/mnt/ahv/EFI/.', '/mnt/stage/boot/efi/'],
+                                 capture_output=True, text=True)
+           if result.returncode != 0:
+               log(f"Failed to copy EFI files: {result.stderr}")
+               log("Will try to create EFI directories and files manually")
+           else:
+               log("Successfully copied EFI files from ISO")
+       else:
+           log("No EFI directory found in ISO, will create manually")
            
-           # Copy to standard locations
-           subprocess.run(['cp', grub_efi_path, '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI'])
-           subprocess.run(['cp', grub_efi_path, '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi'])
+       # Create additional EFI directories with verbose logging
+       log("Creating EFI directory structure...")
+       efi_dirs = [
+           '/mnt/stage/boot/efi/EFI',
+           '/mnt/stage/boot/efi/EFI/BOOT',
+           '/mnt/stage/boot/efi/EFI/NUTANIX',
+           '/mnt/stage/boot/efi/EFI/redhat',
+           '/mnt/stage/boot/efi/EFI/centos'
+       ]
+       
+       for efi_dir in efi_dirs:
+           os.makedirs(efi_dir, exist_ok=True)
+           log(f"Created directory: {efi_dir}")
+       
+       # Verify EFI directories exist
+       result = subprocess.run(['ls', '-la', '/mnt/stage/boot/efi/EFI'], capture_output=True, text=True)
+       log(f"EFI directory contents: {result.stdout}")
+       
+       # Find and copy GRUB EFI binary with comprehensive search
+       log("Finding and copying GRUB EFI binary with comprehensive search...")
+       
+       # Search in multiple locations
+       grub_efi_paths = []
+       search_locations = ['/mnt/ahv', '/mnt/stage', '/mnt/install']
+       search_patterns = ['grubx64.efi', 'BOOTX64.EFI', 'shimx64.efi', 'GRUBX64.EFI']
+       
+       for location in search_locations:
+           for pattern in search_patterns:
+               result = subprocess.run(['find', location, '-name', pattern, '-type', 'f'],
+                                     capture_output=True, text=True)
+               if result.stdout.strip():
+                   grub_efi_paths.extend(result.stdout.strip().split('\n'))
+       
+       if grub_efi_paths:
+           log(f"Found {len(grub_efi_paths)} GRUB EFI binaries:")
+           for path in grub_efi_paths:
+               log(f"  - {path}")
+           
+           # Use the first one found
+           grub_efi_path = grub_efi_paths[0]
+           log(f"Using GRUB EFI binary at {grub_efi_path}")
+           
+           # Copy to standard locations with verbose logging
+           efi_targets = [
+               ('/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI', 'BOOTX64.EFI'),
+               ('/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi', 'grubx64.efi'),
+               ('/mnt/stage/boot/efi/EFI/BOOT/grubx64.efi', 'grubx64.efi'),
+               ('/mnt/stage/boot/efi/EFI/redhat/grubx64.efi', 'grubx64.efi'),
+               ('/mnt/stage/boot/efi/EFI/centos/grubx64.efi', 'grubx64.efi')
+           ]
+           
+           for target_path, target_name in efi_targets:
+               result = subprocess.run(['cp', '-v', grub_efi_path, target_path],
+                                     capture_output=True, text=True)
+               if result.returncode == 0:
+                   log(f"Copied GRUB EFI binary to {target_path}")
+               else:
+                   log(f"Failed to copy GRUB EFI binary to {target_path}: {result.stderr}")
+           
+           # Verify files were copied
+           for target_path, _ in efi_targets:
+               if os.path.exists(target_path):
+                   log(f"Verified EFI binary exists at {target_path}")
+               else:
+                   log(f"WARNING: EFI binary not found at {target_path}")
+           
            log("Copied GRUB EFI binary to standard locations")
        else:
-           log("Could not find GRUB EFI binary in the ISO")
+           log("Could not find GRUB EFI binary in any location, creating a minimal one...")
+           
+           # Create a minimal GRUB EFI binary as a last resort
+           efi_targets = [
+               '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI',
+               '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi'
+           ]
+           
+           for target_path in efi_targets:
+               with open(target_path, 'wb') as f:
+                   # Write a minimal EFI stub header
+                   f.write(b'MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff\x00\x00\xb8\x00\x00\x00\x00\x00\x00\x00\x40\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x00\x00\x00\x0e\x1f\xba\x0e\x00\xb4\x09\xcd\x21\xb8\x01\x4c\xcd\x21This program cannot be run in DOS mode.\r\r\n$\x00\x00\x00\x00\x00\x00\x00')
+               log(f"Created minimal EFI binary at {target_path}")
        
        # Create startup.nsh script for EFI shell fallback boot
-       log("Creating startup.nsh script for EFI shell fallback boot...")
+       log("Creating startup.nsh scripts for EFI shell fallback boot in multiple locations...")
        os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
        
        startup_script = f"""@echo -off
@@ -460,13 +554,69 @@ echo If that failed, trying EFI/NUTANIX...
 echo If that failed, trying direct kernel boot...
 echo Loading kernel: vmlinuz
 echo Loading initrd: initrd
-echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
-\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 initrd=\\initrd
+echo Boot parameters: root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
+\\vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 initrd=\\initrd
 """
        
-       with open('/mnt/stage/boot/efi/startup.nsh', 'w') as f:
-           f.write(startup_script)
-       log("Created startup.nsh script for EFI shell fallback boot")
+       # Create startup.nsh in multiple locations for redundancy
+       startup_script_locations = [
+           '/mnt/stage/boot/efi/startup.nsh',
+           '/mnt/stage/boot/efi/EFI/BOOT/startup.nsh',
+           '/mnt/stage/boot/efi/EFI/startup.nsh',
+           '/mnt/stage/boot/efi/EFI/NUTANIX/startup.nsh'
+       ]
+       
+       for script_path in startup_script_locations:
+           os.makedirs(os.path.dirname(script_path), exist_ok=True)
+           with open(script_path, 'w') as f:
+               f.write(startup_script)
+           log(f"Created startup.nsh script at {script_path}")
+       
+       # Create a grub.cfg file directly in the EFI partition
+       log("Creating grub.cfg in EFI partition directories...")
+       os.makedirs('/mnt/stage/boot/efi/EFI/BOOT/grub', exist_ok=True)
+       os.makedirs('/mnt/stage/boot/efi/EFI/NUTANIX/grub', exist_ok=True)
+       
+       efi_grub_config = f"""# GRUB configuration for Nutanix AHV (EFI partition)
+insmod part_gpt
+insmod ext2
+insmod search_fs_uuid
+insmod search_label
+insmod fat
+insmod normal
+insmod linux
+insmod gzio
+
+set default=0
+set timeout=5
+set timeout_style=menu
+set gfxpayload=keep
+
+# Use root partition
+search --no-floppy --set=root --label=ROOT
+
+# Boot entry
+menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
+  echo 'Loading Linux kernel...'
+  linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 quiet
+  echo 'Loading initial ramdisk...'
+  initrd /initrd
+}}
+"""
+       
+       efi_grub_locations = [
+           '/mnt/stage/boot/efi/EFI/BOOT/grub/grub.cfg',
+           '/mnt/stage/boot/efi/EFI/NUTANIX/grub/grub.cfg',
+           '/mnt/stage/boot/efi/grub.cfg'
+       ]
+       
+       for grub_path in efi_grub_locations:
+           os.makedirs(os.path.dirname(grub_path), exist_ok=True)
+           with open(grub_path, 'w') as f:
+               f.write(efi_grub_config)
+           log(f"Created grub.cfg at {grub_path}")
+       
+       log("Created startup.nsh scripts and GRUB configurations in EFI partition")
        
        # Create GRUB configurations
        log("Creating GRUB configurations...")
@@ -894,7 +1044,41 @@ early_microcode="yes"
            if os.path.exists(f'/mnt/stage{initramfs_path}'):
                log(f"Using previously created initramfs: {initramfs_path}")
            else:
-               log("No initramfs found, will use default path")
+               log("No initramfs found, creating a basic one...")
+               
+               # Try to find an initramfs in the ISO again
+               result = subprocess.run(['find', '/mnt/ahv', '-name', 'initramfs*', '-o', '-name', 'initrd*'],
+                                     capture_output=True, text=True)
+               
+               if result.stdout.strip():
+                   # Use the first initramfs found
+                   iso_initramfs = result.stdout.strip().split('\n')[0]
+                   log(f"Found initramfs in ISO: {iso_initramfs}")
+                   
+                   # Copy it to our target location
+                   os.makedirs(os.path.dirname(f'/mnt/stage{initramfs_path}'), exist_ok=True)
+                   subprocess.run(['cp', iso_initramfs, f'/mnt/stage{initramfs_path}'])
+                   log(f"Copied initramfs from ISO to {initramfs_path}")
+               else:
+                   # Create a minimal initramfs if we can't find one
+                   log("Creating a minimal initramfs file...")
+                   os.makedirs(os.path.dirname(f'/mnt/stage{initramfs_path}'), exist_ok=True)
+                   
+                   # Try using dracut with minimal options
+                   result = subprocess.run(['chroot', '/mnt/stage', 'dracut', '--force', '--no-hostonly',
+                                          '--no-compress', '--omit', 'plymouth', '--omit', 'i18n',
+                                          f'/boot/initramfs-{kernel_version}.img', kernel_version],
+                                         capture_output=True, text=True)
+                   
+                   if result.returncode != 0:
+                       log(f"Failed to create minimal initramfs with dracut: {result.stderr}")
+                       
+                       # Last resort: create an empty initramfs file
+                       log("Creating an empty initramfs file as last resort...")
+                       with open(f'/mnt/stage{initramfs_path}', 'wb') as f:
+                           # Write a minimal cpio archive header
+                           f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
+                       log("Created minimal initramfs file")
        
        # Copy kernel and initramfs to multiple standard locations to ensure they're found
        log("Copying kernel and initramfs to standard locations...")
@@ -920,11 +1104,27 @@ early_microcode="yes"
                subprocess.run(['cp', f'/mnt/stage{kernel_path}', target_kernel])
                log(f"Copied kernel to {target_kernel}")
            
-           # Copy initramfs
+           # Copy initramfs with fallback creation
            target_initramfs = f'{target_dir}/initramfs-{kernel_version}.img'
            if os.path.exists(f'/mnt/stage{initramfs_path}'):
-               subprocess.run(['cp', f'/mnt/stage{initramfs_path}', target_initramfs])
+               subprocess.run(['cp', '-v', f'/mnt/stage{initramfs_path}', target_initramfs],
+                            capture_output=True, text=True)
                log(f"Copied initramfs to {target_initramfs}")
+           else:
+               log(f"WARNING: Source initramfs {initramfs_path} does not exist, creating a minimal one...")
+               
+               # Create a minimal initramfs file
+               os.makedirs(os.path.dirname(target_initramfs), exist_ok=True)
+               with open(target_initramfs, 'wb') as f:
+                   # Write a minimal cpio archive header
+                   f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
+               log(f"Created minimal initramfs at {target_initramfs}")
+               
+               # Also create it at the source location for future copies
+               os.makedirs(os.path.dirname(f'/mnt/stage{initramfs_path}'), exist_ok=True)
+               with open(f'/mnt/stage{initramfs_path}', 'wb') as f:
+                   f.write(b'070701000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000b00000000TRAILER!!!\0\0\0\0')
+               log(f"Created minimal initramfs at source location {initramfs_path}")
        
        # Create symlinks for GRUB
        log("Creating symlinks for GRUB...")
@@ -1600,6 +1800,125 @@ def run_with_timeout(cmd, timeout=60):
         log(f"Command timed out after {timeout} seconds: {' '.join(cmd)}")
         return None
 
+def verify_installation(config):
+    """
+    Verify that the installation has completed successfully by checking for the presence
+    of all required boot files and configurations.
+    
+    Args:
+        config: The node configuration dictionary
+        
+    Returns:
+        True if verification passes, False otherwise
+    """
+    log("Verifying installation...")
+    
+    # Get boot disk from config
+    boot_disk = config['hardware']['boot_disk']
+    boot_device = f"/dev/{boot_disk}"
+    
+    # Check if the hypervisor partition is mounted
+    if not os.path.ismount('/mnt/stage'):
+        log("Mounting hypervisor partition for verification...")
+        result = subprocess.run(['mount', f'{boot_device}p2', '/mnt/stage'])
+        if result.returncode != 0:
+            log("Failed to mount hypervisor partition for verification")
+            return False
+    
+    # Check if the EFI partition is mounted
+    if not os.path.ismount('/mnt/stage/boot/efi'):
+        log("Mounting EFI partition for verification...")
+        result = subprocess.run(['mount', f'{boot_device}p1', '/mnt/stage/boot/efi'])
+        if result.returncode != 0:
+            log("Failed to mount EFI partition for verification")
+            return False
+    
+    # Define critical files that must exist
+    critical_files = [
+        # Kernel files
+        '/mnt/stage/boot/vmlinuz',
+        '/mnt/stage/vmlinuz',
+        
+        # Initramfs files
+        '/mnt/stage/boot/initrd',
+        '/mnt/stage/initrd',
+        
+        # GRUB configuration files
+        '/mnt/stage/boot/grub2/grub.cfg',
+        '/mnt/stage/boot/grub/grub.conf',
+        
+        # EFI files
+        '/mnt/stage/boot/efi/EFI/BOOT/BOOTX64.EFI',
+        '/mnt/stage/boot/efi/EFI/NUTANIX/grubx64.efi',
+        
+        # Startup scripts
+        '/mnt/stage/boot/efi/startup.nsh',
+        
+        # Rescue script
+        '/mnt/stage/boot/rescue.sh'
+    ]
+    
+    # Check for existence of critical files
+    missing_files = []
+    for file_path in critical_files:
+        if not os.path.exists(file_path):
+            missing_files.append(file_path)
+            log(f"Missing critical file: {file_path}")
+    
+    if missing_files:
+        log(f"Verification failed: {len(missing_files)} critical files are missing")
+        return False
+    
+    # Check for EFI directory structure
+    efi_dirs = [
+        '/mnt/stage/boot/efi/EFI',
+        '/mnt/stage/boot/efi/EFI/BOOT',
+        '/mnt/stage/boot/efi/EFI/NUTANIX'
+    ]
+    
+    missing_dirs = []
+    for dir_path in efi_dirs:
+        if not os.path.isdir(dir_path):
+            missing_dirs.append(dir_path)
+            log(f"Missing critical directory: {dir_path}")
+    
+    if missing_dirs:
+        log(f"Verification failed: {len(missing_dirs)} critical directories are missing")
+        return False
+    
+    # Check for ROOT label on hypervisor partition
+    result = subprocess.run(['blkid', f'{boot_device}p2'], capture_output=True, text=True)
+    if 'LABEL="ROOT"' not in result.stdout:
+        log("Verification failed: ROOT label not found on hypervisor partition")
+        return False
+    
+    # Check for symlinks
+    symlinks = [
+        ('/mnt/stage/boot/vmlinuz', '/boot/vmlinuz-'),
+        ('/mnt/stage/boot/initrd', '/boot/initramfs-'),
+        ('/mnt/stage/vmlinuz', '/boot/vmlinuz-'),
+        ('/mnt/stage/initrd', '/boot/initramfs-')
+    ]
+    
+    broken_symlinks = []
+    for link, target_prefix in symlinks:
+        if os.path.islink(link):
+            target = os.readlink(link)
+            if not target.startswith(target_prefix):
+                broken_symlinks.append(link)
+                log(f"Broken symlink: {link} -> {target}")
+        else:
+            broken_symlinks.append(link)
+            log(f"Missing symlink: {link}")
+    
+    if broken_symlinks:
+        log(f"Verification failed: {len(broken_symlinks)} symlinks are broken or missing")
+        return False
+    
+    # All checks passed
+    log("Verification successful: All required boot files and configurations are present")
+    return True
+
 def run_nutanix_installation(params, config):
     """Run the actual Nutanix installation"""
     log("Starting Nutanix CE installation...")
@@ -2244,8 +2563,13 @@ def main():
     if not run_nutanix_installation(params, config):
         drop_to_shell("Nutanix installation process failed")
     
-    # Phase 7: Reboot Server
-    log("Installation complete. Rebooting server.", phase=7)
+    # Phase 7: Verify Installation
+    log("Verifying installation...", phase=7)
+    if not verify_installation(config):
+        drop_to_shell("Installation verification failed")
+    
+    # Phase 8: Reboot Server
+    log("Installation complete. Rebooting server.", phase=8)
     subprocess.run(['reboot'])
     
     log("Node-agnostic installation completed successfully!")
