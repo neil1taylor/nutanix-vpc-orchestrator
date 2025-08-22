@@ -1407,7 +1407,7 @@ GRUB_DISABLE_RECOVERY=false
 GRUB_DISABLE_SUBMENU=false
 GRUB_TERMINAL="console serial"
 GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
-GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0"
+GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib rd.driver.pre=ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug"
 GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux gzio"
 """.format(boot_disk=boot_disk))
        log("Created GRUB defaults file")
@@ -1727,8 +1727,8 @@ echo If that failed, trying EFI/NUTANIX...
 echo If that failed, trying direct kernel boot...
 echo Loading kernel: vmlinuz
 echo Loading initrd: initrd
-echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8
-\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8 initrd=\\initrd
+echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib rd.driver.pre=ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug
+\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib rd.driver.pre=ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug initrd=\\initrd
 echo If all boot methods failed, try running the rescue script...
 \\boot\\rescue.sh
 """)
@@ -1764,9 +1764,9 @@ for KERNEL_PATH in /boot/vmlinuz-{kernel_version} /vmlinuz /boot/bzImage /bzImag
        # Try different root specifications
        for ROOT_SPEC in "root=/dev/{boot_disk}p2" "root=LABEL=ROOT" "root=UUID=$(blkid -s UUID -o value /dev/{boot_disk}p2 2>/dev/null || echo 'none')"; do
          echo "Attempting boot with $ROOT_SPEC"
-         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8\""
+         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib rd.driver.pre=ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug\""
          
-         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib modules=ionic console=tty0 console=ttyS0,115200n8" 2>/dev/null
+         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib rd.driver.pre=ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug" 2>/dev/null
          
          if [ $? -eq 0 ]; then
            echo "kexec load successful, executing kernel..."
