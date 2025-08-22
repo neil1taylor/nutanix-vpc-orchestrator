@@ -549,6 +549,15 @@ early_microcode="yes"
                          capture_output=True, text=True)
            log("Copied dracut from host to chroot environment")
        
+       # Create required directories for dracut
+       log("Creating required directories for dracut...")
+       os.makedirs('/mnt/stage/var/tmp', exist_ok=True)
+       os.makedirs('/mnt/stage/tmp', exist_ok=True)
+       os.makedirs('/mnt/stage/var/lib/initramfs', exist_ok=True)
+       # Set proper permissions
+       subprocess.run(['chmod', '1777', '/mnt/stage/var/tmp'], check=False)
+       subprocess.run(['chmod', '1777', '/mnt/stage/tmp'], check=False)
+       
        # Generate initramfs
        log(f"Generating initramfs for kernel version {kernel_version}")
        result = subprocess.run(['chroot', '/mnt/stage', 'dracut', '--force',
@@ -629,6 +638,17 @@ early_microcode="yes"
            except subprocess.CalledProcessError:
                pass  # Continue if symlink creation fails
        
+       # Copy GRUB modules from host if they exist
+       log("Checking for GRUB modules on host system...")
+       host_grub_dir = '/usr/lib/grub/x86_64-efi'
+       target_grub_dir = '/mnt/stage/usr/lib/grub/x86_64-efi'
+       
+       if os.path.exists(host_grub_dir):
+           log(f"Copying GRUB modules from host {host_grub_dir} to chroot...")
+           os.makedirs(target_grub_dir, exist_ok=True)
+           subprocess.run(['cp', '-rf', f'{host_grub_dir}/*', target_grub_dir],
+                         shell=True, capture_output=True)
+       
        # Install GRUB with explicit target and directory
        log("Installing GRUB with explicit target and directory...")
        result = subprocess.run(['chroot', '/mnt/stage', 'grub2-install',
@@ -636,7 +656,6 @@ early_microcode="yes"
                                '--efi-directory=/boot/efi',
                                '--bootloader-id=NUTANIX',
                                '--boot-directory=/boot',
-                               '--directory=/usr/lib/grub/x86_64-efi',
                                f'{boot_device}'],
                                capture_output=True, text=True)
        
@@ -1167,6 +1186,7 @@ def create_mock_modules(config):
         layout_vroc_utils.get_vroc_disks = lambda layout: []
         layout_vroc_utils.get_vroc_raid_info = lambda layout: (None, None)
         layout_vroc_utils.is_vroc_supported = lambda: False
+        layout_vroc_utils.get_vroc_volume = lambda layout, volume_id=None: None
         sys.modules['layout.layout_vroc_utils'] = layout_vroc_utils
         
         layout.layout_finder = layout_finder
