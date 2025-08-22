@@ -561,8 +561,8 @@ echo If that failed, trying EFI/NUTANIX...
 echo If that failed, trying direct kernel boot...
 echo Loading kernel: vmlinuz
 echo Loading initrd: initrd
-echo Boot parameters: root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
-\\vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal initrd=\\initrd
+echo Boot parameters: root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
+\\vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target initrd=\\initrd
 """
        
        # Only create startup.nsh in the root of the EFI partition to save space
@@ -604,7 +604,7 @@ search --no-floppy --set=root --label=ROOT
 # Boot entry
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
  echo 'Loading Linux kernel...'
- linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+ linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
  echo 'Loading initial ramdisk...'
  initrd /initrd
 }}
@@ -664,7 +664,7 @@ search --no-floppy --set=root --label=ROOT
 # Primary boot entry
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
   echo 'Loading Linux kernel...'
-  linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+  linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
   echo 'Loading initial ramdisk...'
   initrd /boot/initramfs-{kernel_version}.img
 }}
@@ -672,7 +672,7 @@ menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
 # Fallback entry with symlinks
 menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
   echo 'Loading Linux kernel (fallback)...'
-  linux /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+  linux /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
   echo 'Loading initial ramdisk (fallback)...'
   initrd /initrd
 }}
@@ -685,7 +685,7 @@ menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
 menuentry 'Nutanix AHV (UUID)' --unrestricted --id nutanix_uuid {{
   echo 'Loading Linux kernel (UUID)...'
   search --no-floppy --set=root --fs-uuid {root_uuid}
-  linux /boot/vmlinuz-{kernel_version} root=UUID={root_uuid} ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+  linux /boot/vmlinuz-{kernel_version} root=UUID={root_uuid} ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
   echo 'Loading initial ramdisk (UUID)...'
   initrd /boot/initramfs-{kernel_version}.img
 }}
@@ -700,12 +700,12 @@ menuentry 'Nutanix AHV (UUID)' --unrestricted --id nutanix_uuid {{
 timeout=5
 title Nutanix AHV
  root (hd0,1)
- kernel /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+ kernel /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
  initrd /boot/initramfs-{kernel_version}.img
 
 title Nutanix AHV (Fallback)
  root (hd0,1)
- kernel /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+ kernel /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
  initrd /initrd
 """
        
@@ -742,9 +742,9 @@ for KERNEL_PATH in /boot/vmlinuz-{kernel_version} /vmlinuz /boot/bzImage /bzImag
        # Try different root specifications
        for ROOT_SPEC in "root=/dev/{boot_disk}p2" "root=LABEL=ROOT" "root=UUID=$(blkid -s UUID -o value /dev/{boot_disk}p2 2>/dev/null || echo 'none')"; do
          echo "Attempting boot with $ROOT_SPEC"
-         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal\\""
+         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target\\""
          
-         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal" 2>/dev/null
+         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target" 2>/dev/null
          
          if [ $? -eq 0 ]; then
            echo "kexec load successful, executing kernel..."
@@ -773,11 +773,11 @@ echo "2. Find a valid initrd:"
 echo "   ls -la /boot/initramfs*"
 echo ""
 echo "3. Try manual boot with kexec:"
-echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal\\""
+echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target\\""
 echo "   kexec -e"
 echo ""
 echo "4. Or try manual boot from GRUB command line:"
-echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal"
+echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target"
 echo "   initrd /boot/initramfs-{kernel_version}.img"
 echo "   boot"
 echo ""
@@ -1350,7 +1350,7 @@ search --no-floppy --set=root --label=ROOT
 # Boot entry - use absolute paths to ensure files are found
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
    echo 'Loading Linux kernel...'
-   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
    echo 'Loading initial ramdisk...'
    initrd /initrd
 }}
@@ -1358,7 +1358,7 @@ menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
 # Fallback entry with full paths
 menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
    echo 'Loading Linux kernel (fallback)...'
-   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
    echo 'Loading initial ramdisk (fallback)...'
    initrd /boot/initramfs-{kernel_version}.img
 }}
@@ -1366,8 +1366,16 @@ menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
 # Emergency entry with UUID
 menuentry 'Nutanix AHV (Emergency)' --unrestricted --id nutanix_emergency {{
    echo 'Loading Linux kernel (emergency)...'
-   linux /boot/vmlinuz-{kernel_version} root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+   linux /boot/vmlinuz-{kernel_version} root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
    echo 'Loading initial ramdisk (emergency)...'
+   initrd /boot/initramfs-{kernel_version}.img
+}}
+
+# Rescue mode entry
+menuentry 'Nutanix AHV (Rescue Mode)' --unrestricted --id nutanix_rescue_mode {{
+   echo 'Loading Linux kernel (rescue mode)...'
+   linux /boot/vmlinuz-{kernel_version} root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=rescue.target
+   echo 'Loading initial ramdisk (rescue mode)...'
    initrd /boot/initramfs-{kernel_version}.img
 }}
 
@@ -1407,7 +1415,7 @@ GRUB_DISABLE_RECOVERY=false
 GRUB_DISABLE_SUBMENU=false
 GRUB_TERMINAL="console serial"
 GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
-GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal"
+GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target"
 GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux gzio"
 """.format(boot_disk=boot_disk))
        log("Created GRUB defaults file")
@@ -1492,8 +1500,83 @@ GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux
        
        # Create a cmdline file with the kernel parameters
        with open('/mnt/stage/tmp/cmdline.txt', 'w') as f:
-           f.write(f"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal")
+           f.write(f"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target")
+
+       # Create a diagnostic script to help identify where the system is freezing
+       log("Creating diagnostic script to help identify freezing issues...")
+       diagnostic_script = """#!/bin/bash
+# Diagnostic script to help identify system freezing issues
+LOG_FILE="/var/log/freeze_diagnostic.log"
+
+echo "Starting freeze diagnostic script at $(date)" > $LOG_FILE
+echo "System information:" >> $LOG_FILE
+uname -a >> $LOG_FILE
+cat /etc/os-release >> $LOG_FILE
+
+# Function to log system status
+log_status() {
+   echo "=== Status at $(date) ===" >> $LOG_FILE
+   echo "Top processes:" >> $LOG_FILE
+   ps aux | head -20 >> $LOG_FILE
+   echo "Memory usage:" >> $LOG_FILE
+   free -m >> $LOG_FILE
+   echo "Disk usage:" >> $LOG_FILE
+   df -h >> $LOG_FILE
+   echo "Last 20 kernel messages:" >> $LOG_FILE
+   dmesg | tail -20 >> $LOG_FILE
+   echo "Systemd status:" >> $LOG_FILE
+   systemctl status >> $LOG_FILE
+   echo "Failed services:" >> $LOG_FILE
+   systemctl --failed >> $LOG_FILE
+   echo "Network interfaces:" >> $LOG_FILE
+   ip addr >> $LOG_FILE
+   echo "PCI devices:" >> $LOG_FILE
+   lspci >> $LOG_FILE
+   echo "" >> $LOG_FILE
+}
+
+# Log initial status
+log_status
+
+# Log status every 10 seconds in the background
+while true; do
+   sleep 10
+   log_status
+done &
+
+# Create a marker file to indicate the script has started
+touch /var/run/diagnostic_running
+"""
        
+       try:
+           with open('/mnt/stage/usr/local/bin/freeze_diagnostic.sh', 'w') as f:
+               f.write(diagnostic_script)
+           os.chmod('/mnt/stage/usr/local/bin/freeze_diagnostic.sh', 0o755)
+           log("Created diagnostic script at /usr/local/bin/freeze_diagnostic.sh")
+           
+           # Create a systemd service to run the diagnostic script at boot
+           systemd_service = """[Unit]
+Description=System Freeze Diagnostic Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/freeze_diagnostic.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"""
+           
+           with open('/mnt/stage/etc/systemd/system/freeze-diagnostic.service', 'w') as f:
+               f.write(systemd_service)
+           
+           # Enable the service
+           subprocess.run(['chroot', '/mnt/stage', 'systemctl', 'enable', 'freeze-diagnostic.service'], check=False)
+           log("Created and enabled freeze-diagnostic systemd service")
+       except Exception as e:
+           log(f"Failed to create diagnostic script: {e}")
        # Check if objcopy is available
        result = subprocess.run(['chroot', '/mnt/stage', 'which', 'objcopy'],
                              capture_output=True, text=True)
@@ -1557,13 +1640,13 @@ set default=0
 
 menuentry "Nutanix AHV" {{
    search --no-floppy --label ROOT --set=root
-   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
    initrd /initrd
 }}
 
 menuentry "Nutanix AHV (rescue mode)" {{
    search --no-floppy --label ROOT --set=root
-   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 single pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 single pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
    initrd /initrd
 }}
 """
@@ -1582,7 +1665,7 @@ set default=0
 
 menuentry "Nutanix AHV" {{
    search --no-floppy --label ROOT --set=root
-   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
    initrd /initrd
 }}
 """
@@ -1727,8 +1810,13 @@ echo If that failed, trying EFI/NUTANIX...
 echo If that failed, trying direct kernel boot...
 echo Loading kernel: vmlinuz
 echo Loading initrd: initrd
-echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
-\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal initrd=\\initrd
+echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target
+\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target initrd=\\initrd
+echo If that failed, trying rescue mode boot...
+echo Loading kernel: vmlinuz
+echo Loading initrd: initrd
+echo Boot parameters with rescue target...
+\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=rescue.target initrd=\\initrd
 echo If all boot methods failed, try running the rescue script...
 \\boot\\rescue.sh
 """)
@@ -1764,9 +1852,9 @@ for KERNEL_PATH in /boot/vmlinuz-{kernel_version} /vmlinuz /boot/bzImage /bzImag
        # Try different root specifications
        for ROOT_SPEC in "root=/dev/{boot_disk}p2" "root=LABEL=ROOT" "root=UUID=$(blkid -s UUID -o value /dev/{boot_disk}p2 2>/dev/null || echo 'none')"; do
          echo "Attempting boot with $ROOT_SPEC"
-         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal\""
+         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target\""
          
-         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal" 2>/dev/null
+         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target" 2>/dev/null
          
          if [ $? -eq 0 ]; then
            echo "kexec load successful, executing kernel..."
@@ -1795,11 +1883,16 @@ echo "2. Find a valid initrd:"
 echo "   ls -la /boot/initramfs*"
 echo ""
 echo "3. Try manual boot with kexec:"
-echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal\""
+echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target\""
 echo "   kexec -e"
 echo ""
 echo "4. Or try manual boot from GRUB command line:"
-echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal"
+echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=emergency.target"
+echo "   initrd /boot/initramfs-{kernel_version}.img"
+echo "   boot"
+echo ""
+echo "5. Try minimal boot with rescue target:"
+echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal systemd.debug-shell=1 systemd.log_level=debug systemd.log_target=console systemd.unit=rescue.target"
 echo "   initrd /boot/initramfs-{kernel_version}.img"
 echo "   boot"
 echo ""

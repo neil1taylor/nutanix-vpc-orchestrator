@@ -496,6 +496,55 @@ curl -I http://your-server-ip/arizona.cfg
 ├── AHV-DVD-x86_64-el8.nutanix.20230302.101026.iso.iso
 ```
 
+## PCI Resource Allocation Issues with Pensando SmartNICs
+
+When installing Nutanix CE on IBM Cloud VPC bare metal servers with Pensando SmartNICs, you may encounter PCI resource allocation warnings in the boot logs. These warnings typically look like:
+
+```
+pci 10002:00:05.0: BAR 13: failed to assign [io size 0x10000]
+pci 10002:00:07.0: BAR 13: no space for [io size 0x10000]
+pci 10002:00:07.0: BAR 14: no space for [mem size 0x20000000]
+pci 10002:00:07.0: BAR 15: no space for [mem size 0x20000000 64bit pref]
+```
+
+These warnings are related to the Pensando SmartNICs (devices at 10002:00:05.0 and 10002:00:07.0) requesting more PCI resources than are available by default.
+
+### Solution
+
+We've implemented the following kernel parameters to address these issues:
+
+```
+pci=realloc=on,nocrs,noaer,assign-busses,resourcehog,hpiosize=0x10000,hpmemsize=0x20000000,hpprefmemsize=0x20000000 pcie_aspm=off iommu=pt nomodeset vga=normal
+```
+
+These parameters:
+1. Enable PCI resource reallocation (`realloc=on`)
+2. Disable Common Reference Space (`nocrs`)
+3. Disable Advanced Error Reporting (`noaer`)
+4. Enable bus assignment (`assign-busses`)
+5. Prioritize PCI resource allocation (`resourcehog`)
+6. Increase I/O space allocation (`hpiosize=0x10000`)
+7. Increase memory space allocation (`hpmemsize=0x20000000`)
+8. Add prefetchable memory space (`hpprefmemsize=0x20000000`)
+9. Disable ASPM power management (`pcie_aspm=off`)
+10. Enable IOMMU passthrough (`iommu=pt`)
+11. Disable kernel mode setting (`nomodeset`)
+12. Set standard VGA mode (`vga=normal`)
+
+### Expected Behavior
+
+Even with these optimized parameters, you may still see some PCI resource allocation warnings in the boot logs. However, these warnings do not prevent the system from booting. The system will continue past these warnings and successfully mount the filesystem and start systemd.
+
+The boot log will show successful progression despite the warnings:
+
+```
+EXT4-fs (nvme0n1p2): mounted filesystem with ordered data mode. Opts: (null)
+systemd[1]: systemd 239 (239-82.el8) running in system mode.
+systemd[1]: Detected architecture x86-64.
+```
+
+These warnings can be safely ignored as long as the system continues to boot and operate normally.
+
 ## Server Reinitialization Issues
 
 When reinitializing a bare metal server, you might encounter issues with server state transitions. The reinitialization process involves:
