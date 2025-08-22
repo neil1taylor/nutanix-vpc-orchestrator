@@ -561,8 +561,8 @@ echo If that failed, trying EFI/NUTANIX...
 echo If that failed, trying direct kernel boot...
 echo Loading kernel: vmlinuz
 echo Loading initrd: initrd
-echo Boot parameters: root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0
-\\vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 initrd=\\initrd
+echo Boot parameters: root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
+\\vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt initrd=\\initrd
 """
        
        # Only create startup.nsh in the root of the EFI partition to save space
@@ -604,7 +604,7 @@ search --no-floppy --set=root --label=ROOT
 # Boot entry
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
  echo 'Loading Linux kernel...'
- linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet
+ linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
  echo 'Loading initial ramdisk...'
  initrd /initrd
 }}
@@ -664,7 +664,7 @@ search --no-floppy --set=root --label=ROOT
 # Primary boot entry
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
   echo 'Loading Linux kernel...'
-  linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0
+  linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
   echo 'Loading initial ramdisk...'
   initrd /boot/initramfs-{kernel_version}.img
 }}
@@ -672,7 +672,7 @@ menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
 # Fallback entry with symlinks
 menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
   echo 'Loading Linux kernel (fallback)...'
-  linux /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0
+  linux /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
   echo 'Loading initial ramdisk (fallback)...'
   initrd /initrd
 }}
@@ -685,7 +685,7 @@ menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
 menuentry 'Nutanix AHV (UUID)' --unrestricted --id nutanix_uuid {{
   echo 'Loading Linux kernel (UUID)...'
   search --no-floppy --set=root --fs-uuid {root_uuid}
-  linux /boot/vmlinuz-{kernel_version} root=UUID={root_uuid} ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0
+  linux /boot/vmlinuz-{kernel_version} root=UUID={root_uuid} ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
   echo 'Loading initial ramdisk (UUID)...'
   initrd /boot/initramfs-{kernel_version}.img
 }}
@@ -700,12 +700,12 @@ menuentry 'Nutanix AHV (UUID)' --unrestricted --id nutanix_uuid {{
 timeout=5
 title Nutanix AHV
  root (hd0,1)
- kernel /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0
+ kernel /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
  initrd /boot/initramfs-{kernel_version}.img
 
 title Nutanix AHV (Fallback)
  root (hd0,1)
- kernel /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0
+ kernel /vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
  initrd /initrd
 """
        
@@ -742,9 +742,9 @@ for KERNEL_PATH in /boot/vmlinuz-{kernel_version} /vmlinuz /boot/bzImage /bzImag
        # Try different root specifications
        for ROOT_SPEC in "root=/dev/{boot_disk}p2" "root=LABEL=ROOT" "root=UUID=$(blkid -s UUID -o value /dev/{boot_disk}p2 2>/dev/null || echo 'none')"; do
          echo "Attempting boot with $ROOT_SPEC"
-         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0\\""
+         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt\\""
          
-         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0" 2>/dev/null
+         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt" 2>/dev/null
          
          if [ $? -eq 0 ]; then
            echo "kexec load successful, executing kernel..."
@@ -773,11 +773,11 @@ echo "2. Find a valid initrd:"
 echo "   ls -la /boot/initramfs*"
 echo ""
 echo "3. Try manual boot with kexec:"
-echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0\\""
+echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt\\""
 echo "   kexec -e"
 echo ""
 echo "4. Or try manual boot from GRUB command line:"
-echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0"
+echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt"
 echo "   initrd /boot/initramfs-{kernel_version}.img"
 echo "   boot"
 echo ""
@@ -1350,7 +1350,7 @@ search --no-floppy --set=root --label=ROOT
 # Boot entry - use absolute paths to ensure files are found
 menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
    echo 'Loading Linux kernel...'
-   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
    echo 'Loading initial ramdisk...'
    initrd /initrd
 }}
@@ -1358,7 +1358,7 @@ menuentry 'Nutanix AHV' --unrestricted --id nutanix {{
 # Fallback entry with full paths
 menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
    echo 'Loading Linux kernel (fallback)...'
-   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet
+   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
    echo 'Loading initial ramdisk (fallback)...'
    initrd /boot/initramfs-{kernel_version}.img
 }}
@@ -1366,7 +1366,7 @@ menuentry 'Nutanix AHV (Fallback)' --unrestricted --id nutanix_fallback {{
 # Emergency entry with UUID
 menuentry 'Nutanix AHV (Emergency)' --unrestricted --id nutanix_emergency {{
    echo 'Loading Linux kernel (emergency)...'
-   linux /boot/vmlinuz-{kernel_version} root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet
+   linux /boot/vmlinuz-{kernel_version} root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
    echo 'Loading initial ramdisk (emergency)...'
    initrd /boot/initramfs-{kernel_version}.img
 }}
@@ -1407,7 +1407,7 @@ GRUB_DISABLE_RECOVERY=false
 GRUB_DISABLE_SUBMENU=false
 GRUB_TERMINAL="console serial"
 GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
-GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug"
+GRUB_CMDLINE_LINUX="root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 debug pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt"
 GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux gzio"
 """.format(boot_disk=boot_disk))
        log("Created GRUB defaults file")
@@ -1492,7 +1492,7 @@ GRUB_PRELOAD_MODULES="part_gpt ext2 search_fs_uuid search_label fat normal linux
        
        # Create a cmdline file with the kernel parameters
        with open('/mnt/stage/tmp/cmdline.txt', 'w') as f:
-           f.write(f"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet")
+           f.write(f"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 quiet pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt")
        
        # Check if objcopy is available
        result = subprocess.run(['chroot', '/mnt/stage', 'which', 'objcopy'],
@@ -1557,13 +1557,13 @@ set default=0
 
 menuentry "Nutanix AHV" {{
    search --no-floppy --label ROOT --set=root
-   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
    initrd /initrd
 }}
 
 menuentry "Nutanix AHV (rescue mode)" {{
    search --no-floppy --label ROOT --set=root
-   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 single
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 single pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
    initrd /initrd
 }}
 """
@@ -1582,7 +1582,7 @@ set default=0
 
 menuentry "Nutanix AHV" {{
    search --no-floppy --label ROOT --set=root
-   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0
+   linux /vmlinuz root=LABEL=ROOT ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
    initrd /initrd
 }}
 """
@@ -1727,8 +1727,8 @@ echo If that failed, trying EFI/NUTANIX...
 echo If that failed, trying direct kernel boot...
 echo Loading kernel: vmlinuz
 echo Loading initrd: initrd
-echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug
-\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug initrd=\\initrd
+echo Boot parameters: root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt
+\\vmlinuz root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt initrd=\\initrd
 echo If all boot methods failed, try running the rescue script...
 \\boot\\rescue.sh
 """)
@@ -1764,9 +1764,9 @@ for KERNEL_PATH in /boot/vmlinuz-{kernel_version} /vmlinuz /boot/bzImage /bzImag
        # Try different root specifications
        for ROOT_SPEC in "root=/dev/{boot_disk}p2" "root=LABEL=ROOT" "root=UUID=$(blkid -s UUID -o value /dev/{boot_disk}p2 2>/dev/null || echo 'none')"; do
          echo "Attempting boot with $ROOT_SPEC"
-         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug selinux=0 enforcing=0\""
+         echo "kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line=\"$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt\""
          
-         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug selinux=0 enforcing=0" 2>/dev/null
+         kexec -l $KERNEL_PATH --initrd=$INITRD_PATH --command-line="$ROOT_SPEC ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic ip=dhcp rd.neednet=1 console=tty0 console=ttyS0,115200n8 debug selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt" 2>/dev/null
          
          if [ $? -eq 0 ]; then
            echo "kexec load successful, executing kernel..."
@@ -1795,11 +1795,11 @@ echo "2. Find a valid initrd:"
 echo "   ls -la /boot/initramfs*"
 echo ""
 echo "3. Try manual boot with kexec:"
-echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0\""
+echo "   kexec -l /path/to/kernel --initrd=/path/to/initrd --command-line=\"root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt\""
 echo "   kexec -e"
 echo ""
 echo "4. Or try manual boot from GRUB command line:"
-echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8"
+echo "   linux /boot/vmlinuz-{kernel_version} root=/dev/{boot_disk}p2 ro crashkernel=auto net.ifnames=0 nvme.io_timeout=4294967295 modprobe.blacklist=mlx4_core,mlx4_en,mlx4_ib,ionic console=tty0 console=ttyS0,115200n8 selinux=0 enforcing=0 pci=realloc,nocrs,noaer pcie_aspm=off iommu=pt"
 echo "   initrd /boot/initramfs-{kernel_version}.img"
 echo "   boot"
 echo ""
