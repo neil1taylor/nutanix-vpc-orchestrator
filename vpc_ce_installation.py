@@ -538,6 +538,17 @@ early_microcode="yes"
            kernel_version = result.stdout.strip().split('\n')[0]
            log(f"Detected kernel version: {kernel_version}")
        
+       # Copy dracut from host to chroot environment if it's missing
+       log("Ensuring dracut is available in chroot environment...")
+       if not os.path.exists('/mnt/stage/usr/bin/dracut'):
+           # Try to copy dracut from host system
+           subprocess.run(['cp', '-f', '/usr/bin/dracut', '/mnt/stage/usr/bin/'],
+                         capture_output=True, text=True)
+           # Copy dracut libraries and dependencies
+           subprocess.run(['cp', '-rf', '/usr/lib/dracut', '/mnt/stage/usr/lib/'],
+                         capture_output=True, text=True)
+           log("Copied dracut from host to chroot environment")
+       
        # Generate initramfs
        log(f"Generating initramfs for kernel version {kernel_version}")
        result = subprocess.run(['chroot', '/mnt/stage', 'dracut', '--force',
@@ -548,12 +559,13 @@ early_microcode="yes"
        if result.returncode != 0:
            log(f"Failed to generate initramfs: {result.stderr}")
            # Try to copy existing initramfs from ISO
+           log("Attempting to copy initramfs from ISO...")
            result = subprocess.run(['find', '/mnt/ahv', '-name', 'initramfs*'],
                                  capture_output=True, text=True)
            if result.stdout.strip():
                initramfs_path = result.stdout.strip().split('\n')[0]
                subprocess.run(['cp', initramfs_path, f'/mnt/stage/boot/initramfs-{kernel_version}.img'])
-               log(f"Copied initramfs from ISO")
+               log(f"Copied initramfs from ISO: {initramfs_path}")
        else:
            log("Successfully generated initramfs")
        
@@ -564,9 +576,11 @@ early_microcode="yes"
        os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
        os.makedirs('/mnt/stage/boot/efi/EFI/NUTANIX', exist_ok=True)
        
-       # Install GRUB packages
+       # Install GRUB packages with all dependencies
+       log("Installing GRUB packages with all dependencies...")
        subprocess.run(['chroot', '/mnt/stage', 'yum', 'install', '-y',
-                      'grub2-efi-x64', 'grub2-tools', 'efibootmgr'],
+                      'grub2-efi-x64', 'grub2-tools', 'grub2-efi-x64-modules',
+                      'efibootmgr', 'shim-x64'],
                      capture_output=True, text=True)
        
        # Copy kernel and initramfs to required locations
@@ -615,9 +629,14 @@ early_microcode="yes"
            except subprocess.CalledProcessError:
                pass  # Continue if symlink creation fails
        
-       # Install GRUB
-       result = subprocess.run(['chroot', '/mnt/stage', 'grub2-install', '--target=x86_64-efi',
-                               '--efi-directory=/boot/efi', '--bootloader-id=NUTANIX',
+       # Install GRUB with explicit target and directory
+       log("Installing GRUB with explicit target and directory...")
+       result = subprocess.run(['chroot', '/mnt/stage', 'grub2-install',
+                               '--target=x86_64-efi',
+                               '--efi-directory=/boot/efi',
+                               '--bootloader-id=NUTANIX',
+                               '--boot-directory=/boot',
+                               '--directory=/usr/lib/grub/x86_64-efi',
                                f'{boot_device}'],
                                capture_output=True, text=True)
        
@@ -853,7 +872,7 @@ def send_status_update(management_ip, phase, message):
 
 def wipe_nvmes():
     """Wipe all NVMe drives"""
-    drives = [d for d in glob.glob('/dev/nvme*') if re.match(r'.*/nvme\d+n\d+, d)]
+    drives = [d for d in glob.glob('/dev/nvme*') if re.match(r'.*/nvme\d+n\d+', d)]
     for drive in sorted(drives):
         log(f"Wiping {drive}")
         subprocess.run(['wipefs', '-a', drive], check=True)
@@ -1143,8 +1162,16 @@ def create_mock_modules(config):
         layout_tools.get_data_disks = lambda layout: config['hardware']['cvm_data_disks']
         sys.modules['layout.layout_tools'] = layout_tools
         
+        # Add missing layout_vroc_utils module
+        layout_vroc_utils = types.ModuleType('layout.layout_vroc_utils')
+        layout_vroc_utils.get_vroc_disks = lambda layout: []
+        layout_vroc_utils.get_vroc_raid_info = lambda layout: (None, None)
+        layout_vroc_utils.is_vroc_supported = lambda: False
+        sys.modules['layout.layout_vroc_utils'] = layout_vroc_utils
+        
         layout.layout_finder = layout_finder
         layout.layout_tools = layout_tools
+        layout.layout_vroc_utils = layout_vroc_utils
 
 if __name__ == "__main__":
     sys.exit(main())
