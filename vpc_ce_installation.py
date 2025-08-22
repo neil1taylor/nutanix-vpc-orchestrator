@@ -522,11 +522,11 @@ GRUB_PRELOAD_MODULES="part_gpt ext2 search_label fat normal linux gzio"
        # Create dracut configuration for required drivers
        os.makedirs('/mnt/stage/etc/dracut.conf.d', exist_ok=True)
        with open('/mnt/stage/etc/dracut.conf.d/vpc_drivers.conf', 'w') as f:
-           f.write("""# Include NVMe and network modules in initramfs
-add_drivers+=" nvme nvme-core "
+        f.write("""# Minimal drivers for IBM Cloud VPC
+add_drivers+=" nvme nvme-core ionic "
 hostonly="no"
-hostonly_cmdline="no"
-early_microcode="yes"
+compress="cat"
+early_microcode="no"
 """)
        
        # Detect kernel version
@@ -558,28 +558,51 @@ early_microcode="yes"
        subprocess.run(['chmod', '1777', '/mnt/stage/var/tmp'], check=False)
        subprocess.run(['chmod', '1777', '/mnt/stage/tmp'], check=False)
        
-       # Generate initramfs
+       # Generate initramfs with timeout and ionic support
        log(f"Generating initramfs for kernel version {kernel_version}")
-       result = subprocess.run(['chroot', '/mnt/stage', 'dracut', '--force',
-                               f'/boot/initramfs-{kernel_version}.img',
-                               kernel_version],
-                               capture_output=True, text=True)
-       
-       if result.returncode != 0:
-           log(f"Failed to generate initramfs: {result.stderr}")
-           # Try to copy existing initramfs from ISO
-           log("Attempting to copy initramfs from ISO...")
-           result = subprocess.run(['find', '/mnt/ahv', '-name', 'initramfs*'],
-                                 capture_output=True, text=True)
-           if result.stdout.strip():
-               initramfs_path = result.stdout.strip().split('\n')[0]
-               subprocess.run(['cp', initramfs_path, f'/mnt/stage/boot/initramfs-{kernel_version}.img'])
-               log(f"Copied initramfs from ISO: {initramfs_path}")
-       else:
-           log("Successfully generated initramfs")
-       
-       # Install GRUB bootloader
-       log("Installing GRUB bootloader...")
+       log("This may take 3-10 minutes. Will timeout after 15 minutes if stuck.")
+
+       try:
+            # Try dracut with 15 minute timeout
+            result = subprocess.run(['timeout', '900',  # 15 minutes
+                                    'chroot', '/mnt/stage', 'dracut', '--force',
+                                    '--add-drivers', 'ionic',  # Explicitly add ionic
+                                    f'/boot/initramfs-{kernel_version}.img',
+                                    kernel_version],
+                                capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                log("Successfully generated initramfs with ionic driver")
+            elif result.returncode == 124:  # timeout command exit code
+                log("Dracut timed out after 15 minutes - using fallback")
+                raise subprocess.TimeoutExpired(None, 900)
+            else:
+                log(f"Dracut failed: {result.stderr}")
+                raise subprocess.CalledProcessError(result.returncode, 'dracut')
+                
+       except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+            log("Dracut failed - falling back to ISO initramfs")
+            
+            # Copy initramfs from ISO
+            result = subprocess.run(['find', '/mnt/ahv', '-name', 'initramfs*'],
+                                capture_output=True, text=True)
+            
+            if result.stdout.strip():
+                initramfs_path = result.stdout.strip().split('\n')[0]
+                subprocess.run(['cp', initramfs_path, f'/mnt/stage/boot/initramfs-{kernel_version}.img'])
+                log(f"Copied initramfs from ISO: {initramfs_path}")
+                
+                # Since ISO initramfs won't have ionic, ensure it loads after boot
+                os.makedirs('/mnt/stage/etc/modules-load.d', exist_ok=True)
+                with open('/mnt/stage/etc/modules-load.d/ionic.conf', 'w') as f:
+                    f.write('ionic\n')
+                log("Configured ionic driver to load after boot")
+            else:
+                log("Could not find initramfs in ISO")
+                drop_to_shell("No initramfs available")
+            
+            # Install GRUB bootloader
+            log("Installing GRUB bootloader...")
        
        # Create necessary directories
        os.makedirs('/mnt/stage/boot/efi/EFI/BOOT', exist_ok=True)
